@@ -1,0 +1,578 @@
+================================================================================
+CONQUEST SERVER PROPOSAL - IMPLEMENTATION REVIEW
+================================================================================
+Legend:
+  ✅ = CODE COMPLETE (fully implemented in C# code)
+  ⚠️ = PARTIAL (code infrastructure exists, needs configuration/content)
+  ❌ = NOT STARTED (requires code implementation)
+  📦 = CONTENT ONLY (no code needed, content/weenie/database work)
+
+================================================================================
+CORE OBJECTIVES
+================================================================================
+High-level goals - evaluated throughout implementation
+
+[✅] Balanced PvE & PvP hybrid server
+[✅] Leverage ILT systems (Banking, Leaderboards, Marketplace limits, etc.)
+[⚠️] Reduced player power (partial - ENL capped at 100, augs need cost tuning)
+[⚠️] Emphasize tinkering/suit building (infrastructure ready, content needed)
+
+================================================================================
+CORE RULES & SYSTEMS
+================================================================================
+
+-------------------------------------------
+Account & Connection Rules
+-------------------------------------------
+[✅] One account per player (Marketplace mules excepted)
+     Implementation: Player_Location.cs:758-790
+     - Checks IP endpoint on teleport
+     - Allows unlimited characters in exempt landblocks (Marketplace 0x016C + Apartments)
+     - Boots excess characters outside exempt areas
+     - Bypasses check for admin characters (IsPlussed)
+     - Default limit: 1 character per IP outside marketplace
+     Location: NetworkSettings.cs - MaximumAllowedSessionsPerIPAddress = 1
+
+[✅] No VPN usage enforcement
+     Status: FULLY IMPLEMENTED
+     Implementation: VPNDetection.cs, AuthenticationHandler.cs
+     - Uses proxycheck.io API for VPN detection
+     - IP blocklist/approvedlist caching system
+     - Automatic login blocking for VPN/proxy connections
+     - Admin commands: /clearvpnblocklist, /removeipfromvpnblocklist
+     - Property: proxycheck_api_key in PropertyManager.cs
+     - 3-second API timeout (fail-open design)
+     Files: VPNDetection.cs, AuthenticationHandler.cs:32-88,287-317,
+            PropertyManager.cs:684, AdminCommands.cs:4794-4818
+
+-------------------------------------------
+Currency & Trade Rules
+-------------------------------------------
+[✅] Non-Tradable: Conquest Coins, Soul Fragments
+     Implementation: PropertyInt64.cs
+     - PropertyInt64.ConquestCoins = 9028
+     - PropertyInt64.SoulFragments = 9029
+     Note: Tradability is set in weenie definitions (content work)
+
+[✅] Tradable: Luminance, MMDs, Event Tokens
+     Implementation: PropertyInt64.cs
+     - PropertyInt64.EventTokens = 9030
+     - Luminance is base ACE property
+     Note: Tradability is set in weenie definitions (content work)
+
+================================================================================
+PETS & COMPLETIONIST CONTENT
+================================================================================
+[📦] Rare, tradable pet drops from major bosses
+[📦] Cosmetic pets from normal mobs
+[📦] Boss pets with balanced bonuses
+Status: Pure content work - no code implementation needed
+
+================================================================================
+QUEST BONUS (QB) SYSTEM
+================================================================================
+
+[✅] Quest Bonus leaderboard enabled
+     Implementation: LeaderboardExtensions.cs:22-33
+     - Stored procedure: TopQuestBonus
+     - 15-minute cache with variance
+     - Thread-safe async operations
+     Files: LeaderboardExtensions.cs, Leaderboard.cs, AuthDbContext.cs
+
+[✅] XP bonus scaling
+     PROPOSAL: 10% XP per 1,000 QB (5,000 QB = 50% XP bonus)
+     IMPLEMENTED: 10% XP per 1,000 QB - MATCHES PROPOSAL
+     Implementation: Player_Xp.cs:531-535 (GetQuestCountXPBonus)
+     Formula: 1.0 + (quest_count * 0.0001)
+     - 0.01% XP bonus per quest
+     - 10% XP bonus per 1,000 quests
+     - 50% XP bonus at 5,000 quests
+     Status: CORRECTED to match customer requirements
+
+[📦] QB Lair
+     - Custom portal at top of Candeth Keep tree
+     - Entry requires 2,500+ QB
+     - Better vendor prices and unique perks
+     Status: Content work (portal, vendors, landblock setup)
+
+================================================================================
+ENLIGHTENMENT (ENL)
+================================================================================
+
+[✅] ENL cap: 100
+     Implementation: Player_Properties.cs:138-142
+     - Capped at 100 in setter
+     - PropertyInt.Enlightenment = 390
+
+[✅] Each ENL provides +1% XP (up to 100%)
+     Implementation: Player_Xp.cs:511-515 (GetXPAndLuminanceModifier)
+     - Formula: enlightenmentBonus = Enlightenment * 0.01f
+     - At ENL 100 = +100% XP (double XP)
+
+[✅] Each ENL provides +1 to all stats
+     Status: FULLY IMPLEMENTED
+     Implementation: CreatureAttribute.cs:135-138
+     - Formula: total += (uint)player.Enlightenment
+     - At ENL 100 = +100 to all attributes (STR, END, COORD, QUICK, FOCUS, SELF)
+
+[✅] Rating bonuses (+1 Damage / +1 Damage Reduction per 25 ENL)
+     Status: FULLY IMPLEMENTED
+     Implementation:
+     - Creature_Rating.cs:226-228 (GetDamageRating)
+     - Creature_Rating.cs:261-263 (GetDamageResistRating)
+     - Enlightenment.cs:447-452 (GetEnlightenmentRatingBonus helper method)
+     - Formula: EnlightenmentAmt / 25 (integer division)
+     - At ENL 100 = +4 Damage Rating and +4 Damage Resistance Rating
+
+[✅] ENL leaderboard
+     Implementation: LeaderboardExtensions.cs:56-67
+     - Stored procedure: TopEnlightenment
+     - Uses biota_properties_int WHERE type = 390
+
+================================================================================
+CONQUEST COINS
+================================================================================
+
+[✅] PropertyInt64 entry exists
+     Implementation: PropertyInt64.cs:40
+     - PropertyInt64.ConquestCoins = 9028
+     - Comment: "Non-tradable currency for augmentations, imbues, tailors"
+
+[✅] Augmentation Gem system
+     Implementation: EmoteManager_AugGems.cs
+     - EmoteType.PromptAddAugment = 9002
+     - Handles +1 and +5 augmentation gems
+     - Uses BankedLuminance for consumption cost (when using gem)
+
+     TWO-STEP SYSTEM (Working as designed):
+     1. Purchase gem from vendor → Costs Conquest Coins (vendor configuration)
+     2. Use gem on character → Costs Luminance (EmoteManager_AugGems.cs:30-64)
+
+     Status: CODE COMPLETE - Vendors need content setup to sell gems for Conquest Coins
+
+[📦] Acquisition (Dropped from dungeons/quests)
+     PROPOSAL DROP RATES:
+     - Retail end-game: 2-3 coins/hour
+     - Tier 1 Custom: 8-10 coins/hour
+     - Tier 2 Custom: 14-18 coins/hour
+     Status: Content work (loot tables, treasure generation)
+
+[📦] Usage - Purchase tailor items
+     Status: Content work (vendor NPCs, item costs)
+
+[📦] Usage - Purchase foolproof imbues
+     PROPOSAL: 30 Conquest Coins per bag
+     Status: Content work (vendor NPCs, create imbue bags)
+
+[✅] Augmentation progression goals
+     PROPOSAL:
+     - Tier 1 (+30/40 augs): 3-4 months
+     - Tier 2 (+60, Mythic): 8-12 months
+     - Very expensive (Conquest Coins + Luminance)
+     - NPC sells +1 and +5 increments only
+     - Example: +3 Creature + +4 Life in one week = reasonable
+
+     Status: CODE COMPLETE
+     - +1 and +5 augmentation gems fully implemented (EmoteManager_AugGems.cs)
+     - Luminance consumption cost integrated
+     - Progression tuning via vendor pricing (content work)
+
+================================================================================
+PVP, PK FLAGGING & SOUL FRAGMENTS
+================================================================================
+
+-------------------------------------------
+PK Flagging
+-------------------------------------------
+[✅] /pk command
+     Status: FULLY IMPLEMENTED
+     Implementation: PlayerCommands.cs:656-750
+     - /pk on: Enables PK status with confirmation dialog
+     - /pk off: Disables PK status with restrictions
+     - PropertyInt64.LastPKDeathTime = 9032 (tracks PK vs PK deaths)
+     - PropertyInt64.LastPKFlagTime = 9033 (tracks when player flagged PK)
+
+     FEATURES:
+     - Confirmation dialog for /pk on (prevents accidental flagging)
+     - Already PK check ("You are already a player killer")
+     - 20-minute cooldown after PK vs PK death before can re-flag PK
+     - PK tag check: Cannot turn off PK while in recovery period after PK combat
+       (uses MinimumTimeSincePk and pk_respite_timer property, default 5 minutes)
+     - 5-minute minimum PK duration before can turn off (prevents combat abuse)
+     - Cannot turn off PK while in PK-only landblock
+     - Status broadcast to all nearby players
+     - Displays remaining time for all cooldowns
+
+[📦] Town statues for PK flagging
+     Status: Content work (statue NPCs with emote actions)
+
+[✅] No item loss on PK death
+     Implementation: Player_Death.cs:482
+     - Modified CalculateDeathItems() to check IsPKDeath()
+     - Returns empty list for PK deaths
+     Files: Player_Death.cs, Creature_Death.cs
+
+[✅] 20-minute cooldown before becoming red again
+     Status: FULLY IMPLEMENTED
+     Implementation:
+     - Player_Death.cs:110 - Sets LastPKDeathTime on PK vs PK death
+     - PlayerCommands.cs:684-695 - Checks cooldown in /pk on command
+     - 20-minute (1200 second) cooldown enforced
+     - Displays remaining time to player if cooldown active
+
+[✅] Red-only dungeons require red status (VARIANT-BASED)
+     Status: FULLY IMPLEMENTED
+     Implementation:
+     - Player_Tick.cs:622-648 (PKDungeonEnforcementTick)
+     - PlayerCommands.cs:735-746 (/pk off variant check)
+     - Player_Xp.cs:541-557 (GetPKDungeonBonus variant check)
+     - Landblock.cs:63-69 (pkDungeonLandblocks HashSet)
+
+     FEATURES:
+     - Uses (landblock, variation) tuples instead of just landblock IDs
+     - Allows same dungeon to have PVE (variant 0) and PK-only (variant 1+) versions
+     - Called every ~5 seconds during player heartbeat
+     - If non-PK player detected in PK-only variant, teleports to lifestone
+     - Cannot use /pk off while in PK-only variant
+     - XP/Lum bonus only applies in PK-only variants
+     - Excludes admins from enforcement
+
+     CONFIGURATION NEEDED:
+     - Populate Landblock.pkDungeonLandblocks HashSet with (landblock, variant) tuples
+     - Example: (0x0001, 1) = Landblock 0x0001, Variant 1 is PK-only
+     - Location: Landblock.cs:63-69
+
+-------------------------------------------
+Soul Fragments
+-------------------------------------------
+[✅] Non-tradable, no expiration
+     Implementation: PropertyInt64.cs:41
+     - PropertyInt64.SoulFragments = 9029
+     Note: Non-tradable set in weenie definition (content work)
+
+[✅] Dropped on player death (1-3 fragments)
+     Implementation: Creature_Death.cs:573-609
+     - Drops 1-3 Soul Fragments on PK death
+     - Uses ThreadSafeRandom.Next(1, 3)
+     - Placeholder weenie ID: 999999998
+
+[✅] Soul Fragment drop cooldown (PK death drops)
+     PROPOSAL: Once every 8 hours
+     IMPLEMENTED: Random 6-8 hours (APPROVED)
+     Implementation: Creature_Death.cs:580-581
+     - Uses ThreadSafeRandom.Next(6, 8) hours
+     - PropertyInt64.LastSoulFragmentLootTime = 9031
+     - Adds variability to prevent predictable farming patterns
+     Status: CONFIRMED - Keeping random 6-8 hour timer
+
+[✅] Periodically dropped in PK-only dungeon variants (≈1-2/hour, 20/day cap)
+     Status: FULLY IMPLEMENTED
+     Implementation: Creature_Death.cs:776-835 (GenerateSoulFragments_PKDungeon)
+     - PropertyInt64.DailySoulFragmentCount = 9034 (tracks daily drops)
+     - PropertyInt64.LastSoulFragmentResetTime = 9035 (tracks last daily reset)
+
+     FEATURES:
+     - 0.75% drop chance per mob kill (~1-2 fragments/hour at 100-200 kills/hour)
+     - Only drops in PK-only dungeon variants (checks landblock+variation tuple)
+     - Daily cap of 20 Soul Fragments per player
+     - Automatic daily reset after 24 hours
+     - Player notification: "You found a Soul Fragment! (X remaining today)"
+     - Cap applies globally (can't bypass by dungeon hopping)
+     - Uses placeholder weenie ID: 999999998
+
+[✅] Death triggers 20-minute dungeon-specific re-entry cooldown
+     Status: FULLY IMPLEMENTED
+     Implementation:
+     - Player_Death.cs:1119-1138 (TrackPKDungeonDeath method)
+     - Player_Tick.cs:639-670 (Re-entry cooldown enforcement)
+     - PropertyInt64.LastPKDungeonDeathLocation = 9036 (packed landblock+variant)
+     - PropertyInt64.LastPKDungeonDeathTime = 9037 (death timestamp)
+
+     FEATURES:
+     - Only applies to PK vs PK deaths (NOT mob deaths)
+     - Tracks SPECIFIC dungeon where player died (landblock+variant packed as long)
+     - 20-minute cooldown applies only to the dungeon where they died
+     - Players can enter OTHER PK dungeons immediately (no global lockout)
+     - Automatic enforcement every ~5 seconds (heartbeat tick)
+     - Teleports to lifestone with time remaining message
+     - Format: "You cannot re-enter this dungeon for X minutes and Y seconds after your death."
+     - If you die to a mob: No cooldown, re-enter immediately
+
+-------------------------------------------
+PK Dungeons
+-------------------------------------------
+[✅] +10% XP bonus in PK dungeons
+     Implementation: Player_Xp.cs:535-549 (GetPKDungeonBonus)
+     - Returns 1.1 (10% bonus) for PK players in PK dungeons
+     - Checks PlayerKillerStatus == PK
+     - Checks CurrentLandblock.Id.Landblock in pkDungeonLandblocks
+
+[✅] +10% Luminance bonus in PK dungeons
+     Implementation: Same as XP (GetPKDungeonBonus applies to both)
+
+[⚠️] PK dungeon landblock list
+     Implementation: Landblock.cs
+     - Static HashSet pkDungeonLandblocks exists
+     - Currently empty: // TODO: Add actual PK dungeon landblock IDs here
+
+     📦 CONTENT NEEDED: Populate with actual PK dungeon landblock IDs
+
+[✅] Same loot tables as regular dungeons
+     Implementation: Automatic (uses same treasure generation)
+
+[📦] Soul Fragment Vendor
+     PROPOSAL: Vendor (e.g., Isin Dule) offers:
+     - Black/red PvP-only tailors
+     - Special bags
+     - BZ Hatred weapon imbues (500+ fragments, 36% success)
+     - Example: 1,500-2,000 fragments for viable PvP weapon
+     Status: Content work (create vendor NPC, items, costs)
+
+================================================================================
+EVENT TOKENS & REWARDS
+================================================================================
+
+[✅] PropertyInt64 entry exists
+     Implementation: PropertyInt64.cs:42
+     - PropertyInt64.EventTokens = 9030
+     - Comment: "Tradable event currency"
+
+[✅] Event chest system
+     PROPOSAL:
+     - Chest duration: 10 minutes (chest despawns after 10 minutes)
+     - Pickup cooldown: 30 minutes (player quest timer between loots)
+     - Drops Event Tokens
+     Status: NO CODE NEEDED - CONTENT WORK ONLY
+     Implementation: Uses existing ACE quest timer system
+     - Set quest timer on chest loot action (30-minute cooldown)
+     - Chest generator with 10-minute lifespan
+     - Quest flag prevents re-looting until timer expires
+     - All handled via weenie properties and emote scripts
+
+[📦] Event Coin Vendor
+     PROPOSAL EXCHANGES:
+     - Static luminance: 1 Event Coin
+     - Conquest Coins: 1 Event Coin
+     - Soul Fragments: 1 Event Coin
+     - Unlimited Dye Pot: 25 Event Coins
+     Status: Content work (vendor NPC, exchange items)
+
+[📦] Admin Customization
+     PROPOSAL:
+     - 10 Event Coins = 1 custom tailor OR 1 named item
+     - Full armor set + weapon = 100 Event Coins
+     - No overpowered items
+     - Must match loot-generated power levels
+     Status: Content work (admin tools, item approval process)
+
+================================================================================
+MARKETPLACE (MAJOR FEATURE)
+================================================================================
+
+[✅] Unlimited characters/mules allowed
+     Implementation: Player_Location.cs:758-790
+     - connectionExemptLandblocks HashSet includes Marketplace (0x016C)
+     - No character limit when in exempt landblocks
+     - Also includes apartment landblocks (0x7200-0x9900, 0x5360-0x5369)
+
+[📦] New Marketplace (cloned Temple Dungeon)
+     PROPOSAL:
+     - Replace current marketplace room
+     - Access via town network, lifestone, subway portal
+     Status: Content work (dungeon clone, portal setup)
+
+[📦] Marketplace NPCs
+     PROPOSAL:
+     - Event Coin Vendor
+     - Soul Fragment Vendor
+     - Conquest/Augmentation NPC
+     - Salvage vendor (5 MMDs per bag)
+     - Foolproof imbues (30 Conquest Coins per bag, tradable)
+     Status: Content work (create NPCs, set up vendors)
+
+[📦] Recall gems
+     PROPOSAL:
+     - Marketplace Recall
+     - Subway Recall
+     - Town Network Recall
+     - Cost: 10 Conquest Coins each
+     Status: Content work (create recall gem items)
+
+[📦] Daily quest NPC hub
+     Status: Content work (create quest NPCs, daily reset system)
+
+[📦] Optional QoL portal room
+     PROPOSAL: Portals to Candeth, VoD, Jungle, etc.
+     Status: Content work (portal setup)
+
+================================================================================
+QUALITY OF LIFE
+================================================================================
+
+[📦] Level 7 Buff Bot NPCs
+     PROPOSAL:
+     - White players: Level 7 buffs
+     - Red players: Level 6 buffs
+     - Located in major towns
+     Status: Content work (create buff bot NPCs)
+
+[📦] Expanded town network portals
+     Status: Content work (add portal destinations)
+
+================================================================================
+ITEM TINKERING & PVP BALANCE
+================================================================================
+
+[✅] All items tinkerable up to 20x
+     Status: CODE COMPLETE
+     Implementation: RecipeManager.cs:304-331
+     - Extended TinkeringDifficulty list from 10 to 20 attempts
+     - Difficulty multipliers: 1.0 (attempt 1) → 9.5 (attempt 20)
+     - Progressive +0.5 difficulty increase for attempts 11-20
+     - No additional validation needed - existing system supports 20x
+
+[📦] New salvage: +50 Vitality imbue (36% success)
+     Status: Content work (create salvage item, imbue mechanics)
+
+[📦] Target survivability
+     PROPOSAL:
+     - 730-750 base armor
+     - +450 HP from vitality imbues
+     Status: Content/balance work (loot generation, item stats)
+
+[✅] Nether weapons in drop tables
+     Status: CODE COMPLETE - Loot integration finished, weenie creation needed
+     Implementation:
+     - Nether Sceptre, Baton, Staff (casters) ALREADY in loot tables (Tiers 3-8)
+       Location: CasterWcids.cs:32,40,56,64,80,88,104,112,120,136,144,152
+     - Added 74 Nether melee/missile weapon placeholders to loot tables:
+       * 24 Heavy Weapons (HeavyWeaponWcids.cs)
+       * 19 Light Weapons (LightWeaponWcids.cs)
+       * 22 Finesse Weapons (FinesseWeaponWcids.cs)
+       * 3 Crossbows (CrossbowWcids.cs)
+       * 2 Atlatls (AtlatlWcids.cs)
+       * 4 Two-Handed (TwoHandedWeaponWcids.cs)
+     - Added 74 WeenieClassName enum entries (WCID range: 999900000-999900074)
+       Location: WeenieClassName.cs:41896-41980
+     - Updated drop probabilities: Base 35%, Elementals 13% each (including Nether)
+     - Bows (heritage-specific) not yet processed
+     CONTENT WORK NEEDED: Create 74 weenie definitions for Nether weapons
+     Reference: Nether_Weapons_Summary.txt for complete weapon list
+
+[📦] Expanded weapon systems
+     PROPOSAL: Hilt/multistrike mechanics
+     Status: Content/code work (depends on complexity)
+
+================================================================================
+WISHLIST (FUTURE CONSIDERATIONS)
+================================================================================
+
+[❌] Rentable Marketplace storage chests
+     PROPOSAL:
+     - Holds up to 8 bags
+     - Rent-based (housing-like system)
+     - Reduces mule dependency
+     Status: Future work (significant code implementation needed)
+
+================================================================================
+ADDITIONAL SYSTEMS IMPLEMENTED (NOT IN PROPOSAL)
+================================================================================
+
+[✅] Banking System
+     Implementation: Across multiple files
+     - PropertyInt64.BankedPyreals = 9004
+     - PropertyInt64.BankedLuminance = 9005
+     - PropertyInt64.BankedLegendaryKeys = 9015
+     Status: Copied from ILT (from session summary)
+
+[✅] Leaderboards (5 types)
+     Implementation: LeaderboardExtensions.cs
+     - TopQuestBonus (Quest Bonus count)
+     - TopLevel (Character level)
+     - TopEnlightenment (ENL count)
+     - TopBank (Banked pyreals)
+     - TopLum (Banked luminance)
+     - Thread-safe caching with 15-minute refresh + variance
+
+[✅] Augmentation Display Command
+     Implementation: PlayerCommands.cs - /aug command
+     - Displays all 10 luminance augmentation levels
+     Files: Player_Properties.cs (wrapper properties for 10 aug types)
+
+[✅] Dungeon Variations System
+     Implementation: Position.cs, LandblockId.cs, BiotaExtensions.cs
+     - Variation_Id property on LandblockId
+     - Variation property on Position
+     - VariationId in PropertiesPosition
+     - Full support for instanced/varied dungeons
+
+================================================================================
+SUMMARY - IMPLEMENTATION STATUS
+================================================================================
+
+CODE IMPLEMENTATION COMPLETE:
+  ✅ Marketplace character limits (1 outside, unlimited inside)
+  ✅ Quest Bonus System with leaderboard
+  ✅ Enlightenment System (cap 100, +1% XP per ENL)
+  ✅ Banking System (3 currencies)
+  ✅ Leaderboards (5 types with caching)
+  ✅ PK death items removed
+  ✅ Soul Fragment drops (1-3) with cooldown (6-8 hours)
+  ✅ PK dungeon XP/Lum bonus (+10%)
+  ✅ Augmentation gems (+1 and +5 variants)
+  ✅ Dungeon variations infrastructure
+  ✅ Custom PropertyInt64 entries for all currencies
+  ✅ VPN detection/blocking (proxycheck.io integration)
+  ✅ ENL stat bonuses (+1 all stats per ENL)
+  ✅ ENL rating bonuses (+1 Damage/DR per 25 ENL)
+  ✅ /pk command (on/off with confirmation and cooldowns)
+  ✅ PK flagging cooldown (20 minutes after PK vs PK death)
+  ✅ Red-only dungeon enforcement (auto-teleport non-PK players)
+  ✅ Periodic Soul Fragment drops in PK dungeon variants (0.75% chance, 20/day cap)
+  ✅ PK death dungeon re-entry cooldown (20 minutes, dungeon-specific)
+
+CODE IMPLEMENTATION NEEDED:
+  ❌ Rentable storage chests (wishlist - low priority)
+
+CONFIGURATION NEEDED:
+  ⚠️ Populate pkDungeonLandblocks HashSet with (landblock, variant) tuples
+     Example: (0x0001, 1) = Landblock 0x0001, Variant 1 is PK-only
+     Location: Landblock.cs:63-69
+     Note: This is the only configuration required to activate PK dungeon systems
+
+CONTENT WORK ONLY:
+  📦 Pet drops and systems
+  📦 QB Lair (custom portal, vendors)
+  📦 Conquest Coin drop rates/loot tables
+  📦 Soul Fragment Vendor (Isin Dule)
+  📦 Event Coin Vendor
+  📦 Event Chest System (10-min duration, 30-min quest timer cooldown)
+  📦 Augmentation Gem Vendor (sells +1/+5 gems for Conquest Coins)
+  📦 Admin customization system
+  📦 New Marketplace dungeon
+  📦 All Marketplace NPCs and vendors
+  📦 Recall gems
+  📦 Daily quest NPCs
+  📦 Buff bot NPCs
+  📦 Town network expansions
+  ✅ 20x tinkering (code complete - RecipeManager.cs)
+  📦 +50 Vitality imbue
+  ✅ Nether weapons loot integration (74 melee/missile + 3 existing casters)
+  📦 All weenie creation (Soul Fragment, Aug Gems, Event items, Nether weapon weenies, etc.)
+
+DATABASE WORK:
+  📦 Create stored procedures (TopQuestBonus, TopLevel, TopEnlightenment, TopBank, TopLum)
+  📦 Create account_quest table
+  📦 Add VariationId column to biota_properties_position
+  See: Database_Requirements.txt for complete details
+
+================================================================================
+COMPILATION STATUS
+================================================================================
+✅ BUILD SUCCESSFUL - 0 Errors, 0 Warnings
+   Last build: After PK system implementation
+   All code compiles cleanly with .NET 8.0
+
+================================================================================
+END OF REVIEW
+================================================================================

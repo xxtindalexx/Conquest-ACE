@@ -1,0 +1,353 @@
+================================================================================
+VPN DETECTION SYSTEM - ANALYSIS FROM ACE_DOCTIDE
+================================================================================
+
+SOURCE: C:\Users\xxtin\Documents\ACE_Doctide
+
+================================================================================
+OVERVIEW
+================================================================================
+
+ACE_Doctide has a VPN detection system that uses the proxycheck.io API service
+to check if connecting IPs are VPNs/proxies. The system includes:
+- API integration with proxycheck.io
+- IP whitelisting (VpnApprovedIPs)
+- IP blocklisting (VpnBlockedIPs)
+- Admin commands to manage lists
+- Automatic blocking on login
+
+**IMPORTANT NOTE**: The VPN detection code is COMMENTED OUT in the Doctide
+authentication handler, suggesting it may have performance or reliability issues.
+
+================================================================================
+FILES INVOLVED
+================================================================================
+
+1. ACE.Server\Network\VPNDetection.cs
+   - VPNDetection.CheckVPN(string ip) - Calls proxycheck.io API
+   - ISPInfo class - Stores VPN check results
+   - 3-second timeout on API calls
+
+2. ACE.Server\Network\Handlers\AuthenticationHandler.cs
+   - CheckForVpn(string ip) - Wrapper that calls VPNDetection.CheckVPN
+   - VpnBlockedIPs list - Runtime cache of blocked IPs
+   - VpnApprovedIPs list - Runtime cache of approved IPs
+   - Login blocking logic (COMMENTED OUT)
+
+3. ACE.Server\Managers\PropertyManager.cs
+   - "proxycheck_api_key" property - API key for proxycheck.io service
+
+4. ACE.Server\Command\Handlers\AdminCommands.cs
+   - /clearvpnblocklist - Clears all blocked IPs
+   - /removeipfromvpnblocklist <ip> - Removes specific IP from block list
+
+================================================================================
+HOW IT WORKS
+================================================================================
+
+1. CONFIGURATION:
+   - Admin sets "proxycheck_api_key" property in database (config_properties_string)
+   - This key is used to authenticate with proxycheck.io API
+   - Free tier available, paid tiers for higher volume
+
+2. ON LOGIN ATTEMPT:
+   - Extract player IP from session.EndPointC2S
+   - Check if IP is in VpnApprovedIPs cache (skip check if found)
+   - Check if IP is in VpnBlockedIPs cache (immediately block if found)
+   - If not in either cache, call proxycheck.io API
+   - API returns ISPInfo with Proxy field ("yes" or "no")
+   - If Proxy = "yes", add to VpnBlockedIPs and terminate session
+   - If Proxy = "no", add to VpnApprovedIPs and allow login
+
+3. CACHING:
+   - Both lists are in-memory only (cleared on server restart)
+   - Reduces API calls for repeat login attempts
+   - VpnBlockedIPs persists until admin clears or removes IP
+
+4. ADMIN MANAGEMENT:
+   - /clearvpnblocklist - Clears entire blocked list
+   - /removeipfromvpnblocklist 123.45.67.89 - Removes single IP
+   - Useful for false positives or whitelisting specific VPN users
+
+================================================================================
+CODE STRUCTURE
+================================================================================
+
+-------------------------------------------
+VPNDetection.cs - ISPInfo Class
+-------------------------------------------
+public class ISPInfo
+{
+    public string ASN { get; set; }           // Autonomous System Number
+    public string Provider { get; set; }      // ISP name
+    public string Continent { get; set; }     // Continent
+    public string Country { get; set; }       // Country name
+    public string IsoCode { get; set; }       // Country ISO code
+    public string Region { get; set; }        // State/Region
+    public string RegionCode { get; set; }    // State/Region code
+    public string City { get; set; }          // City
+    public float Latitude { get; set; }       // GPS latitude
+    public float Longitude { get; set; }      // GPS longitude
+    public string Proxy { get; set; }         // "yes" or "no" - KEY FIELD
+    public string Type { get; set; }          // Type of proxy (VPN, TOR, etc.)
+}
+
+-------------------------------------------
+VPNDetection.cs - CheckVPN Method
+-------------------------------------------
+public static async Task<ISPInfo> CheckVPN(string ip)
+{
+    // Skip localhost
+    if (string.IsNullOrEmpty(ip) || ip.Equals("127.0.0.1"))
+        return null;
+
+    // Build API URL with key
+    var url = $"https://proxycheck.io/v2/{ip}?vpn=1&asn=1&key={ApiKey}";
+
+    // Make HTTP request with 3-second timeout
+    var req = WebRequest.Create(url);
+    var task = req.GetResponseAsync();
+    if (!(await Task.WhenAny(task, Task.Delay(3000)) == task))
+    {
+        log.Warn($"VPNDetection.CheckVPN task timed out for ip = {ip}");
+        return null; // Timed out - allow login (fail-open)
+    }
+
+    // Parse JSON response into ISPInfo
+    var resp = task.Result;
+    var data = ReadStreamAsString(resp.GetResponseStream());
+    var ispinfo = JsonDeserialize<ISPInfo>(data[ip]);
+
+    // Log VPN detections
+    if (ispinfo.Proxy.ToLower().Equals("yes"))
+        log.Debug($"VPN detected for ip = {ip} with ISPInfo = {ispinfo}");
+
+    return ispinfo;
+}
+
+-------------------------------------------
+AuthenticationHandler.cs - CheckForVpn
+-------------------------------------------
+private static bool CheckForVpn(string ip)
+{
+    if (ip.Equals("127.0.0.1"))
+        return false;
+
+    bool isVpn = false;
+    try
+    {
+        var task = VPNDetection.CheckVPN(ip);
+        task.Wait();
+        var ispInfo = task.Result;
+
+        if (ispInfo != null &&
+            !String.IsNullOrEmpty(ispInfo.Proxy) &&
+            ispInfo.Proxy.Equals("yes"))
+        {
+            log.Warn($"VPN detected with ISPInfo = {ispInfo}");
+            isVpn = true;
+        }
+    }
+    catch (Exception ex)
+    {
+        log.Error($"Exception in CheckForVPN: {ex}");
+    }
+
+    return isVpn;
+}
+
+-------------------------------------------
+AuthenticationHandler.cs - Login Logic (COMMENTED OUT)
+-------------------------------------------
+// Inside HandleLoginRequest after successful account lookup:
+
+var currIp = session.EndPointC2S?.Address?.ToString();
+bool isVpn = false;
+
+if (!VpnApprovedIPs.Contains(currIp))
+{
+    if (VpnBlockedIPs.Contains(currIp))
+    {
+        isVpn = true;
+    }
+    else
+    {
+        // Not in either cache - check API
+        isVpn = CheckForVpn(currIp);
+        if (isVpn)
+            VpnBlockedIPs.Add(currIp);
+        else
+            VpnApprovedIPs.Add(currIp);
+    }
+}
+
+if (isVpn)
+{
+    log.Info($"Blocked login for account {session.Account} from IP {currIp} due to VPN");
+    string bootMsg = " Connections from VPN / proxy disallowed by server policy";
+    session.Terminate(SessionTerminationReason.AccountBooted,
+                     new GameMessageBootAccount(bootMsg),
+                     null,
+                     bootMsg);
+    return;
+}
+
+================================================================================
+PROXYCHECK.IO API DETAILS
+================================================================================
+
+SERVICE: https://proxycheck.io
+ENDPOINT: https://proxycheck.io/v2/{ip}?vpn=1&asn=1&key={apikey}
+
+FREE TIER:
+- 1,000 queries per day
+- Rate limited
+- Good for small servers
+
+PAID TIERS:
+- Higher query limits
+- Faster response times
+- Better accuracy
+- Custom blacklists
+
+RESPONSE FORMAT:
+{
+  "123.45.67.89": {
+    "proxy": "yes",              // or "no"
+    "type": "VPN",               // or "TOR", "SOCKS", etc.
+    "provider": "NordVPN",
+    "country": "United States",
+    "isocode": "US",
+    "city": "New York",
+    "asn": "AS12345",
+    // ... more fields
+  }
+}
+
+================================================================================
+PROS & CONS
+================================================================================
+
+PROS:
+✅ Third-party API handles VPN detection
+✅ Caching reduces API calls
+✅ Admin controls for false positives
+✅ Detailed ISP information available
+✅ Fail-open design (timeout = allow login)
+✅ Easy to configure with API key
+
+CONS:
+❌ Requires external API dependency
+❌ Free tier limited to 1,000 queries/day
+❌3-second timeout can delay logins
+❌ False positives possible (mobile carriers, corporate networks)
+❌ API downtime = all logins blocked or all allowed depending on fail mode
+❌ Privacy concerns (sending player IPs to third party)
+❌ Commented out in Doctide (suggests issues in production)
+
+================================================================================
+WHY IT'S COMMENTED OUT IN DOCTIDE
+================================================================================
+
+Possible reasons:
+1. Performance: 3-second timeout per login attempt = slow logins
+2. API costs: Paid API key expensive for high-volume server
+3. False positives: Blocking legitimate players
+4. API reliability: Service downtime blocking all logins
+5. Privacy: Player complaints about IP tracking
+6. Bypass methods: Determined players can use residential proxies
+
+================================================================================
+IMPLEMENTATION FOR CONQUEST
+================================================================================
+
+OPTION 1: Use Doctide's system as-is
+- Copy VPNDetection.cs to ACE.Server\Network\
+- Copy CheckForVpn logic to AuthenticationHandler
+- Add "proxycheck_api_key" property
+- Add admin commands
+- Uncomment login blocking logic
+- Get proxycheck.io API key (free or paid)
+
+OPTION 2: Modified approach (Recommended)
+- Use VPN detection but make it non-blocking
+- Log VPN connections for admin review
+- Manually add repeat offenders to blocklist
+- Avoids false positive lockouts
+- Allows admin discretion
+
+OPTION 3: Enhanced caching
+- Persist VpnBlockedIPs and VpnApprovedIPs to database
+- Only check new IPs via API
+- Reduces API calls significantly
+- Faster login times for returning players
+
+OPTION 4: Skip VPN detection
+- Rely on multi-accounting detection instead (IP + character limits)
+- Easier to enforce, fewer false positives
+- Players can VPN but still limited to 1 character outside marketplace
+- Manual admin banning for abuse
+
+================================================================================
+RECOMMENDATION FOR CONQUEST
+================================================================================
+
+Based on the proposal requirement "No VPN usage permitted, under any
+circumstances" and the fact that Doctide commented out their VPN detection,
+I recommend:
+
+HYBRID APPROACH:
+1. Implement VPN detection with logging (non-blocking)
+2. Add admin command to view recent VPN connection attempts
+3. Manually add confirmed VPN IPs to blocklist
+4. Rely primarily on character limit enforcement (already implemented)
+5. Use VPN detection as evidence for manual bans, not automatic
+
+RATIONALE:
+- Avoids false positive lockouts
+- Gives admins control
+- Character limits already prevent multi-account abuse
+- VPN users still limited to 1 character outside marketplace
+- Admins can review logs and ban repeat offenders
+
+================================================================================
+FILES TO COPY FROM DOCTIDE
+================================================================================
+
+If implementing VPN detection for Conquest:
+
+1. Copy: ACE_Doctide\Source\ACE.Server\Network\VPNDetection.cs
+   To: ACEMain\Source\ACE.Server\Network\VPNDetection.cs
+
+2. Modify: ACEMain\Source\ACE.Server\Network\Handlers\AuthenticationHandler.cs
+   Add: CheckForVpn method (lines 344-374 from Doctide)
+   Add: VpnBlockedIPs and VpnApprovedIPs lists (lines 32-58 from Doctide)
+   Add: Login blocking logic (lines 213-243 from Doctide, currently commented)
+
+3. Modify: ACEMain\Source\ACE.Server\Managers\PropertyManager.cs
+   Add: ("proxycheck_api_key", new Property<string>("", "API key for proxycheck.io"))
+
+4. Modify: ACEMain\Source\ACE.Server\Command\Handlers\AdminCommands.cs
+   Add: /clearvpnblocklist command
+   Add: /removeipfromvpnblocklist command
+
+5. Add to Database: config_properties_string table
+   Add row: ("proxycheck_api_key", "YOUR_API_KEY_HERE")
+
+6. Sign up for API key: https://proxycheck.io/signup
+
+================================================================================
+ESTIMATED IMPLEMENTATION TIME
+================================================================================
+
+Full implementation: 1-2 hours
+- Copy VPNDetection.cs: 5 minutes
+- Modify AuthenticationHandler: 30 minutes
+- Add PropertyManager entry: 5 minutes
+- Add admin commands: 15 minutes
+- Testing with free API key: 30 minutes
+- Documentation: 15 minutes
+
+================================================================================
+END OF ANALYSIS
+================================================================================
