@@ -47,6 +47,26 @@ namespace ACE.Server.Entity
         public static float MaxObjectRange { get; } = 192f;
         public static float MaxObjectGhostRange { get; } = 250f;
 
+        // CONQUEST: Landblocks exempt from multi-character IP restrictions (Marketplace + Apartments)
+        public static readonly HashSet<ushort> connectionExemptLandblocks = new()
+        {
+            //Marketplace
+            0x016C,
+            //Apartments
+            0x7200, 0x7300, 0x7400, 0x7500, 0x7600, 0x7700, 0x7800, 0x7900, 0x7A00, 0x7B00, 0x7C00, 0x7D00, 0x7E00, 0x7F00, 0x8000, 0x8100, 0x8200, 0x8300, 0x8400, 0x8500, 0x8600, 0x8700, 0x8800, 0x8900, 0x8A00, 0x8B00, 0x8C00, 0x8D00, 0x8E00, 0x8F00, 0x9000, 0x9100, 0x9200, 0x9300, 0x9400, 0x9500, 0x9600, 0x9700, 0x9800, 0x9900, 0x5360, 0x5361, 0x5362, 0x5363, 0x5364, 0x5365, 0x5366, 0x5367, 0x5368, 0x5369
+        };
+
+        // CONQUEST: PK-only dungeon variants where players gain +10% XP/Lum bonus
+        // Stores (landblock, variation) tuples to identify specific dungeon variants
+        // This allows normal PVE dungeons (variation 0) to coexist with PK-only variants (variation 1+)
+        // TODO: Add actual PK dungeon landblock+variant combinations
+        public static readonly HashSet<(ushort landblock, int variation)> pkDungeonLandblocks = new()
+        {
+            // Example: Add PK dungeon landblock+variant combinations here
+            // (0x0001, 1), // Landblock 0x0001, Variant 1 = PK-only
+            // (0x0002, 1), // Landblock 0x0002, Variant 1 = PK-only
+            // etc.
+        };
 
         public LandblockId Id { get; }
 

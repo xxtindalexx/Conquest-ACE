@@ -303,6 +303,7 @@ namespace ACE.Server.Managers
 
         /// <summary>
         /// Thanks to Endy's Tinkering Calculator for these values!
+        /// Extended to support 20x tinkering for Conquest
         /// </summary>
         public static List<float> TinkeringDifficulty = new List<float>()
         {
@@ -316,7 +317,17 @@ namespace ACE.Server.Managers
             3.0f,   // 7
             3.5f,   // 8
             4.0f,   // 9
-            4.5f    // 10
+            4.5f,   // 10
+            5.0f,   // 11
+            5.5f,   // 12
+            6.0f,   // 13
+            6.5f,   // 14
+            7.0f,   // 15
+            7.5f,   // 16
+            8.0f,   // 17
+            8.5f,   // 18
+            9.0f,   // 19
+            9.5f    // 20
         };
 
         public static void ShowDialog(Player player, WorldObject source, WorldObject target, Recipe recipe, double successChance)

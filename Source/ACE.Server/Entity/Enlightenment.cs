@@ -7,6 +7,9 @@ using ACE.Entity.Enum.Properties;
 using ACE.Server.WorldObjects;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Common;
+using ACE.Server.Entity.Actions;
+using System.Runtime.CompilerServices;
 
 namespace ACE.Server.Entity
 {
@@ -46,57 +49,186 @@ namespace ACE.Server.Entity
         // - +1 to all of your skills
         // - An attribute reset certificate
 
-        public static void HandleEnlightenment(WorldObject npc, Player player)
+        public static void HandleEnlightenment(Player player)
         {
             if (!VerifyRequirements(player))
                 return;
 
             DequipAllItems(player);
 
-            RemoveAbility(player);
+            RemoveFromFellowships(player);
 
-            AddPerks(npc, player);
+            player.SendMotionAsCommands(MotionCommand.MarketplaceRecall, MotionStance.NonCombat);
 
-            player.SaveBiotaToDatabase();
+            var startPos = new ACE.Entity.Position(player.Location);
+            ActionChain enlChain = new ActionChain();
+            enlChain.AddDelaySeconds(14);
+
+            // Then do teleport
+            player.IsBusy = true;
+            // CONQUEST: Removed ActionType.Enlightenment_DoEnlighten (ILT-specific enum)
+            enlChain.AddAction(player, () =>
+            {
+                player.IsBusy = false;
+                var endPos = new ACE.Entity.Position(player.Location);
+                if (startPos.SquaredDistanceTo(endPos) > Player.RecallMoveThresholdSq)
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You have moved too far during the enlightenment animation!", ChatMessageType.Broadcast));
+                    return;
+                }
+
+                player.ThreadSafeTeleportOnDeath();
+
+                // CONQUEST: Spend luminance
+                if (!SpendLuminance(player))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You do not have enough luminance to enlighten!", ChatMessageType.Broadcast));
+                    return;
+                }
+
+                // CONQUEST: Consume enlightenment currency
+                if (!RemoveEnlightenmentCurrency(player))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You do not have enough enlightenment currency!", ChatMessageType.Broadcast));
+                    return;
+                }
+
+                RemoveAbility(player);
+                AddPerks(player);
+                if (player.Enlightenment >= 25)
+                {
+                    DequipAllItems(player);
+                }
+                player.SaveBiotaToDatabase();
+            });
+
+            // Set the chain to run
+            enlChain.EnqueueChain();
+
         }
 
         public static bool VerifyRequirements(Player player)
         {
-            if (player.Level < 275)
+            if (player.Level < (275 + player.Enlightenment))
             {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must be level 275 for enlightenment.", ChatMessageType.Broadcast));
-                return false;
-            }
-
-            if (!VerifyLumAugs(player))
-            {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must have all luminance auras for enlightenment.", ChatMessageType.Broadcast));
-                return false;
-            }
-
-            if (!VerifySocietyMaster(player))
-            {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must be a Master of one of the Societies of Dereth for enlightenment.", ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must be level 275 Plus 1 per Previous Enlightenment to enlighten further.", ChatMessageType.Broadcast));
                 return false;
             }
 
             if (player.GetFreeInventorySlots() < 25)
             {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must have at least 25 free inventory slots in your main pack for enlightenment.", ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must have at least 25 free inventory slots in your main pack for enlightenment, to unequip your gear automatically.", ChatMessageType.Broadcast));
                 return false;
             }
 
-            if (player.Enlightenment >= 5)
+            if (player.HasVitae)
             {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You have already reached the maximum enlightenment level!", ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot reach enlightenment with a Vitae Penalty. Go find those lost pieces of your soul and try again. Check under the couch cushions, that's where I usually lose mine.", ChatMessageType.Broadcast));
                 return false;
             }
+
+            if (player.Teleporting || player.TooBusyToRecall || player.IsAnimating || player.IsInDeathProcess)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot enlighten while teleporting or busy. Complete your movement and try again. Neener neener.", ChatMessageType.System));
+                return false;
+            }
+
+            // CONQUEST: Removed Variation parameter (ILT-specific for dungeon variations)
+            Landblock currentLandblock = LandblockManager.GetLandblock(player.Location.LandblockId, false, false);
+            if (currentLandblock != null && currentLandblock.IsDungeon)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot enlighten while inside a dungeon. Find an exit or recall to begin your enlightenment.", ChatMessageType.System));
+                return false;
+            }
+
+            if (player.CombatMode != CombatMode.NonCombat)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot enlighten while in combat mode. Be at peace, friend.", ChatMessageType.System));
+                return false;
+            }
+
+
+            if (player.LastPortalTeleportTimestamp.HasValue)
+            {
+                var timeSinceLastPortal = Time.GetUnixTime() - player.LastPortalTeleportTimestamp.Value;
+                if (timeSinceLastPortal <= 10.0f)
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You've teleported too recently to enlighten.", ChatMessageType.Broadcast));
+                    return false;
+                }
+            }
+
+            var targetEnlightenment = player.Enlightenment + 1;
+
+            // CONQUEST: Cap at 100 enlightenment
+            if (targetEnlightenment > 100)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You have reached the maximum enlightenment level of 100!", ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // CONQUEST: Luminance auras required after enlightenment 10
+            if (targetEnlightenment > 10)
+            {
+                if (!VerifyLumAugs(player))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must have all luminance auras (excluding skill credit auras) to enlighten beyond level 10.", ChatMessageType.Broadcast));
+                    return false;
+                }
+            }
+
+            // CONQUEST: Society master rank required after enlightenment 30
+            if (targetEnlightenment > 30)
+            {
+                if (!VerifySocietyMaster(player))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must be a Society Master to enlighten beyond level 30.", ChatMessageType.Broadcast));
+                    return false;
+                }
+            }
+
+            // CONQUEST: Currency requirement - TODO: Replace placeholder weenie 999999999 with actual currency weenie
+            // Required amount scales with enlightenment level
+            int currencyRequired = targetEnlightenment; // 1 per enlightenment level, adjust as needed
+            var currencyCount = player.GetNumInventoryItemsOfWCID(999999999);
+            if (currencyCount < currencyRequired)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {currencyRequired} Enlightenment Currency to reach enlightenment level {targetEnlightenment}. You have {currencyCount}.", ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // CONQUEST: Simple luminance cost - TODO: Determine final cost formula with client
+            // Placeholder: 1 million luminance per enlightenment level
+            long baseLumCost = 1_000_000;  // 1M luminance base cost
+            long reqLum = targetEnlightenment * baseLumCost;
+
+            if (!VerifyLuminance(player, reqLum))
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {reqLum:N0} banked luminance to enlighten to level {targetEnlightenment}. You have {player.BankedLuminance:N0}.", ChatMessageType.Broadcast));
+                return false;
+            }
+
             return true;
+        }
+
+        public static bool VerifyLuminance(Player player, long reqLum)
+        {
+            return player.BankedLuminance >= reqLum;
         }
 
         public static bool VerifySocietyMaster(Player player)
         {
             return player.SocietyRankCelhan == 1001 || player.SocietyRankEldweb == 1001 || player.SocietyRankRadblo == 1001;
+        }
+
+        public static bool VerifyParagonCompleted(Player player)
+        {
+            return player.QuestManager.GetCurrentSolves("ParagonEnlCompleted") >= 1;
+        }
+
+        public static bool VerifyParagonArmorCompleted(Player player)
+        {
+            return player.QuestManager.GetCurrentSolves("ParagonArmorCompleted") >= 1;
         }
 
         public static bool VerifyLumAugs(Player player)
@@ -118,6 +250,11 @@ namespace ACE.Server.Entity
             return lumAugCredits == 65;
         }
 
+        public static void RemoveFromFellowships(Player player)
+        {
+            player.FellowshipQuit(false);
+        }
+
         public static void DequipAllItems(Player player)
         {
             var equippedObjects = player.EquippedObjects.Keys.ToList();
@@ -126,45 +263,91 @@ namespace ACE.Server.Entity
                 player.HandleActionPutItemInContainer(equippedObject.Full, player.Guid.Full, 0);
         }
 
+        public static void RemoveAllSpells(Player player)
+        {
+            player.EnchantmentManager.DispelAllEnchantments();
+        }
+
         public static void RemoveAbility(Player player)
         {
             RemoveSociety(player);
-            RemoveLuminance(player);
-            RemoveAetheria(player);
-            RemoveAttributes(player);
+            //RemoveLuminance(player);
             RemoveSkills(player);
             RemoveLevel(player);
+            RemoveAllSpells(player);
+        }
+
+        public static void RemoveTokens(Player player)
+        {
+            // CONQUEST: ILT tokens not used
+            //player.TryConsumeFromInventoryWithNetworking(300000, player.Enlightenment + 1 - 5);
+        }
+
+        public static void RemoveMedallion(Player player)
+        {
+            // CONQUEST: ILT medallions not used
+            //player.TryConsumeFromInventoryWithNetworking(90000217, player.Enlightenment + 1 - 5);
+        }
+
+        public static void RemoveSigil(Player player)
+        {
+            // CONQUEST: ILT sigils not used
+            //player.TryConsumeFromInventoryWithNetworking(300101189, player.Enlightenment + 1 - 5);
+        }
+
+        public static bool RemoveEnlightenmentCurrency(Player player)
+        {
+            // CONQUEST: Consume enlightenment currency
+            // TODO: Replace placeholder weenie 999999999 with actual currency weenie
+            int currencyRequired = player.Enlightenment + 1;
+            return player.TryConsumeFromInventoryWithNetworking(999999999, currencyRequired);
+        }
+
+        public static bool SpendLuminance(Player player)
+        {
+            // CONQUEST: Simple linear luminance cost formula
+            // TODO: Determine final cost formula with client
+            long baseLumCost = 1_000_000;  // 1M luminance base cost
+            var targetEnlightenment = player.Enlightenment + 1;
+            long reqLum = targetEnlightenment * baseLumCost;
+
+            return player.SpendLuminance(reqLum);
         }
 
         public static void RemoveSociety(Player player)
         {
-            player.QuestManager.Erase("SocietyMember");
-            player.QuestManager.Erase("CelestialHandMember");
-            player.QuestManager.Erase("EnlightenedCelestialHandMaster");
-            player.QuestManager.Erase("EldrytchWebMember");
-            player.QuestManager.Erase("EnlightenedEldrytchWebMaster");
-            player.QuestManager.Erase("RadiantBloodMember");
-            player.QuestManager.Erase("EnlightenedRadiantBloodMaster");
+            // Leave society alone if server prop is false
+            if (PropertyManager.GetBool("enl_removes_society").Item)
+            {
+                player.QuestManager.Erase("SocietyMember");
+                player.QuestManager.Erase("CelestialHandMember");
+                player.QuestManager.Erase("EnlightenedCelestialHandMaster");
+                player.QuestManager.Erase("EldrytchWebMember");
+                player.QuestManager.Erase("EnlightenedEldrytchWebMaster");
+                player.QuestManager.Erase("RadiantBloodMember");
+                player.QuestManager.Erase("EnlightenedRadiantBloodMaster");
 
-            if (player.SocietyRankCelhan == 1001)
-                player.QuestManager.Stamp("EnlightenedCelestialHandMaster"); // after rejoining society, player can get promoted instantly to master when speaking to promotions officer
-            if (player.SocietyRankEldweb == 1001)
-                player.QuestManager.Stamp("EnlightenedEldrytchWebMaster");   // after rejoining society, player can get promoted instantly to master when speaking to promotions officer
-            if (player.SocietyRankRadblo == 1001)
-                player.QuestManager.Stamp("EnlightenedRadiantBloodMaster");  // after rejoining society, player can get promoted instantly to master when speaking to promotions officer
+                if (player.SocietyRankCelhan == 1001)
+                    player.QuestManager.Stamp("EnlightenedCelestialHandMaster"); // after rejoining society, player can get promoted instantly to master when speaking to promotions officer
+                if (player.SocietyRankEldweb == 1001)
+                    player.QuestManager.Stamp("EnlightenedEldrytchWebMaster");   // after rejoining society, player can get promoted instantly to master when speaking to promotions officer
+                if (player.SocietyRankRadblo == 1001)
+                    player.QuestManager.Stamp("EnlightenedRadiantBloodMaster");  // after rejoining society, player can get promoted instantly to master when speaking to promotions officer
 
-            player.Faction1Bits = null;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.Faction1Bits, 0));
-            player.SocietyRankCelhan = null;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.SocietyRankCelhan, 0));
-            player.SocietyRankEldweb = null;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.SocietyRankEldweb, 0));
-            player.SocietyRankRadblo = null;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.SocietyRankRadblo, 0));
+                player.Faction1Bits = null;
+                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.Faction1Bits, 0));
+                //player.SocietyRankCelhan = null;
+                //player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.SocietyRankCelhan, 0));
+                //player.SocietyRankEldweb = null;
+                //player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.SocietyRankEldweb, 0));
+                //player.SocietyRankRadblo = null;
+                //player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.SocietyRankRadblo, 0));
+            }
         }
 
         public static void RemoveLevel(Player player)
         {
+            // CONQUEST: Removed TotalExperienceDouble (ILT-specific property)
             player.TotalExperience = 0;
             player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(player, PropertyInt64.TotalExperience, player.TotalExperience ?? 0));
 
@@ -252,57 +435,29 @@ namespace ACE.Server.Entity
 
         public static void RemoveLuminance(Player player)
         {
-            player.QuestManager.Erase("OracleLuminanceRewardsAccess_1110");
-            player.QuestManager.Erase("LoyalToShadeOfLadyAdja");
-            player.QuestManager.Erase("LoyalToKahiri");
-            player.QuestManager.Erase("LoyalToLiamOfGelid");
-            player.QuestManager.Erase("LoyalToLordTyragar");
-
-            player.LumAugDamageRating = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugDamageRating, 0));
-            player.LumAugDamageReductionRating = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugDamageReductionRating, 0));
-            player.LumAugCritDamageRating = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugCritDamageRating, 0));
-            player.LumAugCritReductionRating = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugCritReductionRating, 0));
-            //player.LumAugSurgeEffectRating = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugSurgeEffectRating, 0));
-            player.LumAugSurgeChanceRating = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugSurgeChanceRating, 0));
-            player.LumAugItemManaUsage = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugItemManaUsage, 0));
-            player.LumAugItemManaGain = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugItemManaGain, 0));
-            player.LumAugVitality = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugVitality, 0));
-            player.LumAugHealingRating = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugHealingRating, 0));
-            player.LumAugSkilledCraft = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugSkilledCraft, 0));
-            player.LumAugSkilledSpec = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugSkilledSpec, 0));
-            player.LumAugAllSkills = 0;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.LumAugAllSkills, 0));
-
-            player.AvailableLuminance = null;
+            player.AvailableLuminance = 0;
             player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(player, PropertyInt64.AvailableLuminance, 0));
-            player.MaximumLuminance = null;
-            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(player, PropertyInt64.MaximumLuminance, 0));
 
-            player.SendMessage("Your Luminance and Luminance Auras fade from your spirit.", ChatMessageType.Broadcast);
+            player.SendMessage("Your Luminance fades from your spirit.", ChatMessageType.Broadcast);
         }
 
         public static uint AttributeResetCertificate => 46421;
 
-        public static void AddPerks(WorldObject npc, Player player)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int GetEnlightenmentRatingBonus(int EnlightenmentAmt)
         {
-            // +1 to all skills
-            // this could be handled through InitLevel, since we are always using deltas when modifying that field
-            // (ie. +5/-5, instead of specifically setting to 5 trained / 10 specialized in SkillAlterationDevice)
-            // however, it just feels safer to handle this dynamically in CreatureSkill, based on Enlightenment (similar to augs)
-            //var enlightenment = player.Enlightenment + 1;
-            //player.UpdateProperty(player, PropertyInt.Enlightenment, enlightenment);
+            // CONQUEST: Simple formula - +1 DR/DMG per 25 enlightenment
+            // ENL 0-24: 0 bonus, ENL 25-49: 1 bonus, ENL 50-74: 2 bonus, ENL 75-99: 3 bonus, ENL 100: 4 bonus
+            return EnlightenmentAmt / 25;
+        }
+
+        public static void AddPerks(Player player)
+        {
+            // CONQUEST: Enlightenment bonuses are handled in the following locations:
+            // - +1 to all skills: Handled dynamically in CreatureSkill based on Enlightenment property (similar to augmentations)
+            // - +1% XP per ENL: Integrated into Player_Xp.cs (EarnXP and other XP gain methods)
+            // - +1 all stats per ENL: Integrated into Player.cs (attribute calculations)
+            // - +1 DR/DMG per 25 ENL: Integrated into Creature.cs via GetEnlightenmentRatingBonus() method
 
             player.Enlightenment += 1;
             player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.Enlightenment, player.Enlightenment));
@@ -313,42 +468,61 @@ namespace ACE.Server.Entity
 
             var lvl = "";
 
+            switch (player.Enlightenment % 100)
+            {
+                case 11:
+                case 12:
+                case 13:
+                    lvl = player.Enlightenment + "th";
+                    break;
+            }
+            if (string.IsNullOrEmpty(lvl))
+            {
+                switch (player.Enlightenment % 10)
+                {
+                    case 1:
+                        lvl = player.Enlightenment + "st";
+                        break;
+                    case 2:
+                        lvl = player.Enlightenment + "nd";
+                        break;
+                    case 3:
+                        lvl = player.Enlightenment + "rd";
+                        break;
+                    default:
+                        lvl = player.Enlightenment + "th";
+                        break;
+                }
+            }
+            
             // add title
             switch (player.Enlightenment)
             {
                 case 1:
-                    player.AddTitle(CharacterTitle.Awakened);
-                    lvl = "1st";
+                    player.AddTitle(CharacterTitle.Awakened);                   
                     break;
                 case 2:
                     player.AddTitle(CharacterTitle.Enlightened);
-                    lvl = "2nd";
                     break;
                 case 3:
                     player.AddTitle(CharacterTitle.Illuminated);
-                    lvl = "3rd";
                     break;
                 case 4:
                     player.AddTitle(CharacterTitle.Transcended);
-                    lvl = "4th";
                     break;
                 case 5:
                     player.AddTitle(CharacterTitle.CosmicConscious);
-                    lvl = "5th";
-                    break;
+                    break;                
             }
-
-            player.GiveFromEmote(npc, AttributeResetCertificate, 1);
 
             var msg = $"{player.Name} has achieved the {lvl} level of Enlightenment!";
             PlayerManager.BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
+            // CONQUEST: Removed Discord integration (ILT-specific feature)
+            // DiscordChatManager.SendDiscordMessage(player.Name, msg, ConfigManager.Config.Chat.GeneralChannelId);
             PlayerManager.LogBroadcastChat(Channel.AllBroadcast, null, msg);
 
-            // +2 vitality
-            // handled automatically via PropertyInt.Enlightenment * 2
-
-            /*var vitality = player.LumAugVitality + 2;
-            player.UpdateProperty(player, PropertyInt.LumAugVitality, vitality);*/
+            // CONQUEST: Enlightenment bonuses (+1% XP, +1 stats, +1 DR/DMG per 25) are applied dynamically
+            // See comments at the top of AddPerks method for integration locations
         }
     }
 }

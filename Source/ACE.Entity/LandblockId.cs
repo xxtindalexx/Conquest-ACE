@@ -7,14 +7,32 @@ namespace ACE.Entity
     {
         public uint Raw { get; }
 
+        // CONQUEST: Dungeon Variations - allows creating multiple instances of the same dungeon
+        public int? Variation_Id;
+
         public LandblockId(uint raw)
         {
             Raw = raw;
+            Variation_Id = null;
         }
 
         public LandblockId(byte x, byte y)
         {
             Raw = (uint)x << 24 | (uint)y << 16;
+            Variation_Id = null;
+        }
+
+        // CONQUEST: Dungeon Variations - constructors with variation support
+        public LandblockId(uint raw, int? variationId)
+        {
+            Raw = raw;
+            Variation_Id = variationId;
+        }
+
+        public LandblockId(byte x, byte y, int? variationId)
+        {
+            Raw = (uint)x << 24 | (uint)y << 16;
+            Variation_Id = variationId;
         }
 
         public LandblockId East => new LandblockId(Convert.ToByte(LandblockX + 1), LandblockY);

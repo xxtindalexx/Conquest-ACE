@@ -96,6 +96,12 @@ public partial class ShardDbContext : DbContext
 
     public virtual DbSet<HousePermission> HousePermission { get; set; }
 
+    // CONQUEST: Custom DbSets for banking and transfer monitoring
+    public virtual DbSet<BankCommandBlacklist> BankCommandBlacklist { get; set; }
+    public virtual DbSet<TransferMonitoringConfigDb> TransferMonitoringConfigs { get; set; }
+    public virtual DbSet<TransferLog> TransferLog { get; set; }
+    public virtual DbSet<TrackedItem> TrackedItems { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)

@@ -106,6 +106,9 @@ namespace ACE.Server.WorldObjects
                 pkPlayer.PkTimestamp = Time.GetUnixTime();
                 pkPlayer.PlayerKillsPk++;
 
+                // CONQUEST: Track PK death timestamp for 20-minute cooldown on /pk on command
+                SetProperty(PropertyInt64.LastPKDeathTime, (long)Time.GetUnixTime());
+
                 var globalPKDe = $"{lastDamager.Name} has defeated {Name}!";
 
                 if ((Location.Cell & 0xFFFF) < 0x100)
@@ -229,6 +232,9 @@ namespace ACE.Server.WorldObjects
             dieChain.AddAction(this, () =>
             {
                 CreateCorpse(topDamager, hadVitae);
+
+                // CONQUEST: Track death in PK-only dungeon variant for 20-minute re-entry cooldown (PK vs PK only)
+                TrackPKDungeonDeath(topDamager);
 
                 ThreadSafeTeleportOnDeath(); // enter portal space
 
@@ -478,7 +484,8 @@ namespace ACE.Server.WorldObjects
             // if player dies on a No Drop landblock,
             // they don't drop any items
 
-            if (corpse.IsOnNoDropLandblock || IsPKLiteDeath(corpse.KillerId))
+            // CONQUEST: PK deaths don't drop death items (will drop Soul Fragments instead)
+            if (corpse.IsOnNoDropLandblock || IsPKLiteDeath(corpse.KillerId) || IsPKDeath(corpse.KillerId))
                 return new List<WorldObject>();
 
             var numItemsDropped = GetNumItemsDropped(corpse);
@@ -1102,6 +1109,37 @@ namespace ACE.Server.WorldObjects
             {
                 return new();
             }
+        }
+
+        /// <summary>
+        /// CONQUEST: Tracks player death in PK-only dungeon variants
+        /// Stores the specific landblock+variant where they died
+        /// Used to enforce 20-minute re-entry cooldown for that specific dungeon
+        /// Only tracks PK vs PK deaths (not deaths to mobs)
+        /// </summary>
+        public void TrackPKDungeonDeath(DamageHistoryInfo topDamager)
+        {
+            // Only track PK vs PK deaths (not mob deaths)
+            if (!IsPKDeath(topDamager))
+                return;
+
+            // Check if player died in a PK-only dungeon variant
+            if (CurrentLandblock == null || Location == null)
+                return;
+
+            var currentLandblock = (ushort)CurrentLandblock.Id.Landblock;
+            var currentVariation = Location.Variation ?? 0;
+
+            // Only track if died in a PK-only dungeon variant
+            if (!Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                return;
+
+            // Pack landblock and variant into a single long: (landblock << 16 | variant)
+            var packedLocation = ((long)currentLandblock << 16) | (long)currentVariation;
+
+            // Store the location and timestamp
+            SetProperty(PropertyInt64.LastPKDungeonDeathLocation, packedLocation);
+            SetProperty(PropertyInt64.LastPKDungeonDeathTime, (long)Time.GetUnixTime());
         }
     }
 }

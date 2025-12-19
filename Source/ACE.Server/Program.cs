@@ -265,6 +265,14 @@ namespace ACE.Server
             log.Info("Initializing GuidManager...");
             GuidManager.Initialize();
 
+            if (ConfigManager.Config.Chat.EnableDiscordConnection)
+            {
+                log.Info("Initializing DiscordChatManager...");
+                DiscordChatManager.Initialize();
+            }
+            else
+                log.Info("Discord Integration Disabled...");
+
             if (ConfigManager.Config.Server.ServerPerformanceMonitorAutoStart)
             {
                 log.Info("Server Performance Monitor auto starting...");

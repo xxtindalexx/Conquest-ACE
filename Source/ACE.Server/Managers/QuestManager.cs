@@ -212,6 +212,12 @@ namespace ACE.Server.Managers
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
                 }
             }
+
+            // CONQUEST: Quest Bonus System - Track account-wide quest completions
+            if (Creature is Player playerForQB)
+            {
+                StampAccountQuest(playerForQB, questName, quest.NumTimesCompleted);
+            }
         }
 
         /// <summary>
@@ -682,6 +688,59 @@ namespace ACE.Server.Managers
                 Console.WriteLine($"{Name}.QuestManager.SetQuestBits({questFormat}, 0x{bits:X}): {on}");
 
             SetQuestCompletions(questFormat, questBits);
+        }
+
+        // CONQUEST: Quest Bonus System
+        /// <summary>
+        /// Stamps the account-wide quest tracking database for Quest Bonus system
+        /// </summary>
+        private static void StampAccountQuest(Player player, string questName, int solves)
+        {
+            var acctId = player.Account.AccountId;
+
+            // Check if already tracked to avoid database thrashing
+            if (player.Account.HasQuestBonusAndCompletion(questName))
+            {
+                return;
+            }
+
+            using (var context = new Database.Models.Auth.AuthDbContext())
+            {
+                try
+                {
+                    var acctQuest = context.AccountQuest.Where(x => x.AccountId == acctId && x.Quest == questName).FirstOrDefault();
+                    if (acctQuest != null)
+                    {
+                        // Update existing record if quest was just completed (first completion)
+                        if (solves == 1 && acctQuest.NumTimesCompleted < 1)
+                        {
+                            acctQuest.NumTimesCompleted = (uint)solves;
+                            context.AccountQuest.Update(acctQuest);
+                            player.Account.UpdateAccountQuestsCacheByQuestName(questName, (uint)solves);
+                        }
+                    }
+                    else
+                    {
+                        // Add new record
+                        context.AccountQuest.Add(new Database.Models.Auth.AccountQuest()
+                        {
+                            AccountId = acctId,
+                            Quest = questName,
+                            NumTimesCompleted = (uint)solves
+                        });
+                        player.Account.UpdateAccountQuestsCacheByQuestName(questName, (uint)solves);
+                    }
+
+                    context.SaveChanges();
+
+                    // Update player's quest completion count
+                    player.QuestCompletionCount = player.Account.CachedQuestBonusCount;
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"Failed to stamp account quest {questName} for account {acctId}: {ex.Message}");
+                }
+            }
         }
     }
 }

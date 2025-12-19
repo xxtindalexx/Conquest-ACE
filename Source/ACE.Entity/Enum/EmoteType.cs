@@ -130,6 +130,9 @@ namespace ACE.Entity.Enum
         InqContractsFull              = 121,
 
         // Unknown Id Emotes & Custom Emotes
-        Enlightenment                 = 9001
+        Enlightenment                 = 9001,
+
+        // CONQUEST: Luminance Augmentation Gems
+        PromptAddAugment              = 9002
     }
 }

@@ -176,5 +176,34 @@ namespace ACE.Database
                 return result;
             }
         }
+
+        // CONQUEST: Quest Bonus System
+        public List<AccountQuest> GetAccountQuests(uint accountId)
+        {
+            using (var context = new AuthDbContext())
+            {
+                return context.AccountQuest
+                    .AsNoTracking()
+                    .Where(r => r.AccountId == accountId)
+                    .ToList();
+            }
+        }
+
+        public long? GetCountOfAccountQuests(uint accountId)
+        {
+            using (var context = new AuthDbContext())
+            {
+                var quests = context.AccountQuest
+                    .AsNoTracking()
+                    .Where(r => r.AccountId == accountId)
+                    .ToList();
+
+                if (quests == null || quests.Count == 0)
+                    return 0;
+
+                // Count all quests + completed quests (gives bonus for both starting and completing)
+                return quests.Count + quests.Where(x => x.NumTimesCompleted >= 1).Count();
+            }
+        }
     }
 }

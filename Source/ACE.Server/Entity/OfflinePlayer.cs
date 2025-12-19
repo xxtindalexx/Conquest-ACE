@@ -46,6 +46,7 @@ namespace ACE.Server.Entity
         public DateTime LastRequestedDatabaseSave { get; protected set; }
 
         public bool ChangesDetected { get; set; }
+        public bool SaveInProgress { get; set; }
 
         public readonly ReaderWriterLockSlim BiotaDatabaseLock = new ReaderWriterLockSlim();
 
@@ -56,11 +57,30 @@ namespace ACE.Server.Entity
         /// </summary>
         public void SaveBiotaToDatabase(bool enqueueSave = true)
         {
+            SaveBiotaToDatabase(enqueueSave, null);
+        }
+
+        /// <summary>
+        /// This will set the LastRequestedDatabaseSave to UtcNow and ChangesDetected to false.<para />
+        /// If enqueueSave is set to true, DatabaseManager.Shard.SaveBiota() will be called for the biota.<para />
+        /// Set enqueueSave to false if you want to perform all the normal routines for a save but not the actual save. This is useful if you're going to collect biotas in bulk for bulk saving.
+        /// </summary>
+        /// <param name="enqueueSave">Whether to enqueue the save operation</param>
+        /// <param name="onCompleted">Optional callback to invoke when the save operation completes</param>
+        public void SaveBiotaToDatabase(bool enqueueSave, Action<bool> onCompleted)
+        {
             LastRequestedDatabaseSave = DateTime.UtcNow;
+            SaveInProgress = true;
             ChangesDetected = false;
 
             if (enqueueSave)
-                DatabaseManager.Shard.SaveBiota(Biota, BiotaDatabaseLock, null);
+            {
+                DatabaseManager.Shard.SaveBiota(Biota, BiotaDatabaseLock, result =>
+                {
+                    SaveInProgress = false;
+                    onCompleted?.Invoke(result);
+                });
+            }
         }
 
 
@@ -282,6 +302,64 @@ namespace ACE.Server.Entity
                 SetProperty(prop, value.Value);
             else
                 RemoveProperty(prop);
+        }
+
+        // CONQUEST: Allegiance Luminance Tracking
+        public ulong AllegianceLumCached
+        {
+            get => (ulong)(GetProperty(PropertyInt64.AllegianceLumCached) ?? 0);
+            set { if (value == 0) RemoveProperty(PropertyInt64.AllegianceLumCached); else SetProperty(PropertyInt64.AllegianceLumCached, (long)value); }
+        }
+
+        public ulong AllegianceLumGenerated
+        {
+            get => (ulong)(GetProperty(PropertyInt64.AllegianceLumGenerated) ?? 0);
+            set { if (value == 0) RemoveProperty(PropertyInt64.AllegianceLumGenerated); else SetProperty(PropertyInt64.AllegianceLumGenerated, (long)value); }
+        }
+
+        // CONQUEST: Banking Properties
+        public long? BankedLuminance
+        {
+            get => GetProperty(PropertyInt64.BankedLuminance);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.BankedLuminance); else SetProperty(PropertyInt64.BankedLuminance, value.Value); }
+        }
+
+        public long? BankedPyreals
+        {
+            get => GetProperty(PropertyInt64.BankedPyreals);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.BankedPyreals); else SetProperty(PropertyInt64.BankedPyreals, value.Value); }
+        }
+
+        public long? BankedLegendaryKeys
+        {
+            get => GetProperty(PropertyInt64.BankedLegendaryKeys) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.BankedLegendaryKeys); else SetProperty(PropertyInt64.BankedLegendaryKeys, value.Value); }
+        }
+
+        // CONQUEST: BankedMythicalKeys removed - Mythical Keys not used in Conquest
+        /*public long? BankedMythicalKeys
+        {
+            get => GetProperty(PropertyInt64.BankedMythicalKeys) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.BankedMythicalKeys); else SetProperty(PropertyInt64.BankedMythicalKeys, value.Value); }
+        }*/
+
+        // CONQUEST: Custom Currencies
+        public long? ConquestCoins
+        {
+            get => GetProperty(PropertyInt64.ConquestCoins) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.ConquestCoins); else SetProperty(PropertyInt64.ConquestCoins, value.Value); }
+        }
+
+        public long? SoulFragments
+        {
+            get => GetProperty(PropertyInt64.SoulFragments) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.SoulFragments); else SetProperty(PropertyInt64.SoulFragments, value.Value); }
+        }
+
+        public long? EventTokens
+        {
+            get => GetProperty(PropertyInt64.EventTokens) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.EventTokens); else SetProperty(PropertyInt64.EventTokens, value.Value); }
         }
     }
 }

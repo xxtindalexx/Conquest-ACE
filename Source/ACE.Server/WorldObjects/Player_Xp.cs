@@ -5,6 +5,7 @@ using ACE.Common.Extensions;
 using ACE.DatLoader;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
@@ -32,7 +33,13 @@ namespace ACE.Server.WorldObjects
             // should this be passed upstream to fellowship / allegiance?
             var enchantment = GetXPAndLuminanceModifier(xpType);
 
-            var m_amount = (long)Math.Round(amount * enchantment * modifier);
+            // CONQUEST: Quest Bonus System - account-wide quest completion bonus
+            var questBonus = GetQuestCountXPBonus();
+
+            // CONQUEST: PK Dungeon Bonus - +10% XP/Lum in PK-only dungeons
+            var pkDungeonBonus = GetPKDungeonBonus();
+
+            var m_amount = (long)Math.Round(amount * enchantment * modifier * questBonus * pkDungeonBonus);
 
             if (m_amount < 0)
             {
@@ -502,10 +509,51 @@ namespace ACE.Server.WorldObjects
             if (xpType == XpType.Kill && AugmentationBonusXp > 0)
                 augBonus = AugmentationBonusXp * 0.05f;
 
-            var modifier = 1.0f + enchantmentBonus + augBonus;
+            // CONQUEST: Add enlightenment XP bonus (+1% per enlightenment level)
+            // At ENL 100, this gives +100% XP (double XP)
+            var enlightenmentBonus = 0.0f;
+            if (Enlightenment > 0)
+                enlightenmentBonus = Enlightenment * 0.01f;
+
+            var modifier = 1.0f + enchantmentBonus + augBonus + enlightenmentBonus;
             //Console.WriteLine($"XPAndLuminanceModifier: {modifier}");
 
             return modifier;
+        }
+
+        /// <summary>
+        /// CONQUEST: Quest Bonus System
+        /// Reads from the quest completion count property to get the running XP bonus
+        /// Formula: 1 + (quest_count * 0.0001)
+        /// 10% XP bonus per 1,000 quests (0.01% per quest)
+        /// Example: 5,000 QB = 50% XP bonus
+        /// </summary>
+        public double GetQuestCountXPBonus()
+        {
+            const double questToBonusRatio = 0.0001; // 0.01% per quest = 10% per 1,000 quests
+            return 1.0 + (this.QuestCompletionCount ?? 0) * questToBonusRatio;
+        }
+
+        /// <summary>
+        /// CONQUEST: PK Dungeon Bonus System
+        /// Returns a 10% XP/Luminance bonus for PK players in PK-only dungeon variants
+        /// </summary>
+        public double GetPKDungeonBonus()
+        {
+            // Check if player is PK and in a PK-only dungeon variant
+            if (PlayerKillerStatus == PlayerKillerStatus.PK &&
+                CurrentLandblock != null &&
+                Location != null)
+            {
+                var currentLandblock = (ushort)CurrentLandblock.Id.Landblock;
+                var currentVariation = Location.Variation ?? 0;
+
+                if (Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                {
+                    return 1.1; // 10% bonus
+                }
+            }
+            return 1.0; // No bonus
         }
     }
 }

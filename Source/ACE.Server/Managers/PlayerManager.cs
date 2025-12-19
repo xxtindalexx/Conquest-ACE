@@ -643,6 +643,21 @@ namespace ACE.Server.Managers
                 player.Session.Network.EnqueueSend(msg);
         }
 
+        public static void BroadcastFromDiscord(Channel channel, string senderName, string message)
+        {
+            foreach (var player in GetAllOnline().Where(p => (p.ChannelsActive ?? 0).HasFlag(channel)))
+            {
+                player.Session.Network.EnqueueSend(new GameEventChannelBroadcast(
+                    player.Session,
+                    channel,
+                    senderName, // Directly use senderName from Discord
+                    message
+                ));
+            }
+
+            LogBroadcastChat(channel, null, message); // Log without a Player object
+        }
+
         public static void BroadcastToAuditChannel(Player issuer, string message)
         {
             if (issuer != null)

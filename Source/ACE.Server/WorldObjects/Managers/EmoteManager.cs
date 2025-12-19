@@ -27,7 +27,7 @@ using Spell = ACE.Server.Entity.Spell;
 
 namespace ACE.Server.WorldObjects.Managers
 {
-    public class EmoteManager
+    public partial class EmoteManager
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
@@ -336,7 +336,8 @@ namespace ACE.Server.WorldObjects.Managers
 
                     if (player != null)
                     {
-                        Enlightenment.HandleEnlightenment(WorldObject, player);
+                        // CONQUEST: Simplified to single-argument call (removed WorldObject parameter)
+                        Enlightenment.HandleEnlightenment(player);
                     }
 
                     break;
@@ -1496,6 +1497,14 @@ namespace ACE.Server.WorldObjects.Managers
 
                     PlayerManager.LogBroadcastChat(Channel.AllBroadcast, WorldObject, message);
 
+                    break;
+
+                // CONQUEST: Luminance Augmentation Gems (+1 and +5 variants)
+                case EmoteType.PromptAddAugment:
+                    if (player != null)
+                    {
+                        HandleAugmentationGem(emote, player);
+                    }
                     break;
 
                 default:

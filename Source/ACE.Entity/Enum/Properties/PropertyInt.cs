@@ -634,6 +634,9 @@ namespace ACE.Entity.Enum.Properties
         PCAPRecordedAppraisalPages               = 8042,
         PCAPRecordedAppraisalMaxPages            = 8043,
 
+        // Conquest: Daily tracking
+        SoulFragmentDropsToday                   = 8100,  // Track daily Soul Fragment drops for cap enforcement (20/day)
+
         // TotalLogins                           = 9001,
         // DeletionTimestamp                     = 9002,
         // CharacterOptions1                     = 9003,

@@ -221,5 +221,13 @@ namespace ACE.Entity.Enum.Properties
         PCAPRecordeOmegaX              = 8016,
         PCAPRecordeOmegaY              = 8017,
         PCAPRecordeOmegaZ              = 8018,
+
+        // Conquest: Timestamp properties for cooldowns and tracking
+        LastSoulFragmentDeathTimestamp = 8100,  // Last time player dropped Soul Fragments on death (8hr cooldown)
+        LastEventChestLootTimestamp    = 8101,  // Last time player looted an event chest (30min cooldown)
+        LastPKUnflagTimestamp          = 8102,  // Last time player unflagged from PK (20min cooldown to reflag)
+        SoulFragmentDayResetTimestamp  = 8103,  // Timestamp for daily Soul Fragment cap reset
+        LastDungeonDeathTimestamp      = 8104,  // Last time player died in a dungeon (20min re-entry cooldown)
+        LastClapCommandTime            = 8105,  // Last time /clap command was used (for ILT compatibility)
     }
 }

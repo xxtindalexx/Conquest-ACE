@@ -236,5 +236,32 @@
 
     // Upon server startup, precache all DAT files that would be sent as compressed data
     "PrecacheCompressedDATFiles": false
+  },
+  // CONQUEST: Discord Integration for Content Import/Export
+  // Allows content creators to upload SQL/JSON to Discord for server import
+  // Developers can export content to Discord for modification
+  "Chat": {
+    // Enable Discord bot connection
+    "EnableDiscordConnection": false,
+
+    // Discord Bot Token (get from https://discord.com/developers/applications)
+    "DiscordToken": "YOUR_BOT_TOKEN_HERE",
+
+    // Discord Server/Guild ID (right-click server name, Copy ID)
+    "ServerId": 0,
+
+    // Channel IDs (right-click channel name, Copy ID)
+    "GeneralChannelId": 0,          // General chat channel (optional)
+    "TradeChannelId": 0,            // Trade channel (optional)
+    "AdminAuditId": 0,              // Admin audit logging
+    "EventsChannelId": 0,           // Server events
+    "ExportsChannelId": 0,          // SQL exports destination (dev → creator)
+    "WeenieUploadsChannelId": 0,   // SQL uploads source (creator → dev)
+    "RaffleChannelId": 0,           // Raffle system (optional)
+    "AdminChannelId": 0,            // Admin communications
+    "WebhookURL": "",               // Webhook URL (optional)
+    "ClothingModUploadChannelId": 0,   // JSON clothing mod uploads
+    "ClothingModExportChannelId": 0,   // JSON clothing mod exports
+    "PerformanceAlertsChannelId": 0    // Performance monitoring (optional)
   }
 }

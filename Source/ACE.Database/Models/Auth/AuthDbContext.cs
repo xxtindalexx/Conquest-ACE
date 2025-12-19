@@ -20,6 +20,12 @@ public partial class AuthDbContext : DbContext
 
     public virtual DbSet<Account> Account { get; set; }
 
+    // CONQUEST: Quest Bonus System
+    public virtual DbSet<AccountQuest> AccountQuest { get; set; }
+
+    // CONQUEST: Leaderboards
+    public virtual DbSet<Leaderboard> Leaderboard { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -127,6 +133,31 @@ public partial class AuthDbContext : DbContext
                 .HasForeignKey(d => d.AccessLevel)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("fk_accesslevel");
+        });
+
+        // CONQUEST: Quest Bonus System
+        modelBuilder.Entity<AccountQuest>(entity =>
+        {
+            entity.HasKey(e => new { e.AccountId, e.Quest })
+                .HasName("PRIMARY")
+                .HasAnnotation("MySql:IndexPrefixLength", new[] { 0, 0 });
+
+            entity.ToTable("account_quest");
+
+            entity.Property(e => e.AccountId).HasColumnName("accountId");
+            entity.Property(e => e.Quest).HasColumnName("quest");
+            entity.Property(e => e.NumTimesCompleted).HasColumnName("num_Times_Completed");
+        });
+
+        // CONQUEST: Leaderboards
+        modelBuilder.Entity<Leaderboard>(entity =>
+        {
+            entity.HasKey(e => e.LeaderboardId).HasName("PRIMARY");
+
+            entity.ToTable("leaderboard");
+
+            entity.Property(e => e.LeaderboardId).HasColumnName("LeaderboardID");
+            entity.Property(e => e.Character).HasMaxLength(255);
         });
 
         OnModelCreatingPartial(modelBuilder);

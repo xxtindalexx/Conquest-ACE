@@ -758,9 +758,35 @@ namespace ACE.Server.WorldObjects
             IgnoreCollisions = false;
             Hidden = false;
             Teleporting = false;
-            
+
             CheckMonsters();
             CheckHouse();
+
+            // CONQUEST: Marketplace character limit enforcement - boot excess characters from same IP outside exempt landblocks
+            int nonexemptCount = 0;
+            var endpoint = this.Session.EndPointC2S;
+            var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(endpoint.Address.ToString());
+            if (!ipAllowsUnlimited)
+            {
+                var players = PlayerManager.GetAllOnline();
+                foreach (var p in players.Where(x => x.Session.EndPointC2S.Address.Equals(endpoint.Address)))
+                {
+                    // Skip players in exempt landblocks (marketplace + apartments)
+                    if (p.CurrentLandblock != null && Landblock.connectionExemptLandblocks.Contains(p.CurrentLandblock.Id.Landblock))
+                        continue;
+
+                    // Skip admin characters (IsPlussed)
+                    if (p.IsPlussed)
+                        continue;
+
+                    // If exceeding the limit, log off the older connection
+                    if (++nonexemptCount > ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress)
+                    {
+                        p.SendMessage($"Booting due to exceeding {ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress} allowed outside of exempt areas.");
+                        p.Session.LogOffPlayer();
+                    }
+                }
+            }
 
             EnqueueBroadcastPhysicsState();
 

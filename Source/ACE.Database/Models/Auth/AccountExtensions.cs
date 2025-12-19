@@ -3,6 +3,7 @@ using ACE.Common.Cryptography;
 using log4net;
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
@@ -120,6 +121,17 @@ namespace ACE.Database.Models.Auth
             account.BanReason = null;
 
             DatabaseManager.Authentication.UpdateAccount(account);
+        }
+
+        // CONQUEST: Quest Bonus System
+        public static long? GetCharacterQuestCompletions(this Account account)
+        {
+            return DatabaseManager.Authentication.GetCountOfAccountQuests(account.AccountId);
+        }
+
+        public static List<AccountQuest> GetAccountQuests(this Account account)
+        {
+            return DatabaseManager.Authentication.GetAccountQuests(account.AccountId);
         }
     }
 }

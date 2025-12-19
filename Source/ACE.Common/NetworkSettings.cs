@@ -33,11 +33,13 @@ namespace ACE.Common
         public uint DefaultSessionTimeout { get; set; } = 60;
 
         /// <summary>
-        /// This setting will allow or restrict sessions based on the IPAddress connecting to the server.
+        /// CONQUEST: This setting will allow or restrict sessions based on the IPAddress connecting to the server.
+        /// Set to 1 to allow only 1 character outside marketplace/apartments at a time.
         /// </summary>
         /// <remarks>
+        /// -1 = unlimited, 1 = one character outside exempt areas (marketplace/apartments)
         /// </remarks>
-        public int MaximumAllowedSessionsPerIPAddress { get; set; } = -1;
+        public int MaximumAllowedSessionsPerIPAddress { get; set; } = 1;
 
         /// <summary>
         /// Will allow the given IP addresses to have unlimited sessions - recommend only use this for Admins

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using ACE.Common;
 using ACE.Database;
 using ACE.Database.Models.World;
 using ACE.Entity;
@@ -566,7 +567,47 @@ namespace ACE.Server.WorldObjects
                     var isPKLdeath = player.IsPKLiteDeath(killer);
 
                     if (isPKdeath)
+                    {
                         corpse.PkLevel = PKLevel.PK;
+
+                        // CONQUEST: Drop 1-3 Soul Fragments on PK death
+                        // Check if killer can loot Soul Fragments (6-8 hour cooldown)
+                        var killerPlayer = killer?.TryGetAttacker() as Player;
+                        if (killerPlayer != null)
+                        {
+                            var lastSoulFragmentLoot = killerPlayer.GetProperty(PropertyInt64.LastSoulFragmentLootTime) ?? 0;
+                            var currentTime = Time.GetUnixTime();
+                            var cooldownHours = ThreadSafeRandom.Next(6, 8);  // Random 6-8 hour cooldown
+                            var cooldownSeconds = cooldownHours * 3600;
+
+                            if (currentTime >= lastSoulFragmentLoot + cooldownSeconds)
+                            {
+                                // Cooldown has passed, drop Soul Fragments
+                                var soulFragmentCount = ThreadSafeRandom.Next(1, 3);  // 1-3 soul fragments
+                                var soulFragmentWeenieId = 999999998u;  // TODO: Replace with actual Soul Fragment weenie ID
+
+                                for (int i = 0; i < soulFragmentCount; i++)
+                                {
+                                    var soulFragment = WorldObjectFactory.CreateNewWorldObject(soulFragmentWeenieId);
+                                    if (soulFragment != null)
+                                    {
+                                        soulFragment.Location = new Position(corpse.Location);
+                                        corpse.TryAddToInventory(soulFragment);
+                                    }
+                                }
+
+                                // Update the loot timestamp when Soul Fragments are created
+                                killerPlayer.SetProperty(PropertyInt64.LastSoulFragmentLootTime, (long)currentTime);
+                            }
+                            else
+                            {
+                                // Still on cooldown - notify killer
+                                var timeRemaining = (lastSoulFragmentLoot + cooldownSeconds) - currentTime;
+                                var hoursRemaining = Math.Ceiling(timeRemaining / 3600.0);
+                                killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {hoursRemaining} more hour(s) before you can loot Soul Fragments again.", ChatMessageType.Broadcast));
+                            }
+                        }
+                    }
 
                     if (!isPKdeath && !isPKLdeath)
                     {
@@ -587,6 +628,9 @@ namespace ACE.Server.WorldObjects
                     GenerateTreasure(killer, corpse);
                 else
                     GenerateTreasure_Olthoi(killer, corpse);
+
+                // CONQUEST: Soul Fragment drops in PK-only dungeon variants
+                GenerateSoulFragments_PKDungeon(killer, corpse);
 
                 if (killer != null && killer.IsPlayer && !killer.IsOlthoiPlayer)
                 {
@@ -722,6 +766,72 @@ namespace ACE.Server.WorldObjects
             if (slag == null) return;
 
             corpse.TryAddToInventory(slag);
+        }
+
+        /// <summary>
+        /// CONQUEST: Generates Soul Fragments on mob deaths in PK-only dungeon variants
+        /// Small chance to drop 1 Soul Fragment (~1-2 per hour)
+        /// Daily cap of 20 Soul Fragments per player
+        /// </summary>
+        private void GenerateSoulFragments_PKDungeon(DamageHistoryInfo killer, Corpse corpse)
+        {
+            // Must have a player killer
+            if (killer == null || !killer.IsPlayer)
+                return;
+
+            var killerPlayer = killer.TryGetAttacker() as Player;
+            if (killerPlayer == null || corpse == null)
+                return;
+
+            // Check if in a PK-only dungeon variant
+            if (killerPlayer.CurrentLandblock == null || killerPlayer.Location == null)
+                return;
+
+            var currentLandblock = (ushort)killerPlayer.CurrentLandblock.Id.Landblock;
+            var currentVariation = killerPlayer.Location.Variation ?? 0;
+
+            if (!Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                return;
+
+            // Check and reset daily Soul Fragment count if needed
+            var currentTime = Time.GetUnixTime();
+            var lastResetTime = killerPlayer.GetProperty(PropertyInt64.LastSoulFragmentResetTime) ?? 0;
+            var dailyCount = killerPlayer.GetProperty(PropertyInt64.DailySoulFragmentCount) ?? 0;
+
+            // Reset if more than 24 hours have passed
+            if (currentTime - lastResetTime > 86400) // 86400 seconds = 24 hours
+            {
+                dailyCount = 0;
+                killerPlayer.SetProperty(PropertyInt64.LastSoulFragmentResetTime, (long)currentTime);
+            }
+
+            // Check daily cap (20 fragments per day)
+            if (dailyCount >= 20)
+                return;
+
+            // Roll for Soul Fragment drop (0.75% chance for ~1-2 per hour at 100-200 kills/hour)
+            var dropChance = ThreadSafeRandom.Next(0.0f, 1.0f);
+            if (dropChance > 0.0075f)  // 0.75% drop rate
+                return;
+
+            // Create Soul Fragment
+            // TODO: Replace 999999998 with actual Soul Fragment weenie ID
+            var soulFragment = WorldObjectFactory.CreateNewWorldObject(999999998);
+            if (soulFragment == null)
+                return;
+
+            // Add to corpse
+            if (corpse.TryAddToInventory(soulFragment))
+            {
+                // Increment daily count
+                killerPlayer.SetProperty(PropertyInt64.DailySoulFragmentCount, dailyCount + 1);
+
+                // Notify player
+                var remaining = 20 - (dailyCount + 1);
+                killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"You found a Soul Fragment! ({remaining} remaining today)",
+                    ChatMessageType.Broadcast));
+            }
         }
 
         public void DoCantripLogging(DamageHistoryInfo killer, WorldObject wo)

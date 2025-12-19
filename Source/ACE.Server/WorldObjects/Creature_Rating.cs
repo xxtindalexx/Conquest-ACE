@@ -216,15 +216,20 @@ namespace ACE.Server.WorldObjects
 
             var augBonus = 0;
             var lumAugBonus = 0;
+            var enlightenmentBonus = 0;
 
             if (this is Player player)
             {
                 augBonus = player.AugmentationDamageBonus * 3;
                 lumAugBonus = player.LumAugDamageRating;
+
+                // CONQUEST: Add enlightenment damage rating bonus (+1 per 25 ENL)
+                if (player.Enlightenment > 0)
+                    enlightenmentBonus = ACE.Server.Entity.Enlightenment.GetEnlightenmentRatingBonus(player.Enlightenment);
             }
 
             // heritage / weapon type bonus factored in elsewhere?
-            return damageRating + equipment + enchantments - weaknessRating + augBonus + lumAugBonus;
+            return damageRating + equipment + enchantments - weaknessRating + augBonus + lumAugBonus + enlightenmentBonus;
         }
 
         public int GetDamageResistRating(CombatType? combatType = null, bool directDamage = true)
@@ -245,15 +250,20 @@ namespace ACE.Server.WorldObjects
             var augBonus = 0;
             var lumAugBonus = 0;
             var specBonus = 0;
+            var enlightenmentBonus = 0;
 
             if (this is Player player)
             {
                 augBonus = player.AugmentationDamageReduction * 3;
                 lumAugBonus = player.LumAugDamageReductionRating;
                 specBonus = GetSpecDefenseBonus(combatType);
+
+                // CONQUEST: Add enlightenment damage resistance rating bonus (+1 per 25 ENL)
+                if (player.Enlightenment > 0)
+                    enlightenmentBonus = ACE.Server.Entity.Enlightenment.GetEnlightenmentRatingBonus(player.Enlightenment);
             }
 
-            return damageResistRating + equipment + enchantments - netherDotDamageRating + augBonus + lumAugBonus + specBonus;
+            return damageResistRating + equipment + enchantments - netherDotDamageRating + augBonus + lumAugBonus + specBonus + enlightenmentBonus;
         }
 
         public float GetDamageResistRatingMod(CombatType? combatType = null, bool directDamage = true)

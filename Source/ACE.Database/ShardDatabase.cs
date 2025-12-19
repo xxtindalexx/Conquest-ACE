@@ -888,5 +888,39 @@ namespace ACE.Database
                 rwLock.ExitReadLock();
             }
         }
+
+        // CONQUEST: Transfer Logging Methods
+        public void SaveTransferLog(TransferLog transferLog)
+        {
+            using (var context = new ShardDbContext())
+            {
+                context.TransferLog.Add(transferLog);
+                context.SaveChanges();
+            }
+        }
+
+        public List<TransferLog> GetTransferHistory(string playerName, DateTime cutoffDate)
+        {
+            using (var context = new ShardDbContext())
+            {
+                return context.TransferLog
+                    .AsNoTracking()
+                    .Where(t => (t.FromPlayerName == playerName || t.ToPlayerName == playerName) && t.Timestamp >= cutoffDate)
+                    .OrderByDescending(t => t.Timestamp)
+                    .ToList();
+            }
+        }
+
+        public List<TransferLog> GetRecentTransfers(DateTime cutoffDate)
+        {
+            using (var context = new ShardDbContext())
+            {
+                return context.TransferLog
+                    .AsNoTracking()
+                    .Where(t => t.Timestamp >= cutoffDate)
+                    .OrderByDescending(t => t.Timestamp)
+                    .ToList();
+            }
+        }
     }
 }
