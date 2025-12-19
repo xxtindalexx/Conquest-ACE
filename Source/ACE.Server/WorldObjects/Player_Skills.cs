@@ -132,6 +132,17 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
+            // Check if Summoning skill requires Void Magic to be specialized
+            if (skill == Skill.Summoning)
+            {
+                var voidMagicSkill = GetCreatureSkill(Skill.VoidMagic, false);
+                if (voidMagicSkill == null || voidMagicSkill.AdvancementClass < SkillAdvancementClass.Specialized)
+                {
+                    Session.Network.EnqueueSend(new GameMessageSystemChat("You must specialize Void Magic before you can train Summoning!", ChatMessageType.Advancement));
+                    return false;
+                }
+            }
+
             // attempt to train the specified skill
             var success = TrainSkill(skill, creditsSpent);
 
@@ -174,6 +185,14 @@ namespace ACE.Server.WorldObjects
 
             if (creatureSkill.AdvancementClass >= SkillAdvancementClass.Trained || creditsSpent > AvailableSkillCredits)
                 return false;
+
+            // Server-side validation: Summoning requires Void Magic to be specialized
+            if (skill == Skill.Summoning)
+            {
+                var voidMagicSkill = GetCreatureSkill(Skill.VoidMagic, false);
+                if (voidMagicSkill == null || voidMagicSkill.AdvancementClass < SkillAdvancementClass.Specialized)
+                    return false;
+            }
 
             creatureSkill.AdvancementClass = SkillAdvancementClass.Trained;
             creatureSkill.Ranks = 0;
