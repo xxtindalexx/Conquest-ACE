@@ -17,9 +17,9 @@ namespace ACE.Server.Factories.Tables.Wcids
 
         private static ChanceTable<WeenieClassName> T5_Chances = new ChanceTable<WeenieClassName>()
         {
-            ( WeenieClassName.bowshort,                     0.25f ),
-            ( WeenieClassName.shouyumi,                     0.13f ),
-            ( WeenieClassName.yumi,                         0.13f ),
+            ( WeenieClassName.bowshort,                     0.20f ),
+            ( WeenieClassName.shouyumi,                     0.11f ),
+            ( WeenieClassName.yumi,                         0.11f ),
             ( WeenieClassName.bowslashing,                  0.035f ),
             ( WeenieClassName.bowpiercing,                  0.035f ),
             ( WeenieClassName.bowblunt,                     0.035f ),
@@ -34,24 +34,30 @@ namespace ACE.Server.Factories.Tables.Wcids
             ( WeenieClassName.ace31802_firecompoundbow,     0.035f ),
             ( WeenieClassName.ace31803_frostcompoundbow,    0.035f ),
             ( WeenieClassName.ace31801_electriccompoundbow, 0.035f ),
+            ( WeenieClassName.conquest_netherbowshort,      0.03f ),
+            ( WeenieClassName.conquest_nethershouyumi,      0.03f ),
+            ( WeenieClassName.conquest_netheryumi,          0.03f ),
         };
 
         private static ChanceTable<WeenieClassName> T6_T8_Chances = new ChanceTable<WeenieClassName>()
         {
-            ( WeenieClassName.bowslashing,                  0.075f ),
-            ( WeenieClassName.bowpiercing,                  0.075f ),
-            ( WeenieClassName.bowblunt,                     0.07f ),
-            ( WeenieClassName.bowacid,                      0.07f ),
-            ( WeenieClassName.bowfire,                      0.07f ),
-            ( WeenieClassName.bowfrost,                     0.07f ),
-            ( WeenieClassName.bowelectric,                  0.07f ),
-            ( WeenieClassName.ace31798_slashingcompoundbow, 0.075f ),
-            ( WeenieClassName.ace31804_piercingcompoundbow, 0.075f ),
-            ( WeenieClassName.ace31800_bluntcompoundbow,    0.07f ),
-            ( WeenieClassName.ace31799_acidcompoundbow,     0.07f ),
-            ( WeenieClassName.ace31802_firecompoundbow,     0.07f ),
-            ( WeenieClassName.ace31803_frostcompoundbow,    0.07f ),
-            ( WeenieClassName.ace31801_electriccompoundbow, 0.07f ),
+            ( WeenieClassName.bowslashing,                  0.06f ),
+            ( WeenieClassName.bowpiercing,                  0.06f ),
+            ( WeenieClassName.bowblunt,                     0.055f ),
+            ( WeenieClassName.bowacid,                      0.055f ),
+            ( WeenieClassName.bowfire,                      0.055f ),
+            ( WeenieClassName.bowfrost,                     0.055f ),
+            ( WeenieClassName.bowelectric,                  0.055f ),
+            ( WeenieClassName.ace31798_slashingcompoundbow, 0.06f ),
+            ( WeenieClassName.ace31804_piercingcompoundbow, 0.06f ),
+            ( WeenieClassName.ace31800_bluntcompoundbow,    0.055f ),
+            ( WeenieClassName.ace31799_acidcompoundbow,     0.055f ),
+            ( WeenieClassName.ace31802_firecompoundbow,     0.055f ),
+            ( WeenieClassName.ace31803_frostcompoundbow,    0.055f ),
+            ( WeenieClassName.ace31801_electriccompoundbow, 0.055f ),
+            ( WeenieClassName.conquest_netherbowshort,      0.07f ),
+            ( WeenieClassName.conquest_nethershouyumi,      0.07f ),
+            ( WeenieClassName.conquest_netheryumi,          0.07f ),
         };
 
         private static readonly List<ChanceTable<WeenieClassName>> bowTiers = new List<ChanceTable<WeenieClassName>>()

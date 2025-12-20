@@ -17,7 +17,14 @@
 
       // MaximumAllowedSessionsPerIPAddress, default: -1
       // -1 means unlimited connections per IP Address.
+      // Set to -1 to allow multiple accounts from the same IP to connect
       "MaximumAllowedSessionsPerIPAddress": -1,
+
+      // MaximumCharactersOutsideMarketplace, default: 1
+      // Restricts how many characters per IP can be active outside marketplace/apartments
+      // -1 = unlimited, 1 = only one character outside marketplace per IP
+      // Unlimited characters allowed in marketplace regardless of this setting
+      "MaximumCharactersOutsideMarketplace": 1,
 
      // AllowUlimitedSessionsFromIPs, default []
      // Will allow the given IP addresses to have unlimited sessions - recommend only use this for Admins/Devs

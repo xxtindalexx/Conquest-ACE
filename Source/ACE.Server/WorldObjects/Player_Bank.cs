@@ -32,6 +32,7 @@ namespace ACE.Server.WorldObjects
         private const int PYREAL_MAX_STACK = 25000;
         private const int ENLIGHTENED_COIN_MAX_STACK = 25000;
         private const int WEAKLY_ENLIGHTENED_COIN_MAX_STACK = 25000;
+        private const int EVENT_TOKEN_MAX_STACK = 25000;
         private const int TRADE_NOTE_MAX_STACK = 250;
         private const int MMD_TRADE_NOTE_MAX_STACK = 5000;
 
@@ -664,6 +665,45 @@ namespace ACE.Server.WorldObjects
                     else
                     {
                         Session.Network.EnqueueSend(new GameMessageSystemChat("No Soul Fragments found to deposit", ChatMessageType.System));
+                    }
+                }
+            }
+
+            this.SavePlayerToDatabase();
+        }
+
+        public void DepositEventTokens(bool suppressChat = false)
+        {
+            if (EventTokens == null)
+            {
+                EventTokens = 0;
+            }
+            lock (balanceLock)
+            {
+                long totalDeposited = 0;
+                var tokenList = this.GetInventoryItemsOfWCID(13370002); // Dragon Coin (Event Currency)
+                foreach (var token in tokenList)
+                {
+                    int val = token.Value ?? 0;
+                    if (val > 0)
+                    {
+                        if (this.TryConsumeFromInventoryWithNetworking(token))
+                        {
+                            EventTokens += val;
+                            totalDeposited += val;
+                        }
+                    }
+                }
+
+                if (!suppressChat)
+                {
+                    if (totalDeposited > 0)
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited {totalDeposited:N0} Dragon Coins", ChatMessageType.System));
+                    }
+                    else
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat("No Dragon Coins found to deposit", ChatMessageType.System));
                     }
                 }
             }
@@ -1338,6 +1378,62 @@ namespace ACE.Server.WorldObjects
             return successfullyCreated;
         }
 
+        /// <summary>
+        /// Creates Event Tokens (Dragon Coins) in multiple stacks respecting maximum stack size limits.
+        /// Uses batched network updates for optimal performance.
+        /// </summary>
+        /// <param name="Amount">Total amount of Event Tokens to create</param>
+        /// <returns>Number of Event Tokens successfully created</returns>
+        private long CreateEventTokens(long Amount)
+        {
+            long remaining = Amount;
+            long successfullyCreated = 0;
+            var createdItems = new List<WorldObject>();
+
+            while (remaining > 0)
+            {
+                int stackSize = (int)Math.Min(remaining, (long)EVENT_TOKEN_MAX_STACK);
+
+                WorldObject wo = WorldObjectFactory.CreateNewWorldObject(13370002); // Dragon Coin (Event Currency)
+                if (wo == null)
+                    break; // Can't create more items
+
+                wo.SetStackSize(stackSize);
+
+                // Create item without immediate networking
+                var itemCreated = this.TryAddToInventory(wo, out _);
+                if (!itemCreated)
+                {
+                    log.Debug($"[BANK_DEBUG] Player: {Name} | Failed to create event token stack of {stackSize} - insufficient pack space");
+                    break; // Stop creating, but keep what we've made so far
+                }
+
+                createdItems.Add(wo);
+                successfullyCreated += stackSize;
+
+                // Only log every 10th stack to reduce log spam
+                if (createdItems.Count % 10 == 0 || remaining - stackSize == 0)
+                {
+                    log.Debug($"[BANK_DEBUG] Player: {Name} | Created {createdItems.Count} event token stacks | Total: {successfullyCreated:N0} | Remaining: {remaining - stackSize:N0}");
+                }
+
+                remaining -= stackSize;
+            }
+
+            // Send batched network update for all created items
+            if (createdItems.Count > 0)
+            {
+                foreach (var item in createdItems)
+                {
+                    Session.Network.EnqueueSend(new GameMessageCreateObject(item));
+                }
+                log.Debug($"[BANK_DEBUG] Player: {Name} | Sent batched network update for {createdItems.Count} event token stacks");
+            }
+
+            // Return the amount that was successfully created
+            return successfullyCreated;
+        }
+
         public void WithdrawSoulFragments(long Amount)
         {
             if (Amount <= 0)
@@ -1377,6 +1473,48 @@ namespace ACE.Server.WorldObjects
             else
             {
                 Session.Network.EnqueueSend(new GameMessageSystemChat("Failed to create weakly Conquest Coins - check pack space. Withdrawal cancelled.", ChatMessageType.System));
+            }
+        }
+
+        public void WithdrawEventTokens(long Amount)
+        {
+            if (Amount <= 0)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Amount must be greater than zero", ChatMessageType.System));
+                return;
+            }
+
+            // Check if player has enough Event Tokens (outside lock for early exit)
+            if (EventTokens < Amount)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"You don't have enough Dragon Coins banked. Need {Amount:N0} but only have {EventTokens:N0}.", ChatMessageType.System));
+                return;
+            }
+
+            // Create Event Tokens (outside lock)
+            long successfullyCreated = CreateEventTokens(Amount);
+
+            // Update balance atomically (only lock for balance mutation)
+            if (successfullyCreated > 0)
+            {
+                lock (balanceLock)
+                {
+                    EventTokens -= successfullyCreated;
+                }
+
+                // Send notifications outside of lock
+                if (successfullyCreated == Amount)
+                {
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} Dragon Coins", ChatMessageType.System));
+                }
+                else
+                {
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} Dragon Coins (partial - insufficient pack space for remaining {Amount - successfullyCreated:N0} Dragon Coins)", ChatMessageType.System));
+                }
+            }
+            else
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Failed to create Dragon Coins - check pack space. Withdrawal cancelled.", ChatMessageType.System));
             }
         }
 
@@ -1930,7 +2068,93 @@ namespace ACE.Server.WorldObjects
             
             // Log the transfer
             TransferLogger.LogBankTransfer(this, CharacterDestination, "Luminance", Amount, TransferLogger.TransferTypeBankTransfer);
-            
+
+            return true;
+        }
+
+        public bool TransferEventTokens(long Amount, string CharacterDestination)
+        {
+            // Validate amount
+            if (Amount <= 0)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Transfer amount must be greater than zero.", ChatMessageType.System));
+                return false;
+            }
+            // Check if player has enough Event Tokens to transfer
+            if (EventTokens < Amount)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"You don't have enough Dragon Coins banked to transfer. Need {Amount:N0} but only have {EventTokens:N0}.", ChatMessageType.System));
+                return false;
+            }
+
+            var tarplayer = FindTargetByName(CharacterDestination);
+            if (tarplayer == null)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"Character '{CharacterDestination}' not found.", ChatMessageType.System));
+                return false;
+            }
+
+            if (tarplayer is OfflinePlayer)
+            {
+                var offlinePlayer = tarplayer as OfflinePlayer;
+
+                if (offlinePlayer.EventTokens == null)
+                {
+                    offlinePlayer.EventTokens = 0;
+                }
+
+                lock (balanceLock)
+                {
+                    this.EventTokens -= Amount;
+                }
+
+                offlinePlayer.EventTokens += Amount;
+                offlinePlayer.SaveBiotaToDatabase();
+
+                // Send confirmation to sender
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Dragon Coins to {offlinePlayer.Name} (offline)", ChatMessageType.System));
+            }
+            else
+            {
+                var onlinePlayer = (Player)tarplayer;
+
+                // Deadlock-safe double-lock using consistent ordering
+                object lockA = this.balanceLock;
+                object lockB = onlinePlayer.balanceLock;
+                bool sourceFirst = string.CompareOrdinal(this.Name, onlinePlayer.Name) <= 0;
+                var firstLock = sourceFirst ? lockA : lockB;
+                var secondLock = sourceFirst ? lockB : lockA;
+
+                lock (firstLock)
+                {
+                    lock (secondLock)
+                    {
+                        // Perform atomic transfer
+                        this.EventTokens -= Amount;
+                        onlinePlayer.EventTokens = (onlinePlayer.EventTokens ?? 0) + Amount;
+                    }
+                }
+
+                // Send notification outside of locks
+                onlinePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"Received {Amount:N0} Dragon Coins from {this.Name}", ChatMessageType.System));
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Dragon Coins to {onlinePlayer.Name}", ChatMessageType.System));
+
+                // Persist to database for significant transfers (performance optimization)
+                if (Amount > 10)
+                {
+                    onlinePlayer.SavePlayerToDatabase();
+                }
+            }
+
+            // Persist to database for significant transfers (performance optimization)
+            if (Amount > 10)
+            {
+                this.SavePlayerToDatabase();
+            }
+
+            // Log the transfer
+            TransferLogger.LogBankTransfer(this, CharacterDestination, "Dragon Coins", Amount, TransferLogger.TransferTypeBankTransfer);
+
             return true;
         }
         /* CONQUEST: Disabled - Conquest Coins are non-tradable
