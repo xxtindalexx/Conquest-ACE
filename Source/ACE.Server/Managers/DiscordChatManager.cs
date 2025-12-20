@@ -33,18 +33,48 @@ namespace ACE.Server.Managers
 
         public static void SendDiscordMessage(string player, string message, long channelId)
         {
-            if (ConfigManager.Config.Chat.EnableDiscordConnection)
+            if (!ConfigManager.Config.Chat.EnableDiscordConnection)
+                return;
+
+            try
             {
-                try
+                // Check if Discord client is initialized
+                if (_discordSocketClient == null)
                 {
-                    _discordSocketClient.GetGuild((ulong)ConfigManager.Config.Chat.ServerId).GetTextChannel((ulong)channelId).SendMessageAsync(player + " : " + message);
+                    log.Warn("[DiscordRelay] Discord client is not initialized.");
+                    return;
                 }
-                catch (Exception ex)
+
+                // Check if client is connected
+                if (_discordSocketClient.ConnectionState != ConnectionState.Connected)
                 {
-                    log.Error("Error sending discord message, " + ex.Message);
+                    log.Warn($"[DiscordRelay] Discord client is not connected. State: {_discordSocketClient.ConnectionState}");
+                    return;
                 }
+
+                // Get guild
+                var guild = _discordSocketClient.GetGuild((ulong)ConfigManager.Config.Chat.ServerId);
+                if (guild == null)
+                {
+                    log.Warn($"[DiscordRelay] Could not find guild with ID {ConfigManager.Config.Chat.ServerId}");
+                    return;
+                }
+
+                // Get text channel
+                var channel = guild.GetTextChannel((ulong)channelId);
+                if (channel == null)
+                {
+                    log.Warn($"[DiscordRelay] Could not find channel with ID {channelId}");
+                    return;
+                }
+
+                // Send message
+                _ = channel.SendMessageAsync(player + " : " + message);
             }
-            
+            catch (Exception ex)
+            {
+                log.Error($"[DiscordRelay] Error sending discord message: {ex.Message}");
+            }
         }
 
         public static void SendDiscordFile(string player, string message, long channelId, FileAttachment fileContent)
@@ -151,8 +181,21 @@ namespace ACE.Server.Managers
             });
 
             _discordSocketClient.MessageReceived += OnDiscordChat; // ✅ Listen for messages
-            _discordSocketClient.LoginAsync(TokenType.Bot, ConfigManager.Config.Chat.DiscordToken);
-            _discordSocketClient.StartAsync();
+
+            // Start async connection (don't await - let it connect in background)
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await _discordSocketClient.LoginAsync(TokenType.Bot, ConfigManager.Config.Chat.DiscordToken);
+                    await _discordSocketClient.StartAsync();
+                    log.Info("[DiscordRelay] Discord client connected successfully.");
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"[DiscordRelay] Failed to connect Discord client: {ex.Message}");
+                }
+            });
         }
 
         public static async Task OnDiscordChat(SocketMessage message)

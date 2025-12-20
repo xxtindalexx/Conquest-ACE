@@ -7,11 +7,16 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using log4net;
+
 using Microsoft.EntityFrameworkCore;
 
 using ACE.Adapter.GDLE;
 using ACE.Adapter.Lifestoned;
+using ACE.Common;
 using ACE.Common.Extensions;
+using ACE.DatLoader;
+using ACE.DatLoader.FileTypes;
 using ACE.Database;
 using ACE.Database.Models.World;
 using ACE.Database.SQLFormatters.World;
@@ -30,6 +35,8 @@ namespace ACE.Server.Command.Handlers.Processors
 {
     public class DeveloperContentCommands
     {
+        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+
         public enum FileType
         {
             Undefined,
@@ -1080,6 +1087,77 @@ namespace ACE.Server.Command.Handlers.Processors
 
             // load spell from db
             var spell = DatabaseManager.World.GetCachedSpell(spellId);
+        }
+
+        [CommandHandler("import-discord", AccessLevel.Developer, CommandHandlerFlag.None, 1, "Imports content from Discord to database", "<identifier> - should match the name of the Discord attachment file without the .sql extension")]
+        public static void HandleDiscordImport(Session session, params string[] parameters)
+        {
+            try
+            {
+                string identifier = parameters[0];
+                if (string.IsNullOrEmpty(identifier))
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, "Invalid identifier");
+                    return;
+                }
+
+                string sql = DiscordChatManager.GetSQLFromDiscordMessage(20, identifier);
+
+                if (string.IsNullOrEmpty(sql))
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find SQL attachment for '{identifier}' in Discord WeenieUploads channel");
+                    return;
+                }
+
+                using (var ctx = new WorldDbContext())
+                    ctx.Database.ExecuteSqlRaw(sql);
+
+                CommandHandlerHelper.WriteOutputInfo(session, $"Imported '{identifier}' from Discord.");
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"Imported '{identifier}' from Discord");
+            }
+            catch (Exception e)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error importing from Discord: {e.Message}");
+                log.Error($"[DiscordImport] Error: {e.Message}");
+            }
+        }
+
+        [CommandHandler("import-discord-clothing", AccessLevel.Developer, CommandHandlerFlag.None, 1, "Imports JSON clothing content from Discord to the server folder", "<filename>")]
+        public static void HandleDiscordJsonImport(Session session, params string[] parameters)
+        {
+            try
+            {
+                string identifier = parameters[0];
+                if (string.IsNullOrEmpty(identifier))
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, "Invalid identifier");
+                    return;
+                }
+
+                string json = DiscordChatManager.GetJsonFromDiscordMessage(20, identifier);
+
+                if (string.IsNullOrEmpty(json))
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find JSON attachment for '{identifier}' in Discord");
+                    return;
+                }
+
+                // Save to ModsDirectory/Clothing folder
+                var clothingDir = Path.Combine(ConfigManager.Config.Server.ModsDirectory, "Clothing");
+                if (!Directory.Exists(clothingDir))
+                    Directory.CreateDirectory(clothingDir);
+
+                var filePath = Path.Combine(clothingDir, identifier + ".json");
+                File.WriteAllText(filePath, json);
+
+                CommandHandlerHelper.WriteOutputInfo(session, $"Imported '{identifier}.json' from Discord to {filePath}");
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"Imported clothing '{identifier}.json' from Discord");
+            }
+            catch (Exception e)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error importing JSON from Discord: {e.Message}");
+                log.Error($"[DiscordImportClothing] Error: {e.Message}");
+            }
         }
 
         /// <summary>
@@ -2301,6 +2379,25 @@ namespace ACE.Server.Command.Handlers.Processors
             }
 
             CommandHandlerHelper.WriteOutputInfo(session, $"Exported {sql_folder}{sql_filename}");
+
+            // DISCORD RELAY: Send SQL file to Discord Exports channel
+            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.ExportsChannelId > 0)
+            {
+                try
+                {
+                    var filePath = sql_folder + sql_filename;
+                    using (var fileStream = File.OpenRead(filePath))
+                    {
+                        var fileAttachment = new Discord.FileAttachment(fileStream, sql_filename);
+                        DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported weenie {weenie.ClassId}", ConfigManager.Config.Chat.ExportsChannelId, fileAttachment);
+                    }
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Uploaded {sql_filename} to Discord");
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"[DiscordRelay] Failed to upload SQL file to Discord: {ex.Message}");
+                }
+            }
         }
 
         public static void ExportSQLRecipe(Session session, string param)
@@ -2638,6 +2735,345 @@ namespace ACE.Server.Command.Handlers.Processors
             }
 
             CommandHandlerHelper.WriteOutputInfo(session, $"Exported {sql_folder}{sql_filename}");
+        }
+
+        [CommandHandler("export-discord", AccessLevel.Developer, CommandHandlerFlag.None, 1, "Exports content from database to SQL file and uploads to Discord", "<wcid> [content-type]\n<content-type> - weenie (default), recipe, quest, spell, landblock, encounter, event")]
+        public static void HandleExportSqlToDiscord(Session session, params string[] parameters)
+        {
+            var param = parameters[0];
+            var contentType = FileType.Weenie;
+
+            if (parameters.Length > 1)
+            {
+                contentType = GetContentType(parameters, ref param);
+
+                if (contentType == FileType.Undefined)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Unknown content type '{parameters[1]}'");
+                    return;
+                }
+            }
+
+            switch (contentType)
+            {
+                case FileType.LandblockInstance:
+                    ExportDiscordLandblock(session, param);
+                    break;
+
+                case FileType.Quest:
+                    ExportDiscordQuest(session, param);
+                    break;
+
+                case FileType.Recipe:
+                    ExportDiscordRecipe(session, param);
+                    break;
+
+                case FileType.Spell:
+                    ExportDiscordSpell(session, param);
+                    break;
+
+                case FileType.Weenie:
+                    ExportDiscordWeenie(session, param);
+                    break;
+            }
+        }
+
+        public static void ExportDiscordWeenie(Session session, string param)
+        {
+            Weenie weenie = null;
+            if (uint.TryParse(param, out var wcid))
+                weenie = DatabaseManager.World.GetWeenie(wcid);
+            else
+                weenie = DatabaseManager.World.GetWeenie(param);
+
+            if (weenie == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find weenie {param}");
+                return;
+            }
+
+            if (WeenieSQLWriter == null)
+            {
+                WeenieSQLWriter = new WeenieSQLWriter();
+                WeenieSQLWriter.WeenieNames = DatabaseManager.World.GetAllWeenieNames();
+                WeenieSQLWriter.SpellNames = DatabaseManager.World.GetAllSpellNames();
+                WeenieSQLWriter.TreasureDeath = DatabaseManager.World.GetAllTreasureDeath();
+                WeenieSQLWriter.TreasureWielded = DatabaseManager.World.GetAllTreasureWielded();
+                WeenieSQLWriter.PacketOpCodes = PacketOpCodeNames.Values;
+            }
+
+            using (MemoryStream mem = new MemoryStream())
+            {
+                using (StreamWriter sw = new StreamWriter(mem))
+                {
+                    sw.AutoFlush = true;
+
+                    try
+                    {
+                        WeenieSQLWriter.CreateSQLDELETEStatement(weenie, sw);
+                        sw.WriteLine();
+                        WeenieSQLWriter.CreateSQLINSERTStatement(weenie, sw);
+                        sw.WriteLine();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to generate SQL for weenie {wcid}");
+                        return;
+                    }
+
+                    mem.Position = 0;
+                    var fileName = wcid.ToString() + ".sql";
+                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported weenie {wcid}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
+
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported {weenie.ClassName} to Discord");
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported weenie {wcid} ({weenie.ClassName}) to Discord");
+                }
+            }
+        }
+
+        public static void ExportDiscordRecipe(Session session, string param)
+        {
+            if (!uint.TryParse(param, out var recipeId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"{param} not a valid recipe id");
+                return;
+            }
+
+            var cookbooks = DatabaseManager.World.GetCookbooksByRecipeId(recipeId);
+            if (cookbooks == null || cookbooks.Count == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find recipe {recipeId}");
+                return;
+            }
+
+            var recipe = cookbooks[0].Recipe;
+
+            if (RecipeSQLWriter == null)
+                RecipeSQLWriter = new RecipeSQLWriter();
+
+            using (MemoryStream mem = new MemoryStream())
+            {
+                using (StreamWriter sw = new StreamWriter(mem))
+                {
+                    sw.AutoFlush = true;
+
+                    try
+                    {
+                        RecipeSQLWriter.CreateSQLDELETEStatement(recipe, sw);
+                        sw.WriteLine();
+                        RecipeSQLWriter.CreateSQLINSERTStatement(recipe, sw);
+                        sw.WriteLine();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to generate SQL for recipe {recipeId}");
+                        return;
+                    }
+
+                    mem.Position = 0;
+                    var fileName = recipeId.ToString() + ".sql";
+                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported recipe {recipeId}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
+
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported recipe {recipeId} to Discord");
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported recipe {recipeId} to Discord");
+                }
+            }
+        }
+
+        public static void ExportDiscordQuest(Session session, string questName)
+        {
+            var quest = DatabaseManager.World.GetCachedQuest(questName);
+            if (quest == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find quest {questName}");
+                return;
+            }
+
+            if (QuestSQLWriter == null)
+                QuestSQLWriter = new QuestSQLWriter();
+
+            using (MemoryStream mem = new MemoryStream())
+            {
+                using (StreamWriter sw = new StreamWriter(mem))
+                {
+                    sw.AutoFlush = true;
+
+                    try
+                    {
+                        QuestSQLWriter.CreateSQLDELETEStatement(quest, sw);
+                        sw.WriteLine();
+                        QuestSQLWriter.CreateSQLINSERTStatement(quest, sw);
+                        sw.WriteLine();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to generate SQL for quest {questName}");
+                        return;
+                    }
+
+                    mem.Position = 0;
+                    var fileName = questName + ".sql";
+                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported quest {questName}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
+
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported quest {questName} to Discord");
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported quest {questName} to Discord");
+                }
+            }
+        }
+
+        public static void ExportDiscordSpell(Session session, string param)
+        {
+            if (!uint.TryParse(param, out var spellId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"{param} not a valid spell id");
+                return;
+            }
+
+            var spell = DatabaseManager.World.GetCachedSpell(spellId);
+            if (spell == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find spell {spellId}");
+                return;
+            }
+
+            if (SpellSQLWriter == null)
+                SpellSQLWriter = new SpellSQLWriter();
+
+            using (MemoryStream mem = new MemoryStream())
+            {
+                using (StreamWriter sw = new StreamWriter(mem))
+                {
+                    sw.AutoFlush = true;
+
+                    try
+                    {
+                        SpellSQLWriter.CreateSQLDELETEStatement(spell, sw);
+                        sw.WriteLine();
+                        SpellSQLWriter.CreateSQLINSERTStatement(spell, sw);
+                        sw.WriteLine();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to generate SQL for spell {spellId}");
+                        return;
+                    }
+
+                    mem.Position = 0;
+                    var fileName = spellId.ToString() + ".sql";
+                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported spell {spellId}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
+
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported spell {spellId} to Discord");
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported spell {spellId} to Discord");
+                }
+            }
+        }
+
+        public static void ExportDiscordLandblock(Session session, string param)
+        {
+            if (!ushort.TryParse(param, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var landblockId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"{param} not a valid landblock id (use hex format, e.g., A9B4)");
+                return;
+            }
+
+            var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblockId);
+            if (instances == null || instances.Count == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find landblock instances for {landblockId:X4}");
+                return;
+            }
+
+            if (LandblockInstanceWriter == null)
+                LandblockInstanceWriter = new LandblockInstanceWriter();
+
+            using (MemoryStream mem = new MemoryStream())
+            {
+                using (StreamWriter sw = new StreamWriter(mem))
+                {
+                    sw.AutoFlush = true;
+
+                    try
+                    {
+                        LandblockInstanceWriter.CreateSQLDELETEStatement(instances, sw);
+                        sw.WriteLine();
+                        LandblockInstanceWriter.CreateSQLINSERTStatement(instances, sw);
+                        sw.WriteLine();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to generate SQL for landblock {landblockId:X4}");
+                        return;
+                    }
+
+                    mem.Position = 0;
+                    var fileName = landblockId.ToString("X4") + ".sql";
+                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported landblock {landblockId:X4}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
+
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported landblock {landblockId:X4} to Discord");
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported landblock {landblockId:X4} to Discord");
+                }
+            }
+        }
+
+        [CommandHandler("export-discord-clothing", AccessLevel.Developer, CommandHandlerFlag.None, 1, "Exports a ClothingBase entry to JSON and sends it to Discord", "<id> - ClothingBase ID (0x10000000 - 0x10FFFFFF)")]
+        public static void HandleExportClothingToDiscord(Session session, params string[] parameters)
+        {
+            if (parameters == null || parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: export-discord-clothing <id>");
+                return;
+            }
+
+            uint clothingBaseId;
+            if (!uint.TryParse(parameters[0], out clothingBaseId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid ClothingBase ID format.");
+                return;
+            }
+
+            if (clothingBaseId < 0x10000000 || clothingBaseId > 0x10FFFFFF)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"{clothingBaseId:X8} is not a valid ClothingBase between 0x10000000 and 0x10FFFFFF");
+                return;
+            }
+
+            if (!DatManager.PortalDat.AllFiles.ContainsKey(clothingBaseId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"ClothingBase {clothingBaseId:X8} not found.");
+                return;
+            }
+
+            try
+            {
+                var cbToExport = DatManager.PortalDat.ReadFromDat<ClothingTable>(clothingBaseId);
+                var json = JsonSerializer.Serialize(cbToExport, new JsonSerializerOptions { WriteIndented = true });
+
+                using (MemoryStream mem = new MemoryStream())
+                {
+                    using (StreamWriter sw = new StreamWriter(mem))
+                    {
+                        sw.AutoFlush = true;
+                        sw.WriteLine(json);
+
+                        mem.Position = 0;
+                        var fileName = $"{clothingBaseId:X8}.json";
+                        DiscordChatManager.SendDiscordFile(session.Player.Name, $"ClothingBase {clothingBaseId:X8}.json", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
+
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Exported ClothingBase {clothingBaseId:X8} to Discord.");
+                        PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported ClothingBase {clothingBaseId:X8} to Discord");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error exporting ClothingBase {clothingBaseId:X8} to Discord: {ex.Message}");
+                log.Error($"[ExportClothing] Error: {ex.Message}");
+            }
         }
 
         [CommandHandler("clearcache", AccessLevel.Developer, CommandHandlerFlag.None, "Clears the various database caches. This enables live editing of the database information")]

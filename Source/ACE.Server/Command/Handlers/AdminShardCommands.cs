@@ -2,6 +2,7 @@ using System;
 
 using log4net;
 
+using ACE.Common;
 using ACE.Common.Extensions;
 using ACE.Entity.Enum;
 using ACE.Server.Managers;
@@ -142,6 +143,23 @@ namespace ACE.Server.Command.Handlers
                 PlayerManager.BroadcastToAll(new GameMessageSystemChat($"Broadcast from {adminName}> {adminText}\n" + genericMsgToPlayers, ChatMessageType.WorldBroadcast));
             else
                 PlayerManager.BroadcastToAll(new GameMessageSystemChat(genericMsgToPlayers, ChatMessageType.WorldBroadcast));
+
+            // DISCORD RELAY: Send shutdown notification to Events channel
+            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.EventsChannelId > 0)
+            {
+                var discordMsg = "";
+                if (sdt.TotalMilliseconds == 0)
+                    discordMsg = "🔴 **SERVER SHUTTING DOWN NOW!**";
+                else if (sdt.TotalMinutes <= 1)
+                    discordMsg = $"⚠️ **WARNING** - Server shutting down in {time}! Please log out!";
+                else
+                    discordMsg = $"📢 **ATTENTION** - Server will shut down in {time}.";
+
+                if (!hideName && !string.IsNullOrEmpty(adminText))
+                    discordMsg = $"**{adminName}**: {adminText}\n{discordMsg}";
+
+                DiscordChatManager.SendDiscordMessage("Server", discordMsg, ConfigManager.Config.Chat.EventsChannelId);
+            }
 
             ServerManager.BeginShutdown();
         }
