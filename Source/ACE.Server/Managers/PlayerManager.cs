@@ -173,7 +173,7 @@ namespace ACE.Server.Managers
                 playersLock.ExitReadLock();
             }
 
-            DatabaseManager.Shard.SaveBiotasInParallel(biotas, null, true);
+            DatabaseManager.Shard.SaveBiotasInParallel(biotas, result => { }, "SaveOfflinePlayersWithChanges");
         }
         
 
@@ -666,9 +666,16 @@ namespace ACE.Server.Managers
                 BroadcastToChannelFromConsole(Channel.Audit, message);
 
             //if (PropertyManager.GetBool("log_audit", true).Item)
-                //log.Info($"[AUDIT] {(issuer != null ? $"{issuer.Name} says on the Audit channel: " : "")}{message}");
+            //log.Info($"[AUDIT] {(issuer != null ? $"{issuer.Name} says on the Audit channel: " : "")}{message}");
 
             //LogBroadcastChat(Channel.Audit, issuer, message);
+
+            // DISCORD RELAY: Send audit messages to Discord
+            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.AdminAuditId > 0)
+            {
+                var playerName = issuer?.Name ?? "System";
+                DiscordChatManager.SendDiscordMessage(playerName, message, ConfigManager.Config.Chat.AdminAuditId);
+            }
         }
 
         public static void BroadcastToChannel(Channel channel, Player sender, string message, bool ignoreSquelch = false, bool ignoreActive = false)

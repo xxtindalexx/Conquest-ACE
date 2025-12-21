@@ -16,8 +16,8 @@ namespace ACE.Server.Factories.Tables.Wcids
 
         private static ChanceTable<WeenieClassName> T5_Chances = new ChanceTable<WeenieClassName>()
         {
-            ( WeenieClassName.atlatl,                     0.25f ),
-            ( WeenieClassName.atlatlroyal,                0.26f ),
+            ( WeenieClassName.atlatl,                     0.215f ),
+            ( WeenieClassName.atlatlroyal,                0.225f ),
             ( WeenieClassName.atlatlslashing,             0.035f ),
             ( WeenieClassName.atlatlpiercing,             0.035f ),
             ( WeenieClassName.atlatlblunt,                0.035f ),
@@ -32,24 +32,28 @@ namespace ACE.Server.Factories.Tables.Wcids
             ( WeenieClassName.ace31816_fireslingshot,     0.035f ),
             ( WeenieClassName.ace31817_frostslingshot,    0.035f ),
             ( WeenieClassName.ace31815_electricslingshot, 0.035f ),
+            ( WeenieClassName.conquest_netheratlatl,      0.03f ),
+            ( WeenieClassName.conquest_netherroyalatlatl, 0.03f ),
         };
 
         private static ChanceTable<WeenieClassName> T6_T8_Chances = new ChanceTable<WeenieClassName>()
         {
-            ( WeenieClassName.atlatlslashing,             0.075f ),
-            ( WeenieClassName.atlatlpiercing,             0.075f ),
-            ( WeenieClassName.atlatlblunt,                0.07f ),
-            ( WeenieClassName.atlatlacid,                 0.07f ),
-            ( WeenieClassName.atlatlfire,                 0.07f ),
-            ( WeenieClassName.atlatlfrost,                0.07f ),
-            ( WeenieClassName.atlatlelectric,             0.07f ),
-            ( WeenieClassName.ace31812_slashingslingshot, 0.075f ),
-            ( WeenieClassName.ace31818_piercingslingshot, 0.075f ),
-            ( WeenieClassName.ace31814_bluntslingshot,    0.07f ),
-            ( WeenieClassName.ace31813_acidslingshot,     0.07f ),
-            ( WeenieClassName.ace31816_fireslingshot,     0.07f ),
-            ( WeenieClassName.ace31817_frostslingshot,    0.07f ),
-            ( WeenieClassName.ace31815_electricslingshot, 0.07f ),
+            ( WeenieClassName.atlatlslashing,             0.065f ),
+            ( WeenieClassName.atlatlpiercing,             0.065f ),
+            ( WeenieClassName.atlatlblunt,                0.06f ),
+            ( WeenieClassName.atlatlacid,                 0.06f ),
+            ( WeenieClassName.atlatlfire,                 0.06f ),
+            ( WeenieClassName.atlatlfrost,                0.06f ),
+            ( WeenieClassName.atlatlelectric,             0.06f ),
+            ( WeenieClassName.ace31812_slashingslingshot, 0.065f ),
+            ( WeenieClassName.ace31818_piercingslingshot, 0.065f ),
+            ( WeenieClassName.ace31814_bluntslingshot,    0.06f ),
+            ( WeenieClassName.ace31813_acidslingshot,     0.06f ),
+            ( WeenieClassName.ace31816_fireslingshot,     0.06f ),
+            ( WeenieClassName.ace31817_frostslingshot,    0.06f ),
+            ( WeenieClassName.ace31815_electricslingshot, 0.06f ),
+            ( WeenieClassName.conquest_netheratlatl,      0.07f ),
+            ( WeenieClassName.conquest_netherroyalatlatl, 0.07f ),
         };
 
         private static readonly List<ChanceTable<WeenieClassName>> atlatlTiers = new List<ChanceTable<WeenieClassName>>()
@@ -86,4 +90,6 @@ namespace ACE.Server.Factories.Tables.Wcids
         }
     }
 }
+
+
 

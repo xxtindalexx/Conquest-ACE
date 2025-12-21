@@ -584,7 +584,7 @@ namespace ACE.Server.WorldObjects
                             {
                                 // Cooldown has passed, drop Soul Fragments
                                 var soulFragmentCount = ThreadSafeRandom.Next(1, 3);  // 1-3 soul fragments
-                                var soulFragmentWeenieId = 999999998u;  // TODO: Replace with actual Soul Fragment weenie ID
+                                var soulFragmentWeenieId = 13370003u;  // TODO: Replace with actual Soul Fragment weenie ID
 
                                 for (int i = 0; i < soulFragmentCount; i++)
                                 {

@@ -428,7 +428,7 @@ namespace ACE.Server.WorldObjects
                     return;
 
                 Teleport(allegianceHouse.SlumLord.Location);
-            }); 
+            });
 
             actionChain.EnqueueChain();
         }
@@ -766,7 +766,10 @@ namespace ACE.Server.WorldObjects
             int nonexemptCount = 0;
             var endpoint = this.Session.EndPointC2S;
             var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(endpoint.Address.ToString());
-            if (!ipAllowsUnlimited)
+            var maxAllowed = ConfigManager.Config.Server.Network.MaximumCharactersOutsideMarketplace;
+
+            // -1 means unlimited, so skip the check entirely
+            if (!ipAllowsUnlimited && maxAllowed != -1)
             {
                 var players = PlayerManager.GetAllOnline();
                 foreach (var p in players.Where(x => x.Session.EndPointC2S.Address.Equals(endpoint.Address)))
@@ -780,9 +783,9 @@ namespace ACE.Server.WorldObjects
                         continue;
 
                     // If exceeding the limit, log off the older connection
-                    if (++nonexemptCount > ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress)
+                    if (++nonexemptCount > maxAllowed)
                     {
-                        p.SendMessage($"Booting due to exceeding {ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress} allowed outside of exempt areas.");
+                        p.SendMessage($"Only {maxAllowed} character{(maxAllowed == 1 ? "" : "s")} per IP allowed outside Marketplace. Please return to Marketplace to switch characters.");
                         p.Session.LogOffPlayer();
                     }
                 }
@@ -914,3 +917,4 @@ namespace ACE.Server.WorldObjects
         }
     }
 }
+

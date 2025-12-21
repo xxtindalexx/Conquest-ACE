@@ -97,10 +97,12 @@ public partial class ShardDbContext : DbContext
     public virtual DbSet<HousePermission> HousePermission { get; set; }
 
     // CONQUEST: Custom DbSets for banking and transfer monitoring
-    public virtual DbSet<BankCommandBlacklist> BankCommandBlacklist { get; set; }
-    public virtual DbSet<TransferMonitoringConfigDb> TransferMonitoringConfigs { get; set; }
-    public virtual DbSet<TransferLog> TransferLog { get; set; }
+    public virtual DbSet<TransferLog> TransferLogs { get; set; }
+    public virtual DbSet<TransferSummary> TransferSummaries { get; set; }
     public virtual DbSet<TrackedItem> TrackedItems { get; set; }
+    public virtual DbSet<TransferMonitoringConfigDb> TransferMonitoringConfigs { get; set; }
+    public virtual DbSet<BankCommandBlacklist> BankCommandBlacklist { get; set; }
+    public virtual DbSet<CharTracker> CharTracker { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -125,6 +127,41 @@ public partial class ShardDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+
+        // Configure transfer logging tables
+        modelBuilder.Entity<TransferLog>(entity =>
+        {
+            entity.ToTable("transfer_logs");
+
+            // Add indexes for common query patterns
+            entity.HasIndex(e => e.FromPlayerName, "IX_transfer_logs_FromPlayerName");
+            entity.HasIndex(e => e.ToPlayerName, "IX_transfer_logs_ToPlayerName");
+            entity.HasIndex(e => e.FromPlayerAccount, "IX_transfer_logs_FromPlayerAccount");
+            entity.HasIndex(e => e.ToPlayerAccount, "IX_transfer_logs_ToPlayerAccount");
+            entity.HasIndex(e => e.TransferType, "IX_transfer_logs_TransferType");
+            entity.HasIndex(e => e.Timestamp, "IX_transfer_logs_Timestamp");
+        });
+        modelBuilder.Entity<TransferSummary>(entity =>
+        {
+            entity.ToTable("transfer_summaries");
+            entity.HasIndex(e => new { e.FromPlayerName, e.ToPlayerName, e.TransferType }, "idx_transfer_summary_unique")
+                .IsUnique();
+        });
+        modelBuilder.Entity<TrackedItem>().ToTable("tracked_items");
+        modelBuilder.Entity<TransferMonitoringConfigDb>().ToTable("transfer_monitoring_configs");
+        modelBuilder.Entity<BankCommandBlacklist>().ToTable("transfer_blacklist");
+        modelBuilder.Entity<CharTracker>(entity =>
+        {
+            entity.ToTable("char_tracker");
+
+            // Add indexes for common query patterns
+            entity.HasIndex(e => e.CharacterId, "IX_char_tracker_CharacterId");
+            entity.HasIndex(e => e.AccountName, "IX_char_tracker_AccountName");
+            entity.HasIndex(e => e.CharacterName, "IX_char_tracker_CharacterName");
+            entity.HasIndex(e => e.LoginIP, "IX_char_tracker_LoginIP");
+            entity.HasIndex(e => e.LoginTimestamp, "IX_char_tracker_LoginTimestamp");
+        });
+
         modelBuilder
             .UseCollation("utf8mb4_0900_ai_ci")
             .HasCharSet("utf8mb4");

@@ -13,6 +13,16 @@ using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
 using ACE.Server.Entity;
+using ACE.Server.Network;
+using ACE.Entity.Models;
+using ACE.Server.Factories;
+using ACE.Entity;
+using System.Drawing;
+using ACE.Server.Entity.Actions;
+using ACE.Database.Models.Auth;
+using ACE.Entity.Adapter;
+using ACE.Entity.Enum.Properties;
+using Microsoft.EntityFrameworkCore;
 
 namespace ACE.Server.Managers
 {
@@ -50,8 +60,8 @@ namespace ACE.Server.Managers
                 if (Creature != null)
                     return Creature.Guid.Full;
                 else
-                    return 1; 
-                    //return Fellowship.FellowshipLeaderGuid;
+                    return 1;
+                //return Fellowship.FellowshipLeaderGuid;
             }
         }
 
@@ -177,7 +187,7 @@ namespace ACE.Server.Managers
 
             if (questRegistryWasCreated)
             {
-                quest.LastTimeCompleted = (uint) Time.GetUnixTime();
+                quest.LastTimeCompleted = (uint)Time.GetUnixTime();
                 quest.NumTimesCompleted = 1; // initial add / first solve
 
                 quest.CharacterId = IDtoUseForQuestRegistry;
@@ -187,6 +197,16 @@ namespace ACE.Server.Managers
                 if (Creature is Player player)
                 {
                     player.CharacterChangesDetected = true;
+                    bool isStamp = false; bool isCompletion = false;
+                    UpdatePlayerQuestCompletions(player, questFormat, out isStamp, out isCompletion, (uint)quest.NumTimesCompleted);
+                    if (isStamp)
+                    {
+                        player.SendMessage($"You've stamped {questName}!", ChatMessageType.Advancement);
+                    }
+                    if (isCompletion)
+                    {
+                        player.SendMessage($"You've stamped {questName} on first completion!", ChatMessageType.Advancement);
+                    }
 
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
                 }
@@ -209,14 +229,22 @@ namespace ACE.Server.Managers
                 {
                     player.CharacterChangesDetected = true;
 
+                    if (quest.NumTimesCompleted == 1)
+                    {
+                        bool isStamp = false; bool isCompletion = false;
+                        UpdatePlayerQuestCompletions(player, questFormat, out isStamp, out isCompletion, (uint)quest.NumTimesCompleted);
+                        if (isStamp)
+                        {
+                            player.SendMessage($"You've stamped {questName} on completion!", ChatMessageType.Advancement);
+                        }
+                        if (isCompletion)
+                        {
+                            player.SendMessage($"You've stamped {questName} on first completion!", ChatMessageType.Advancement);
+                        }
+                    }
+
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
                 }
-            }
-
-            // CONQUEST: Quest Bonus System - Track account-wide quest completions
-            if (Creature is Player playerForQB)
-            {
-                StampAccountQuest(playerForQB, questName, quest.NumTimesCompleted);
             }
         }
 
@@ -235,7 +263,7 @@ namespace ACE.Server.Managers
 
             if (questRegistryWasCreated)
             {
-                quest.LastTimeCompleted = (uint) Time.GetUnixTime();
+                quest.LastTimeCompleted = (uint)Time.GetUnixTime();
                 quest.NumTimesCompleted = numTimesCompleted; // initialize the quest to the given completions
 
                 quest.CharacterId = IDtoUseForQuestRegistry;
@@ -245,9 +273,20 @@ namespace ACE.Server.Managers
                 if (Creature is Player player)
                 {
                     player.CharacterChangesDetected = true;
-
+                    bool isStamp = false; bool isCompletion = false;
+                    UpdatePlayerQuestCompletions(player, questFormat, out isStamp, out isCompletion, (uint)numTimesCompleted);
+                    if (isStamp)
+                    {
+                        player.SendMessage($"You've stamped {questName}!", ChatMessageType.Advancement);
+                    }
+                    if (isCompletion)
+                    {
+                        player.SendMessage($"You've stamped {questName} on first completion!", ChatMessageType.Advancement);
+                    }
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
+
                 }
+
             }
             else
             {
@@ -260,7 +299,19 @@ namespace ACE.Server.Managers
                 if (Creature is Player player)
                 {
                     player.CharacterChangesDetected = true;
-
+                    if (quest.NumTimesCompleted == 1)
+                    {
+                        bool isStamp = false; bool isCompletion = false;
+                        UpdatePlayerQuestCompletions(player, questFormat, out isStamp, out isCompletion, (uint)numTimesCompleted);
+                        if (isStamp)
+                        {
+                            player.SendMessage($"You've stamped {questName}!", ChatMessageType.Advancement);
+                        }
+                        if (isCompletion)
+                        {
+                            player.SendMessage($"You've stamped {questName} on first completion!", ChatMessageType.Advancement);
+                        }
+                    }
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
                 }
             }
@@ -299,7 +350,7 @@ namespace ACE.Server.Managers
         /// <summary>
         /// Returns the maximum # of solves for this quest
         /// </summary>
-        public int GetMaxSolves(string questFormat)
+        public static int GetMaxSolves(string questFormat)
         {
             var questName = GetQuestName(questFormat);
 
@@ -692,55 +743,61 @@ namespace ACE.Server.Managers
 
         // CONQUEST: Quest Bonus System
         /// <summary>
-        /// Stamps the account-wide quest tracking database for Quest Bonus system
+        /// Updates account-wide quest tracking for Quest Bonus system
+        /// Only tracks first-time completions for QB credit
         /// </summary>
-        private static void StampAccountQuest(Player player, string questName, int solves)
+        public void UpdatePlayerQuestCompletions(Player player, string questName, out bool stampedNew, out bool stampedCompletion, uint solves = 0)
         {
-            var acctId = player.Account.AccountId;
-
-            // Check if already tracked to avoid database thrashing
-            if (player.Account.HasQuestBonusAndCompletion(questName))
+            stampedNew = false;
+            stampedCompletion = false;
+            if (player.IsMule)
             {
                 return;
             }
 
-            using (var context = new Database.Models.Auth.AuthDbContext())
+            var acctId = player.Account.AccountId;
+
+            if (player.Account.HasQuestBonusAndCompletion(questName))
+            {
+                return; //no need to thrash.
+            }
+
+            using (Database.Models.Auth.AuthDbContext context = new Database.Models.Auth.AuthDbContext())
             {
                 try
                 {
                     var acctQuest = context.AccountQuest.Where(x => x.AccountId == acctId && x.Quest == questName).FirstOrDefault();
                     if (acctQuest != null)
                     {
-                        // Update existing record if quest was just completed (first completion)
+
                         if (solves == 1 && acctQuest.NumTimesCompleted < 1)
                         {
-                            acctQuest.NumTimesCompleted = (uint)solves;
+                            stampedNew = false;
+                            stampedCompletion = true;
+                            acctQuest.NumTimesCompleted = solves;
                             context.AccountQuest.Update(acctQuest);
-                            player.Account.UpdateAccountQuestsCacheByQuestName(questName, (uint)solves);
+                            player.Account.UpdateAccountQuestsCacheByQuestName(questName, solves);
                         }
                     }
                     else
                     {
-                        // Add new record
-                        context.AccountQuest.Add(new Database.Models.Auth.AccountQuest()
-                        {
-                            AccountId = acctId,
-                            Quest = questName,
-                            NumTimesCompleted = (uint)solves
-                        });
-                        player.Account.UpdateAccountQuestsCacheByQuestName(questName, (uint)solves);
+                        context.AccountQuest.Add(new Database.Models.Auth.AccountQuest() { AccountId = acctId, Quest = questName, NumTimesCompleted = solves });
+                        stampedNew = true;
+                        player.Account.UpdateAccountQuestsCacheByQuestName(questName, solves);
                     }
 
-                    context.SaveChanges();
+                    context.SaveChangesFailed += (object sender, Microsoft.EntityFrameworkCore.SaveChangesFailedEventArgs e) =>
+                    {
+                        Console.WriteLine($"Failed to save quest {questName} for account {acctId}");
+                    };
 
-                    // Update player's quest completion count
-                    player.QuestCompletionCount = player.Account.CachedQuestBonusCount;
+                    context.SaveChanges();
                 }
-                catch (Exception ex)
-                {
-                    log.Error($"Failed to stamp account quest {questName} for account {acctId}: {ex.Message}");
-                }
+                catch (Exception) { stampedNew = false; stampedCompletion = false; }
             }
+
+            player.QuestCompletionCount = player.Account.CachedQuestBonusCount;
         }
     }
 }
+

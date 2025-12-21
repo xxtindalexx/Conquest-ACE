@@ -189,7 +189,7 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
-            DatabaseManager.Shard.SaveBiotasInParallel(biotas, null);
+            DatabaseManager.Shard.SaveBiotasInParallel(biotas, result => { }, "PlayerInventorySave");
         }
 
         public enum RemoveFromInventoryAction
