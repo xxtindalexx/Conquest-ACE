@@ -187,16 +187,6 @@ namespace ACE.Server.Managers
                 if (Creature is Player player)
                 {
                     player.CharacterChangesDetected = true;
-                    bool isStamp = false; bool isCompletion = false;
-                    UpdatePlayerQuestCompletions(player, questFormat, out isStamp, out isCompletion, (uint)quest.NumTimesCompleted);
-                    if (isStamp)
-                    {
-                        player.SendMessage($"You've stamped {questName}!", ChatMessageType.Advancement);
-                    }
-                    if (isCompletion)
-                    {
-                        player.SendMessage($"You've stamped {questName} on first completion!", ChatMessageType.Advancement);
-                    }
 
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
                 }
@@ -219,22 +209,14 @@ namespace ACE.Server.Managers
                 {
                     player.CharacterChangesDetected = true;
 
-                    if (quest.NumTimesCompleted == 1)
-                    {
-                        bool isStamp = false; bool isCompletion = false;
-                        UpdatePlayerQuestCompletions(player, questFormat, out isStamp, out isCompletion, (uint)quest.NumTimesCompleted);
-                        if (isStamp)
-                        {
-                            player.SendMessage($"You've stamped {questName} on completion!", ChatMessageType.Advancement);
-                        }
-                        if (isCompletion)
-                        {
-                            player.SendMessage($"You've stamped {questName} on first completion!", ChatMessageType.Advancement);
-                        }
-                    }
-
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
                 }
+            }
+
+            // CONQUEST: Quest Bonus System - Track account-wide quest completions
+            if (Creature is Player playerForQB)
+            {
+                StampAccountQuest(playerForQB, questName, quest.NumTimesCompleted);
             }
         }
 
@@ -263,20 +245,9 @@ namespace ACE.Server.Managers
                 if (Creature is Player player)
                 {
                     player.CharacterChangesDetected = true;
-                    bool isStamp = false; bool isCompletion = false;
-                    UpdatePlayerQuestCompletions(player, questFormat, out isStamp, out isCompletion, (uint)numTimesCompleted);
-                    if (isStamp)
-                    {
-                        player.SendMessage($"You've stamped {questName}!", ChatMessageType.Advancement);
-                    }
-                    if (isCompletion)
-                    {
-                        player.SendMessage($"You've stamped {questName} on first completion!", ChatMessageType.Advancement);
-                    }
+
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
-
                 }
-
             }
             else
             {
@@ -289,19 +260,7 @@ namespace ACE.Server.Managers
                 if (Creature is Player player)
                 {
                     player.CharacterChangesDetected = true;
-                    if (quest.NumTimesCompleted == 1)
-                    {
-                        bool isStamp = false; bool isCompletion = false;
-                        UpdatePlayerQuestCompletions(player, questFormat, out isStamp, out isCompletion, (uint)numTimesCompleted);
-                        if (isStamp)
-                        {
-                            player.SendMessage($"You've stamped {questName}!", ChatMessageType.Advancement);
-                        }
-                        if (isCompletion)
-                        {
-                            player.SendMessage($"You've stamped {questName} on first completion!", ChatMessageType.Advancement);
-                        }
-                    }
+
                     player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
                 }
             }
@@ -733,60 +692,55 @@ namespace ACE.Server.Managers
 
         // CONQUEST: Quest Bonus System
         /// <summary>
-        /// Updates account-wide quest tracking for Quest Bonus system
-        /// Only tracks first-time completions for QB credit
+        /// Stamps the account-wide quest tracking database for Quest Bonus system
         /// </summary>
-        public void UpdatePlayerQuestCompletions(Player player, string questName, out bool stampedNew, out bool stampedCompletion, uint solves = 0)
+        private static void StampAccountQuest(Player player, string questName, int solves)
         {
-            stampedNew = false;
-            stampedCompletion = false;
-            if (player.IsMule)
+            var acctId = player.Account.AccountId;
+
+            // Check if already tracked to avoid database thrashing
+            if (player.Account.HasQuestBonusAndCompletion(questName))
             {
                 return;
             }
 
-            var acctId = player.Account.AccountId;
-
-            if (player.Account.HasQuestBonusAndCompletion(questName))
-            {
-                return; //no need to thrash.
-            }
-
-            using (Database.Models.Auth.AuthDbContext context = new Database.Models.Auth.AuthDbContext())
+            using (var context = new Database.Models.Auth.AuthDbContext())
             {
                 try
                 {
                     var acctQuest = context.AccountQuest.Where(x => x.AccountId == acctId && x.Quest == questName).FirstOrDefault();
                     if (acctQuest != null)
                     {
-
+                        // Update existing record if quest was just completed (first completion)
                         if (solves == 1 && acctQuest.NumTimesCompleted < 1)
                         {
-                            stampedNew = false;
-                            stampedCompletion = true;
-                            acctQuest.NumTimesCompleted = solves;
+                            acctQuest.NumTimesCompleted = (uint)solves;
                             context.AccountQuest.Update(acctQuest);
-                            player.Account.UpdateAccountQuestsCacheByQuestName(questName, solves);
+                            player.Account.UpdateAccountQuestsCacheByQuestName(questName, (uint)solves);
                         }
                     }
                     else
                     {
-                        context.AccountQuest.Add(new Database.Models.Auth.AccountQuest() { AccountId = acctId, Quest = questName, NumTimesCompleted = solves });
-                        stampedNew = true;
-                        player.Account.UpdateAccountQuestsCacheByQuestName(questName, solves);
+                        // Add new record
+                        context.AccountQuest.Add(new Database.Models.Auth.AccountQuest()
+                        {
+                            AccountId = acctId,
+                            Quest = questName,
+                            NumTimesCompleted = (uint)solves
+                        });
+                        player.Account.UpdateAccountQuestsCacheByQuestName(questName, (uint)solves);
                     }
 
-                    context.SaveChangesFailed += (object sender, Microsoft.EntityFrameworkCore.SaveChangesFailedEventArgs e) =>
-                    {
-                        Console.WriteLine($"Failed to save quest {questName} for account {acctId}");
-                    };
-
                     context.SaveChanges();
-                }
-                catch (Exception) { stampedNew = false; stampedCompletion = false; }
-            }
 
-            player.QuestCompletionCount = player.Account.CachedQuestBonusCount;
+                    // Update player's quest completion count
+                    player.QuestCompletionCount = player.Account.CachedQuestBonusCount;
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"Failed to stamp account quest {questName} for account {acctId}: {ex.Message}");
+                }
+            }
         }
     }
 }

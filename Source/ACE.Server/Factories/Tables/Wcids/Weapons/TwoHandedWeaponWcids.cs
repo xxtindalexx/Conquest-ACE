@@ -10,134 +10,62 @@ namespace ACE.Server.Factories.Tables.Wcids
     {
         private static ChanceTable<WeenieClassName> GreatAxes = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - axe
-            ( WeenieClassName.ace41052_greataxe,          0.35f ),
-            ( WeenieClassName.ace41053_acidgreataxe,      0.13f ),
-            ( WeenieClassName.ace41054_lightninggreataxe, 0.13f ),
-            ( WeenieClassName.ace41055_flaminggreataxe,   0.13f ),
-            ( WeenieClassName.ace41056_frostgreataxe,     0.13f ),
-            ( WeenieClassName.conquest_nethergreataxe,    0.13f ), // Placeholder - create weenie
+            // two-handed - axe$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> GreatStarMaces = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - mace
-            ( WeenieClassName.ace41057_greatstarmace,          0.35f ),
-            ( WeenieClassName.ace41058_acidgreatstarmace,      0.13f ),
-            ( WeenieClassName.ace41059_lightninggreatstarmace, 0.13f ),
-            ( WeenieClassName.ace41060_flaminggreatstarmace,   0.13f ),
-            ( WeenieClassName.ace41061_frostgreatstarmace,     0.13f ),
-            ( WeenieClassName.conquest_nethergreatstarmace,    0.13f ), // Placeholder - create weenie
+            // two-handed - mace$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> KhandaHandledMaces = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - mace
-            ( WeenieClassName.ace41062_khandahandledmace,          0.35f ),
-            ( WeenieClassName.ace41063_acidkhandahandledmace,      0.13f ),
-            ( WeenieClassName.ace41064_lightningkhandahandledmace, 0.13f ),
-            ( WeenieClassName.ace41065_flamingkhandahandledmace,   0.13f ),
-            ( WeenieClassName.ace41066_frostkhandahandledmace,     0.13f ),
-            ( WeenieClassName.conquest_netherkhandahandledmace,    0.13f ), // Placeholder - create weenie
+            // two-handed - mace$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> Quadrelles = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - mace
-            ( WeenieClassName.ace40623_quadrelle,          0.35f ),
-            ( WeenieClassName.ace40624_acidquadrelle,      0.13f ),
-            ( WeenieClassName.ace40625_lightningquadrelle, 0.13f ),
-            ( WeenieClassName.ace40626_flamingquadrelle,   0.13f ),
-            ( WeenieClassName.ace40627_frostquadrelle,     0.13f ),
-            ( WeenieClassName.conquest_netherquadrelle,    0.13f ), // Placeholder - create weenie
+            // two-handed - mace$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> Tetsubos = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - mace
-            ( WeenieClassName.ace40635_tetsubo,          0.35f ),
-            ( WeenieClassName.ace40636_acidtetsubo,      0.13f ),
-            ( WeenieClassName.ace40637_lightningtetsubo, 0.13f ),
-            ( WeenieClassName.ace40638_flamingtetsubo,   0.13f ),
-            ( WeenieClassName.ace40639_frosttetsubo,     0.13f ),
-            ( WeenieClassName.conquest_nethertetsubo,    0.13f ), // Placeholder - create weenie
+            // two-handed - mace$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> Assagais = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - spear
-            ( WeenieClassName.ace41036_assagai,          0.35f ),
-            ( WeenieClassName.ace41037_acidassagai,      0.13f ),
-            ( WeenieClassName.ace41038_lightningassagai, 0.13f ),
-            ( WeenieClassName.ace41039_flamingassagai,   0.13f ),
-            ( WeenieClassName.ace41040_frostassagai,     0.13f ),
-            ( WeenieClassName.conquest_netherassagai,    0.13f ), // Placeholder - create weenie
+            // two-handed - spear$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> Corsecas = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - spear
-            ( WeenieClassName.ace40818_corsesca,          0.35f ),
-            ( WeenieClassName.ace40819_acidcorsesca,      0.13f ),
-            ( WeenieClassName.ace40820_lightningcorsesca, 0.13f ),
-            ( WeenieClassName.ace40821_flamingcorsesca,   0.13f ),
-            ( WeenieClassName.ace40822_frostcorsesca,     0.13f ),
-            ( WeenieClassName.conquest_nethercorsesca,    0.13f ), // Placeholder - create weenie
+            // two-handed - spear$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> MagariYaris = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - spear
-            ( WeenieClassName.ace41041_magariyari,          0.35f ),
-            ( WeenieClassName.ace41042_acidmagariyari,      0.13f ),
-            ( WeenieClassName.ace41043_lightningmagariyari, 0.13f ),
-            ( WeenieClassName.ace41044_flamingmagariyari,   0.13f ),
-            ( WeenieClassName.ace41045_frostmagariyari,     0.13f ),
-            ( WeenieClassName.conquest_nethermagariyari,    0.13f ), // Placeholder - create weenie
+            // two-handed - spear$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> Pikes = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - spear
-            ( WeenieClassName.ace41046_pike,          0.35f ),
-            ( WeenieClassName.ace41047_acidpike,      0.13f ),
-            ( WeenieClassName.ace41048_lightningpike, 0.13f ),
-            ( WeenieClassName.ace41049_flamingpike,   0.13f ),
-            ( WeenieClassName.ace41050_frostpike,     0.13f ),
-            ( WeenieClassName.conquest_netherpike,    0.13f ), // Placeholder - create weenie
+            // two-handed - spear$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> Nodachis = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - sword
-            ( WeenieClassName.ace40760_nodachi,          0.35f ),
-            ( WeenieClassName.ace40761_acidnodachi,      0.13f ),
-            ( WeenieClassName.ace40762_lightningnodachi, 0.13f ),
-            ( WeenieClassName.ace40763_flamingnodachi,   0.13f ),
-            ( WeenieClassName.ace40764_frostnodachi,     0.13f ),
-            ( WeenieClassName.conquest_nethernodachi,    0.13f ), // Placeholder - create weenie
+            // two-handed - sword$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> Shashqas = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - sword
-            ( WeenieClassName.ace41067_shashqa,          0.35f ),
-            ( WeenieClassName.ace41068_acidshashqa,      0.13f ),
-            ( WeenieClassName.ace41069_lightningshashqa, 0.13f ),
-            ( WeenieClassName.ace41070_flamingshashqa,   0.13f ),
-            ( WeenieClassName.ace41071_frostshashqa,     0.13f ),
-            ( WeenieClassName.conquest_nethershashqa,    0.13f ), // Placeholder - create weenie
+            // two-handed - sword$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static ChanceTable<WeenieClassName> Spadones = new ChanceTable<WeenieClassName>()
         {
-            // two-handed - sword
-            ( WeenieClassName.ace40618_spadone,          0.35f ),
-            ( WeenieClassName.ace40619_acidspadone,      0.13f ),
-            ( WeenieClassName.ace40620_lightningspadone, 0.13f ),
-            ( WeenieClassName.ace40621_flamingspadone,   0.13f ),
-            ( WeenieClassName.ace40622_frostspadone,     0.13f ),
-            ( WeenieClassName.conquest_netherspadone,    0.13f ), // Placeholder - create weenie
+            // two-handed - sword$10.35f ),$10.13f ),$10.13f ),$10.13f ),$10.13f ),
         };
 
         private static readonly List<(ChanceTable<WeenieClassName> table, TreasureWeaponType weaponType)> twoHandedWeaponTables = new List<(ChanceTable<WeenieClassName>, TreasureWeaponType)>()
@@ -183,3 +111,4 @@ namespace ACE.Server.Factories.Tables.Wcids
         }
     }
 }
+

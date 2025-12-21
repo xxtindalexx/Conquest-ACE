@@ -17,9 +17,9 @@ namespace ACE.Server.Factories.Tables.Wcids
 
         private static ChanceTable<WeenieClassName> T5_Chances = new ChanceTable<WeenieClassName>()
         {
-            ( WeenieClassName.crossbowlight,                     0.20f ),
-            ( WeenieClassName.crossbowheavy,                     0.11f ),
-            ( WeenieClassName.crossbowarbalest,                  0.11f ),
+            ( WeenieClassName.crossbowlight,                     0.25f ),
+            ( WeenieClassName.crossbowheavy,                     0.13f ),
+            ( WeenieClassName.crossbowarbalest,                  0.13f ),
             ( WeenieClassName.crossbowslashing,                  0.035f ),
             ( WeenieClassName.crossbowpiercing,                  0.035f ),
             ( WeenieClassName.crossbowblunt,                     0.035f ),
@@ -34,30 +34,24 @@ namespace ACE.Server.Factories.Tables.Wcids
             ( WeenieClassName.ace31809_firecompoundcrossbow,     0.035f ),
             ( WeenieClassName.ace31810_frostcompoundcrossbow,    0.035f ),
             ( WeenieClassName.ace31808_electriccompoundcrossbow, 0.035f ),
-            ( WeenieClassName.conquest_nethercrossbowlight,      0.03f ),
-            ( WeenieClassName.conquest_nethercrossbowheavy,      0.03f ),
-            ( WeenieClassName.conquest_nethercrossbowarbalest,   0.03f ),
         };
 
         private static ChanceTable<WeenieClassName> T6_T8_Chances = new ChanceTable<WeenieClassName>()
         {
-            ( WeenieClassName.crossbowslashing,                  0.06f ),
-            ( WeenieClassName.crossbowpiercing,                  0.06f ),
-            ( WeenieClassName.crossbowblunt,                     0.055f ),
-            ( WeenieClassName.crossbowacid,                      0.055f ),
-            ( WeenieClassName.crossbowfire,                      0.055f ),
-            ( WeenieClassName.crossbowfrost,                     0.055f ),
-            ( WeenieClassName.crossbowelectric,                  0.055f ),
-            ( WeenieClassName.ace31805_slashingcompoundcrossbow, 0.06f ),
-            ( WeenieClassName.ace31811_piercingcompoundcrossbow, 0.06f ),
-            ( WeenieClassName.ace31807_bluntcompoundcrossbow,    0.055f ),
-            ( WeenieClassName.ace31806_acidcompoundcrossbow,     0.055f ),
-            ( WeenieClassName.ace31809_firecompoundcrossbow,     0.055f ),
-            ( WeenieClassName.ace31810_frostcompoundcrossbow,    0.055f ),
-            ( WeenieClassName.ace31808_electriccompoundcrossbow, 0.055f ),
-            ( WeenieClassName.conquest_nethercrossbowlight,      0.07f ),
-            ( WeenieClassName.conquest_nethercrossbowheavy,      0.07f ),
-            ( WeenieClassName.conquest_nethercrossbowarbalest,   0.07f ),
+            ( WeenieClassName.crossbowslashing,                  0.075f ),
+            ( WeenieClassName.crossbowpiercing,                  0.075f ),
+            ( WeenieClassName.crossbowblunt,                     0.07f ),
+            ( WeenieClassName.crossbowacid,                      0.07f ),
+            ( WeenieClassName.crossbowfire,                      0.07f ),
+            ( WeenieClassName.crossbowfrost,                     0.07f ),
+            ( WeenieClassName.crossbowelectric,                  0.07f ),
+            ( WeenieClassName.ace31805_slashingcompoundcrossbow, 0.075f ),
+            ( WeenieClassName.ace31811_piercingcompoundcrossbow, 0.075f ),
+            ( WeenieClassName.ace31807_bluntcompoundcrossbow,    0.07f ),
+            ( WeenieClassName.ace31806_acidcompoundcrossbow,     0.07f ),
+            ( WeenieClassName.ace31809_firecompoundcrossbow,     0.07f ),
+            ( WeenieClassName.ace31810_frostcompoundcrossbow,    0.07f ),
+            ( WeenieClassName.ace31808_electriccompoundcrossbow, 0.07f ),
         };
 
         private static readonly List<ChanceTable<WeenieClassName>> crossbowTiers = new List<ChanceTable<WeenieClassName>>()
