@@ -669,13 +669,6 @@ namespace ACE.Server.Managers
                 //log.Info($"[AUDIT] {(issuer != null ? $"{issuer.Name} says on the Audit channel: " : "")}{message}");
 
             //LogBroadcastChat(Channel.Audit, issuer, message);
-
-            // DISCORD RELAY: Send audit messages to Discord
-            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.AdminAuditId > 0)
-            {
-                var playerName = issuer?.Name ?? "System";
-                DiscordChatManager.SendDiscordMessage(playerName, message, ConfigManager.Config.Chat.AdminAuditId);
-            }
         }
 
         public static void BroadcastToChannel(Channel channel, Player sender, string message, bool ignoreSquelch = false, bool ignoreActive = false)
