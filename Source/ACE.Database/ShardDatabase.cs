@@ -18,6 +18,7 @@ using ACE.Database.Entity;
 using ACE.Database.Models.Shard;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using ACE.Database.Models.Auth;
 
 namespace ACE.Database
 {
@@ -130,6 +131,47 @@ namespace ACE.Database
         {
             using (var context = new ShardDbContext())
                 return context.Biota.Count();
+        }
+
+        public static int GetServerQuestCompletions(string questName)
+        {
+            int retVal = 0;
+            if (!string.IsNullOrEmpty(questName))
+            {
+                using var context = new ShardDbContext();
+                retVal = context.CharacterPropertiesQuestRegistry.Where(x => x.QuestName == questName).Sum(x => x.NumTimesCompleted);
+            }
+            return retVal;
+        }
+
+        public static int GetPlayerQuestCompletions(string questName, string playerName)
+        {
+            int retVal = 0;
+            if (!string.IsNullOrEmpty(questName) && !string.IsNullOrEmpty(playerName))
+            {
+                using var context = new ShardDbContext();
+                retVal = context.CharacterPropertiesQuestRegistry.Where(x => x.QuestName == questName && x.Character.Name == playerName).Sum(x => x.NumTimesCompleted);
+            }
+            return retVal;
+        }
+
+        public static List<Leaderboard> GetTopQuestCompletions(string questName)
+        {
+            List<Leaderboard> retVal = [];
+            if (!string.IsNullOrEmpty(questName))
+            {
+                using var context = new ShardDbContext();
+                retVal = [.. context.CharacterPropertiesQuestRegistry
+                    .Where(x => x.QuestName == questName)
+                    .GroupBy(x => x.Character.Name)
+                    .Select(x => new Leaderboard {
+                        Character = x.Key
+                        , Score = (ulong)x.Sum(s => s.NumTimesCompleted)
+                    })
+                    .OrderByDescending(x => x.Score)
+                    .Take(25)];
+            }
+            return retVal;
         }
 
         public int GetEstimatedBiotaCount(string dbName)
@@ -894,7 +936,7 @@ namespace ACE.Database
         {
             using (var context = new ShardDbContext())
             {
-                context.TransferLog.Add(transferLog);
+                context.TransferLogs.Add(transferLog);
                 context.SaveChanges();
             }
         }
@@ -903,7 +945,7 @@ namespace ACE.Database
         {
             using (var context = new ShardDbContext())
             {
-                return context.TransferLog
+                return context.TransferLogs
                     .AsNoTracking()
                     .Where(t => (t.FromPlayerName == playerName || t.ToPlayerName == playerName) && t.Timestamp >= cutoffDate)
                     .OrderByDescending(t => t.Timestamp)
@@ -915,11 +957,102 @@ namespace ACE.Database
         {
             using (var context = new ShardDbContext())
             {
-                return context.TransferLog
+                return context.TransferLogs
                     .AsNoTracking()
                     .Where(t => t.Timestamp >= cutoffDate)
                     .OrderByDescending(t => t.Timestamp)
                     .ToList();
+            }
+        }
+
+        public List<TransferParticipantStats> GetTopTransferParticipants(DateTime cutoffDate, int limit = 20)
+        {
+            using (var context = new ShardDbContext())
+            {
+                // Project both directions into unified (Player, Partner, Quantity) relation
+                var fromSide = context.TransferLogs
+                    .AsNoTracking()
+                    .Where(t => t.Timestamp >= cutoffDate)
+                    .Select(t => new { Player = t.FromPlayerName, Partner = t.ToPlayerName, Quantity = (long)t.Quantity });
+
+                var toSide = context.TransferLogs
+                    .AsNoTracking()
+                    .Where(t => t.Timestamp >= cutoffDate)
+                    .Select(t => new { Player = t.ToPlayerName, Partner = t.FromPlayerName, Quantity = (long)t.Quantity });
+
+                var pairs = fromSide.Concat(toSide);
+
+                var allParticipants = pairs
+                    .GroupBy(p => p.Player)
+                    .Select(g => new TransferParticipantStats
+                    {
+                        PlayerName = g.Key,
+                        TotalTransfers = g.Count(),
+                        UniquePartners = g.Select(x => x.Partner).Distinct().Count(),
+                        TotalQuantity = g.Sum(x => x.Quantity)
+                    })
+                    .OrderByDescending(p => p.TotalTransfers)
+                    .Take(limit)
+                    .ToList();
+
+                return allParticipants;
+            }
+        }
+
+        // Transfer Summary methods
+        public List<TransferSummary> GetTransferSummaries(string playerName, DateTime cutoffDate)
+        {
+            using (var context = new ShardDbContext())
+            {
+                return context.TransferSummaries
+                    .AsNoTracking()
+                    .Where(s => (s.FromPlayerName == playerName || s.ToPlayerName == playerName) && s.LastTransfer >= cutoffDate)
+                    .OrderByDescending(s => s.LastTransfer)
+                    .ToList();
+            }
+        }
+
+        public List<TransferSummary> GetHighRiskSummaries(DateTime cutoffDate)
+        {
+            using (var context = new ShardDbContext())
+            {
+                return context.TransferSummaries
+                    .AsNoTracking()
+                    .Where(s => s.IsSuspicious && s.LastTransfer >= cutoffDate)
+                    .OrderByDescending(s => s.SuspiciousTransfers)
+                    .ThenByDescending(s => s.TotalValue)
+                    .ToList();
+            }
+        }
+
+
+
+        // Cleanup methods
+        public void CleanupOldTransferLogs(int daysToKeep)
+        {
+            var cutoffDate = DateTime.UtcNow.AddDays(-daysToKeep);
+            using (var context = new ShardDbContext())
+            {
+                var count = context.TransferLogs.Count(t => t.Timestamp < cutoffDate);
+                if (count > 0)
+                {
+                    context.Database.ExecuteSqlRaw($"DELETE FROM transfer_logs WHERE Timestamp < {{0}}", cutoffDate);
+                    log.Info($"Cleaned up {count} old transfer logs older than {daysToKeep} days");
+                }
+            }
+        }
+
+        public void CleanupOldSummaries(int daysToKeep)
+        {
+            var cutoffDate = DateTime.UtcNow.AddDays(-daysToKeep);
+            using (var context = new ShardDbContext())
+            {
+                var count = context.TransferSummaries.Count(s => s.LastTransfer < cutoffDate);
+                if (count > 0)
+                {
+                    context.Database.ExecuteSqlRaw($"DELETE FROM transfer_summaries WHERE LastTransfer < {{0}}", cutoffDate);
+                    log.Info($"Cleaned up {count} old transfer summaries older than {daysToKeep} days");
+                }
             }
         }
     }

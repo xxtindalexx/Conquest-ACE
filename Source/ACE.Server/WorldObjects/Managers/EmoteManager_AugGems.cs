@@ -45,31 +45,31 @@ namespace ACE.Server.WorldObjects.Managers
             {
                 case "Creature":
                     currentAugCount = player.LuminanceAugmentCreatureCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999000u : 999010u; // Placeholder weenie IDs
+                    gemWeenieId = augCount == 1 ? 13370004u : 13370013u; // Placeholder weenie IDs
                     break;
                 case "Item":
                     currentAugCount = player.LuminanceAugmentItemCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999001u : 999011u;
+                    gemWeenieId = augCount == 1 ? 13370005u : 13370014u;
                     break;
                 case "Life":
                     currentAugCount = player.LuminanceAugmentLifeCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999002u : 999012u;
+                    gemWeenieId = augCount == 1 ? 13370006u : 13370015u;
                     break;
                 case "War":
                     currentAugCount = player.LuminanceAugmentWarCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999003u : 999013u;
+                    gemWeenieId = augCount == 1 ? 13370007u : 13370016u;
                     break;
                 case "Void":
                     currentAugCount = player.LuminanceAugmentVoidCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999004u : 999014u;
+                    gemWeenieId = augCount == 1 ? 13370008u : 13370017u;
                     break;
                 case "Duration":
                     currentAugCount = player.LuminanceAugmentSpellDurationCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999005u : 999015u;
+                    gemWeenieId = augCount == 1 ? 13370011u : 13370020u;
                     break;
                 case "Specialization":
                     currentAugCount = player.LuminanceAugmentSpecializeCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999006u : 999016u;
+                    gemWeenieId = augCount == 1 ? 13370012u : 13370021u;
                     break;
                 case "Summon":
                     currentAugCount = player.LuminanceAugmentSummonCount ?? 0;
@@ -77,11 +77,11 @@ namespace ACE.Server.WorldObjects.Managers
                     break;
                 case "Melee":
                     currentAugCount = player.LuminanceAugmentMeleeCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999008u : 999018u;
+                    gemWeenieId = augCount == 1 ? 13370009u : 13370018u;
                     break;
                 case "Missile":
                     currentAugCount = player.LuminanceAugmentMissileCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999009u : 999019u;
+                    gemWeenieId = augCount == 1 ? 13370010u : 13370019u;
                     break;
                 default:
                     player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown augmentation type: {augType}", ChatMessageType.Broadcast));

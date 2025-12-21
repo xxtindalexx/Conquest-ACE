@@ -169,6 +169,7 @@ namespace ACE.Entity.Enum.Properties
         NoOlthoiTalk                     = 129,
         [AssessmentProperty]
         AutowieldLeft                    = 130,
+        IsMule                           = 131,
 
         /* Custom Properties */
         LinkedPortalOneSummon            = 9001,
@@ -182,5 +183,6 @@ namespace ACE.Entity.Enum.Properties
         FreeAttributeResetRenewed        = 9008,
         SkillTemplesTimerReset           = 9009,
         FreeMasteryResetRenewed          = 9010,
+        ExcludeFromLeaderboards          = 9011,
     }
 }

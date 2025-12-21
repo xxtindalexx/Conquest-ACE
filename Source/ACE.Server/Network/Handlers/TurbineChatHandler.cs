@@ -1,7 +1,4 @@
-using System;
-using System.Reflection;
-using System.Text;
-
+using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Server.Entity;
 using ACE.Server.Managers;
@@ -9,8 +6,10 @@ using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages;
 using ACE.Server.Network.GameMessages.Messages;
-
 using log4net;
+using System;
+using System.Reflection;
+using System.Text;
 
 namespace ACE.Server.Network.Handlers
 {
@@ -315,6 +314,28 @@ namespace ACE.Server.Network.Handlers
                             continue;
 
                         recipient.Session.Network.EnqueueSend(gameMessageTurbineChat);
+                    }
+
+                    // DISCORD RELAY: Send game chat to Discord
+                    if (ConfigManager.Config.Chat.EnableDiscordConnection)
+                    {
+                        try
+                        {
+                            long discordChannelId = 0;
+                            if (channelID == TurbineChatChannel.General)
+                                discordChannelId = ConfigManager.Config.Chat.GeneralChannelId;
+                            else if (channelID == TurbineChatChannel.Trade)
+                                discordChannelId = ConfigManager.Config.Chat.TradeChannelId;
+
+                            if (discordChannelId > 0)
+                            {
+                                DiscordChatManager.SendDiscordMessage(session.Player.Name, message, discordChannelId);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error($"[DiscordRelay] Failed to send message to Discord: {ex.Message}");
+                        }
                     }
 
                     session.Network.EnqueueSend(new GameMessageTurbineChat(ChatNetworkBlobType.NETBLOB_RESPONSE_BINARY, ChatNetworkBlobDispatchType.ASYNCMETHOD_SENDTOROOMBYNAME, contextId, null, null, 0, adjustedchatType));

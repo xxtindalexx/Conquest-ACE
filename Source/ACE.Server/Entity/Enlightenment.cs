@@ -190,7 +190,7 @@ namespace ACE.Server.Entity
             // CONQUEST: Currency requirement - TODO: Replace placeholder weenie 999999999 with actual currency weenie
             // Required amount scales with enlightenment level
             int currencyRequired = targetEnlightenment; // 1 per enlightenment level, adjust as needed
-            var currencyCount = player.GetNumInventoryItemsOfWCID(999999999);
+            var currencyCount = player.GetNumInventoryItemsOfWCID(13370021);
             if (currencyCount < currencyRequired)
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {currencyRequired} Enlightenment Currency to reach enlightenment level {targetEnlightenment}. You have {currencyCount}.", ChatMessageType.Broadcast));
@@ -300,7 +300,7 @@ namespace ACE.Server.Entity
             // CONQUEST: Consume enlightenment currency
             // TODO: Replace placeholder weenie 999999999 with actual currency weenie
             int currencyRequired = player.Enlightenment + 1;
-            return player.TryConsumeFromInventoryWithNetworking(999999999, currencyRequired);
+            return player.TryConsumeFromInventoryWithNetworking(13370021, currencyRequired);
         }
 
         public static bool SpendLuminance(Player player)
@@ -517,8 +517,7 @@ namespace ACE.Server.Entity
 
             var msg = $"{player.Name} has achieved the {lvl} level of Enlightenment!";
             PlayerManager.BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
-            // CONQUEST: Removed Discord integration (ILT-specific feature)
-            // DiscordChatManager.SendDiscordMessage(player.Name, msg, ConfigManager.Config.Chat.GeneralChannelId);
+            DiscordChatManager.SendDiscordMessage(player.Name, msg, ConfigManager.Config.Chat.GeneralChannelId);
             PlayerManager.LogBroadcastChat(Channel.AllBroadcast, null, msg);
 
             // CONQUEST: Enlightenment bonuses (+1% XP, +1 stats, +1 DR/DMG per 25) are applied dynamically
