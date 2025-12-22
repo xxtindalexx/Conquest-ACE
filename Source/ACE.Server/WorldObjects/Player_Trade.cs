@@ -275,6 +275,9 @@ namespace ACE.Server.WorldObjects
 
                 DatabaseManager.Shard.SaveBiotasInParallel(tradedItems, result => { }, "FinalizeTrade");
 
+                // Log the trade
+                ACE.Server.Managers.TransferLogger.LogTrade(this, target, targetEscrow, myEscrow);
+
                 HandleActionResetTrade(Guid);
                 target.HandleActionResetTrade(target.Guid);
             });

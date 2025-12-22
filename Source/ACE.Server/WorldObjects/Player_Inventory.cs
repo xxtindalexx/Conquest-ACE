@@ -1359,6 +1359,18 @@ namespace ACE.Server.WorldObjects
                 new GameMessagePublicUpdateInstanceID(item, PropertyInstanceId.Container, container.Guid),
                 new GameEventItemServerSaysContainId(Session, item, container));
 
+            // Log chest/container deposits (player putting item into world container)
+            // Check if depositing into a world container (chest, storage, etc.) - not into player inventory or corpse
+            bool isContainerDeposit = itemRootOwner == this &&
+                                     containerRootOwner != this &&
+                                     container is Container &&
+                                     container.WeenieType != WeenieType.Corpse &&
+                                     !(container is Player);
+            if (isContainerDeposit)
+            {
+                ACE.Server.Managers.TransferLogger.LogChestDeposit(this, item, container);
+            }
+
             return true;
         }
 
@@ -1445,6 +1457,9 @@ namespace ACE.Server.WorldObjects
                     EnqueueBroadcast(new GameMessageSound(Guid, Sound.DropItem));
 
                     item.EmoteManager.OnDrop(this);
+
+                    // Log ground drop for transfer monitoring
+                    ACE.Server.Managers.TransferLogger.LogGroundDrop(this, item);
                 }
                 else
                 {
@@ -2569,6 +2584,9 @@ namespace ACE.Server.WorldObjects
                 if (TryDropItem(newStack))
                 {
                     EnqueueBroadcast(new GameMessageSound(Guid, Sound.DropItem));
+
+                    // Log ground drop for transfer monitoring
+                    ACE.Server.Managers.TransferLogger.LogGroundDrop(this, newStack);
                 }
                 else
                 {
@@ -3173,6 +3191,21 @@ namespace ACE.Server.WorldObjects
                 targetStack.SaveBiotaToDatabase();
             }
 
+            // Log transfer monitoring based on source and destination
+            // Ground pickup: merging from ground to player inventory
+            if (sourceStackRootOwner == null && targetStackRootOwner == this)
+            {
+                ACE.Server.Managers.TransferLogger.LogGroundPickup(this, sourceStack, amount);
+            }
+            // Chest withdrawal: merging from chest to player inventory
+            else if (sourceStackRootOwner is Container &&
+                     sourceStackRootOwner.WeenieType != WeenieType.Corpse &&
+                     !(sourceStackRootOwner is Player) &&
+                     targetStackRootOwner == this)
+            {
+                ACE.Server.Managers.TransferLogger.LogChestWithdrawal(this, sourceStack, sourceStackRootOwner as Container, amount);
+            }
+
             return true;
         }
 
@@ -3372,6 +3405,9 @@ namespace ACE.Server.WorldObjects
                 target.Session.Network.EnqueueSend(new GameMessageSystemChat($"{Name} gives you {stackMsg}{itemName}.", ChatMessageType.Broadcast));
 
                 target.EnqueueBroadcast(new GameMessageSound(target.Guid, Sound.ReceiveItem));
+
+                // Log the direct give for transfer monitoring
+                ACE.Server.Managers.TransferLogger.LogDirectGive(this, target, itemToGive, (int)(itemToGive.StackSize ?? 1));
             });
 
             actionChain.EnqueueChain();

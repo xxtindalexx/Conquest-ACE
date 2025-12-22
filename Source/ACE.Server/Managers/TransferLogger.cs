@@ -1132,8 +1132,7 @@ namespace ACE.Server.Managers
                 DatabaseManager.Shard.BaseDatabase.SaveTransferLog(transferLog);
 
                 // Update monitoring system (background thread)
-                // CONQUEST: TransferMonitor not implemented yet - can be added later for advanced monitoring
-                // TransferMonitor.RecordTransfer(transferLog);
+                TransferMonitor.RecordTransfer(transferLog);
 
                 // Update transfer summary (background thread)
                 UpdateTransferSummary(transferLog);
