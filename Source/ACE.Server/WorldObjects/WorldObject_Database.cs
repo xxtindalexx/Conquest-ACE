@@ -19,7 +19,12 @@ namespace ACE.Server.WorldObjects
         private static DateTime lastDbQueueAlert = DateTime.MinValue;
         private static int dbQueueAlertsThisMinute = 0;
 
+        // DB slow save monitoring
+        private static DateTime lastDbSlowAlert = DateTime.MinValue;
+        private static int dbSlowAlertsThisMinute = 0;
+
         public DateTime LastRequestedDatabaseSave { get; protected set; }
+        private DateTime SaveStartTime { get; set; }
 
         /// <summary>
         /// This variable is set to true when a change is made, and set to false before a save is requested.<para />
@@ -61,6 +66,7 @@ namespace ACE.Server.WorldObjects
             }
 
             LastRequestedDatabaseSave = DateTime.UtcNow;
+            SaveStartTime = DateTime.UtcNow;
             ChangesDetected = false;
 
             if (enqueueSave)
@@ -76,6 +82,17 @@ namespace ACE.Server.WorldObjects
                             // This will trigger a boot on next player tick
                             player.BiotaSaveFailed = true;
                         }
+                    }
+
+                    // Check for slow saves and alert
+                    var saveTime = (DateTime.UtcNow - SaveStartTime).TotalMilliseconds;
+                    var slowThreshold = PropertyManager.GetLong("db_slow_threshold_ms").Item;
+                    if (saveTime > slowThreshold && this is not Player)
+                    {
+                        var itemName = Name;
+                        var ownerInfo = this.Container is Player owner ? $" | Owner: {owner.Name}" : "";
+                        log.Warn($"[DB SLOW] Item save took {saveTime:N0}ms for {itemName} (Stack: {StackSize}){ownerInfo}");
+                        SendDbSlowDiscordAlert(itemName, saveTime, StackSize ?? 0, ownerInfo);
                     }
 
                     // Check database queue size and alert if threshold exceeded
@@ -179,6 +196,48 @@ namespace ACE.Server.WorldObjects
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Sends Discord alerts for slow database saves
+        /// </summary>
+        private static void SendDbSlowDiscordAlert(string itemName, double saveTime, int stackSize, string ownerInfo)
+        {
+            lock (dbQueueAlertLock)
+            {
+                var now = DateTime.UtcNow;
+
+                // Reset counter every minute
+                if ((now - lastDbSlowAlert).TotalMinutes >= 1)
+                {
+                    dbSlowAlertsThisMinute = 0;
+                }
+
+                // Check rate limit
+                var maxAlerts = PropertyManager.GetLong("db_slow_discord_max_alerts_per_minute").Item;
+                if (maxAlerts <= 0 || dbSlowAlertsThisMinute >= maxAlerts)
+                    return;  // Drop alert to prevent Discord API spam
+
+                // Check Discord is configured
+                if (!ConfigManager.Config.Chat.EnableDiscordConnection ||
+                    ConfigManager.Config.Chat.PerformanceAlertsChannelId <= 0)
+                    return;
+
+                try
+                {
+                    var msg = $"🔴 **DB SLOW**: `{itemName}` (Stack: {stackSize}) took **{saveTime:N0}ms** to save{ownerInfo}";
+
+                    DiscordChatManager.SendDiscordMessage("DB DIAGNOSTICS", msg,
+                        ConfigManager.Config.Chat.PerformanceAlertsChannelId);
+
+                    dbSlowAlertsThisMinute++;
+                    lastDbSlowAlert = now;
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"Failed to send DB slow alert to Discord: {ex.Message}");
+                }
+            }
         }
 
         /// <summary>
