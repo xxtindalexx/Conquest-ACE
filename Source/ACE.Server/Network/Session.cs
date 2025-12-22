@@ -83,6 +83,21 @@ namespace ACE.Server.Network
         /// </summary>
         public DateTime LastPassTime { get; set; }
 
+        /// <summary>
+        /// Rate limiter for /bank command
+        /// </summary>
+        public DateTime LastBankCommandTime { get; set; }
+
+        /// <summary>
+        /// Rate limiter for /clap command
+        /// </summary>
+        public DateTime LastClapCommandTime { get; set; }
+
+        /// <summary>
+        /// Rate limiter for /qb command
+        /// </summary>
+        public DateTime LastQBCommandTime { get; set; }
+
         public Session(ConnectionListener connectionListener, IPEndPoint endPoint, ushort clientId, ushort serverId)
         {
             EndPointC2S = endPoint;

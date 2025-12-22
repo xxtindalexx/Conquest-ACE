@@ -165,6 +165,20 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
+            // Rate limit check for /top qb command
+            if (parameters[0]?.ToLower() == "qb")
+            {
+                var qbCommandLimit = PropertyManager.GetLong("qb_command_limit").Item;
+                var timeSinceLastCommand = DateTime.UtcNow - session.LastQBCommandTime;
+                if (timeSinceLastCommand.TotalSeconds < qbCommandLimit)
+                {
+                    var remainingTime = (int)(qbCommandLimit - timeSinceLastCommand.TotalSeconds);
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {remainingTime} more second(s) before using /top qb again.", ChatMessageType.Broadcast));
+                    return;
+                }
+                session.LastQBCommandTime = DateTime.UtcNow;
+            }
+
             List<Database.Models.Auth.Leaderboard> list = new List<Database.Models.Auth.Leaderboard>();
             var cache = Database.Models.Auth.LeaderboardCache.Instance;
 
@@ -268,6 +282,20 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank balance (or /b b) - View your bank balance", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: pyreals (p), luminance (l), eventtokens (e)", ChatMessageType.System));
                 return;
+            }
+
+            // Rate limit check (only for deposit/withdraw/transfer, not for balance or help)
+            if (parameters[0] == "deposit" || parameters[0] == "d" || parameters[0] == "withdraw" || parameters[0] == "w" || parameters[0] == "transfer" || parameters[0] == "t")
+            {
+                var bankCommandLimit = PropertyManager.GetLong("bank_command_limit").Item;
+                var timeSinceLastCommand = DateTime.UtcNow - session.LastBankCommandTime;
+                if (timeSinceLastCommand.TotalSeconds < bankCommandLimit)
+                {
+                    var remainingTime = (int)(bankCommandLimit - timeSinceLastCommand.TotalSeconds);
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {remainingTime} more second(s) before using this bank command again.", ChatMessageType.System));
+                    return;
+                }
+                session.LastBankCommandTime = DateTime.UtcNow;
             }
 
             // Cleanup edge cases
