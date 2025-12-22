@@ -167,8 +167,8 @@ namespace ACE.Server.Entity
                 return false;
             }
 
-            // CONQUEST: Luminance auras required after enlightenment 10
-            if (targetEnlightenment > 10)
+            // CONQUEST: Luminance auras required after enlightenment 10 (admin bypass)
+            if (targetEnlightenment > 10 && !player.IsPlussed)
             {
                 if (!VerifyLumAugs(player))
                 {
@@ -177,8 +177,8 @@ namespace ACE.Server.Entity
                 }
             }
 
-            // CONQUEST: Society master rank required after enlightenment 30
-            if (targetEnlightenment > 30)
+            // CONQUEST: Society master rank required after enlightenment 30 (admin bypass)
+            if (targetEnlightenment > 30 && !player.IsPlussed)
             {
                 if (!VerifySocietyMaster(player))
                 {

@@ -96,24 +96,64 @@ namespace ACE.Server.Command.Handlers
             HandleAugmentations(session, parameters);
         }
 
-        [CommandHandler("qb", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your Quest Bonus count and XP bonus")]
+        [CommandHandler("qb", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your Quest Bonus count")]
         public static void HandleQuestBonus(Session session, params string[] parameters)
         {
             var player = session.Player;
             var questCount = player.QuestCompletionCount ?? 0;
-            var xpBonus = player.GetQuestCountXPBonus();
-            var bonusPercent = ((xpBonus - 1.0) * 100.0);
 
             session.Network.EnqueueSend(new GameMessageSystemChat("=== Quest Bonus (QB) ===", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Total Quests Completed: {questCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"XP Bonus: {bonusPercent:F2}%", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"(You gain {bonusPercent:F2}% extra XP from all sources)", ChatMessageType.Broadcast));
         }
 
-        [CommandHandler("bonus", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your Quest Bonus count and XP bonus")]
-        public static void HandleQuestBonus2(Session session, params string[] parameters)
+        [CommandHandler("bonus", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays all your XP bonuses")]
+        public static void HandleBonus(Session session, params string[] parameters)
         {
-            HandleQuestBonus(session, parameters);
+            var player = session.Player;
+
+            // Quest Bonus
+            var questCount = player.QuestCompletionCount ?? 0;
+            var questBonus = player.GetQuestCountXPBonus();
+            var questBonusPercent = ((questBonus - 1.0) * 100.0);
+
+            // Enlightenment Bonus (+1% per enlightenment level)
+            var enlightenmentBonus = 1.0 + (player.Enlightenment * 0.01);
+            var enlightenmentBonusPercent = ((enlightenmentBonus - 1.0) * 100.0);
+
+            // PK Dungeon Bonus
+            var pkDungeonBonus = player.GetPKDungeonBonus();
+            var pkDungeonBonusPercent = ((pkDungeonBonus - 1.0) * 100.0);
+
+            // Equipment Bonus (from enchantments)
+            var equipmentBonus = player.EnchantmentManager.GetXPBonus();
+            var equipmentBonusPercent = ((equipmentBonus - 1.0) * 100.0);
+
+            session.Network.EnqueueSend(new GameMessageSystemChat("=== XP Bonuses ===", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Quest Bonus: {questBonusPercent:F2}% ({questCount:N0} quests)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Enlightenment Bonus: {enlightenmentBonusPercent:F2}% (Enlightenment {player.Enlightenment})", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"PK Dungeon Bonus: {pkDungeonBonusPercent:F2}%", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Equipment Bonus: {equipmentBonusPercent:F2}%", ChatMessageType.Broadcast));
+
+            var totalBonus = (questBonus * enlightenmentBonus * pkDungeonBonus * equipmentBonus) - 1.0;
+            var totalBonusPercent = totalBonus * 100.0;
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus: {totalBonusPercent:F2}%", ChatMessageType.Broadcast));
+        }
+
+        [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
+        public static void HandleEnlighten(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            if (!Entity.Enlightenment.VerifyRequirements(player))
+                return; // Error messages sent by VerifyRequirements
+
+            Entity.Enlightenment.HandleEnlightenment(player);
+        }
+
+        [CommandHandler("enlighten", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
+        public static void HandleEnlighten2(Session session, params string[] parameters)
+        {
+            HandleEnlighten(session, parameters);
         }
 
         [CommandHandler("top", AccessLevel.Player, CommandHandlerFlag.None, "Show current leaderboards", "use /top qb, /top level, /top enl, /top bank, or /top lum")]
