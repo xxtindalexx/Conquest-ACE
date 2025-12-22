@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 
 using log4net;
 
+using ACE.Common;
 using ACE.Common.Performance;
 using ACE.Database;
 using ACE.Database.Models.World;
@@ -103,6 +104,10 @@ namespace ACE.Server.Entity
         private readonly LinkedList<WorldObject> sortedWorldObjectsByNextHeartbeat = new LinkedList<WorldObject>();
         private readonly LinkedList<WorldObject> sortedGeneratorsByNextGeneratorUpdate = new LinkedList<WorldObject>();
         private readonly LinkedList<WorldObject> sortedGeneratorsByNextRegeneration = new LinkedList<WorldObject>();
+
+        // Monster tick throttle monitoring
+        private int monsterTickThrottleWarningCount = 0;
+        private DateTime lastMonsterThrottleWarning = DateTime.MinValue;
 
         /// <summary>
         /// This is used to detect and manage cross-landblock group (which is potentially cross-thread) operations.
@@ -471,22 +476,90 @@ namespace ACE.Server.Entity
             if (!IsDormant)
             {
                 stopwatch.Restart();
-                while (sortedCreaturesByNextTick.Count > 0) // Monster_Tick()
+
+                // Throttle monster processing to prevent multi-second spikes during mass spawns
+                // Without this, 400+ creatures can cause 4+ second freezes
+                // Tuning: Lower = safer spikes (50-60), Higher = faster AI reactions (75-100)
+                // At 75: ~0.2s max spike, 447 creatures = 1.8s total delay for last creature
+                // Configurable via: /modifylong monster_tick_throttle_limit <value>
+                int monstersProcessed = 0;
+                var throttleValue = (int)PropertyManager.GetLong("monster_tick_throttle_limit").Item;
+                var maxMonstersPerTick = Math.Max(50, throttleValue); // Enforce minimum of 50 to prevent server lockup
+
+                if (throttleValue < 50 && throttleValue != maxMonstersPerTick)
+                    log.Warn($"[PERFORMANCE] monster_tick_throttle_limit set to {throttleValue}, enforcing minimum of 50. This value is too low and may cause server performance issues.");
+
+
+                while (sortedCreaturesByNextTick.Count > 0 && monstersProcessed < maxMonstersPerTick) // Monster_Tick()
                 {
-                    var first = sortedCreaturesByNextTick.First.Value;
+                    var monster = sortedCreaturesByNextTick.First.Value;
 
                     // If they wanted to run before or at now
-                    if (first.NextMonsterTickTime <= currentUnixTime)
+                    if (monster.NextMonsterTickTime <= currentUnixTime)
                     {
                         sortedCreaturesByNextTick.RemoveFirst();
-                        first.Monster_Tick(currentUnixTime);
-                        sortedCreaturesByNextTick.AddLast(first); // All creatures tick at a fixed interval
+                        // If the monster is dead, remove from the sorted tick list and don't re-add it.
+                        if (monster.IsDead) continue;
+                        monster.Monster_Tick(currentUnixTime);
+                        sortedCreaturesByNextTick.AddLast(monster); // All creatures tick at a fixed interval
+                        monstersProcessed++;
                     }
                     else
                     {
                         break;
                     }
                 }
+
+                // Check if throttle is saturated by counting remaining creatures that are overdue
+                int remainingDueCount = 0;
+                if (monstersProcessed >= maxMonstersPerTick && sortedCreaturesByNextTick.Count > 0)
+                {
+                    // Count how many remaining creatures are overdue for processing
+                    foreach (var creature in sortedCreaturesByNextTick)
+                    {
+                        if (creature.NextMonsterTickTime <= currentUnixTime)
+                            remainingDueCount++;
+                        else
+                            break; // List is sorted, so we can stop once we hit a future tick time
+                    }
+                }
+
+                // Alert if throttle is consistently maxed out (queue saturation)
+                // Only alert after 3+ consecutive ticks of saturation to filter out temporary bursts
+                if (monstersProcessed >= maxMonstersPerTick && remainingDueCount > 0)
+                {
+                    monsterTickThrottleWarningCount++;
+
+                    // Only warn if saturated for 3+ consecutive ticks AND 60 seconds since last warning
+                    // This filters out expected initial dungeon load bursts (1-2 ticks) while catching sustained issues
+                    if (monsterTickThrottleWarningCount >= 3 && DateTime.UtcNow - lastMonsterThrottleWarning > TimeSpan.FromSeconds(60))
+                    {
+                        var warningMsg = $"[PERFORMANCE] Landblock {Id:X8} Monster_Tick throttle saturated for {monsterTickThrottleWarningCount} consecutive ticks! Processed {monstersProcessed}, {remainingDueCount} overdue creatures remain. Total creatures: {sortedCreaturesByNextTick.Count}. Consider increasing maxMonstersPerTick from {maxMonstersPerTick}.";
+                        log.Warn(warningMsg);
+
+                        // Send to Discord if configured
+                        if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.PerformanceAlertsChannelId > 0)
+                        {
+                            try
+                            {
+                                Managers.DiscordChatManager.SendDiscordMessage("⚠️ SERVER", warningMsg, ConfigManager.Config.Chat.PerformanceAlertsChannelId);
+                            }
+                            catch (Exception ex)
+                            {
+                                log.Error($"Failed to send Monster_Tick throttle warning to Discord: {ex.Message}");
+                            }
+                        }
+
+                        lastMonsterThrottleWarning = DateTime.UtcNow;
+                        // Don't reset counter here - let it continue tracking consecutive saturations
+                    }
+                }
+                else
+                {
+                    // Reset counter when not saturated
+                    monsterTickThrottleWarningCount = 0;
+                }
+
                 ServerPerformanceMonitor.AddToCumulativeEvent(ServerPerformanceMonitor.CumulativeEventHistoryType.Landblock_Tick_Monster_Tick, stopwatch.Elapsed.TotalSeconds);
             }
 
