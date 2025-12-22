@@ -109,9 +109,9 @@ namespace ACE.Server.Entity
 
         public static bool VerifyRequirements(Player player)
         {
-            if (player.Level < (275 + player.Enlightenment))
+            if (player.Level < 300)
             {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must be level 275 Plus 1 per Previous Enlightenment to enlighten further.", ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must be level 300 to enlighten.", ChatMessageType.Broadcast));
                 return false;
             }
 
