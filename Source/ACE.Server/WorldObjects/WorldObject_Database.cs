@@ -5,6 +5,7 @@ using ACE.Common;
 using ACE.Database;
 using ACE.Entity.Enum;
 using ACE.Entity.Models;
+using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
 
 namespace ACE.Server.WorldObjects
@@ -12,6 +13,11 @@ namespace ACE.Server.WorldObjects
     partial class WorldObject
     {
         private readonly bool biotaOriginatedFromDatabase;
+
+        // DB queue monitoring - static fields for rate limiting Discord alerts
+        private static readonly object dbQueueAlertLock = new object();
+        private static DateTime lastDbQueueAlert = DateTime.MinValue;
+        private static int dbQueueAlertsThisMinute = 0;
 
         public DateTime LastRequestedDatabaseSave { get; protected set; }
 
@@ -71,6 +77,9 @@ namespace ACE.Server.WorldObjects
                             player.BiotaSaveFailed = true;
                         }
                     }
+
+                    // Check database queue size and alert if threshold exceeded
+                    CheckDatabaseQueueSize();
                 });
             }
         }
@@ -170,6 +179,56 @@ namespace ACE.Server.WorldObjects
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Monitors database queue size and sends Discord alerts when threshold is exceeded
+        /// </summary>
+        private static void CheckDatabaseQueueSize()
+        {
+            var queueThreshold = PropertyManager.GetLong("db_queue_alert_threshold").Item;
+            if (queueThreshold <= 0)
+                return;  // Monitoring disabled
+
+            var queueCount = DatabaseManager.Shard.QueueCount;
+            if (queueCount <= queueThreshold)
+                return;  // Queue size acceptable
+
+            lock (dbQueueAlertLock)
+            {
+                var now = DateTime.UtcNow;
+
+                // Reset counter every minute
+                if ((now - lastDbQueueAlert).TotalMinutes >= 1)
+                {
+                    dbQueueAlertsThisMinute = 0;
+                }
+
+                // Check rate limit
+                var maxAlerts = PropertyManager.GetLong("db_queue_discord_max_alerts_per_minute").Item;
+                if (maxAlerts <= 0 || dbQueueAlertsThisMinute >= maxAlerts)
+                    return;
+
+                // Check Discord is configured
+                if (!ConfigManager.Config.Chat.EnableDiscordConnection ||
+                    ConfigManager.Config.Chat.PerformanceAlertsChannelId <= 0)
+                    return;
+
+                try
+                {
+                    var msg = $"🔴 **DB QUEUE HIGH**: Queue count at **{queueCount}** (threshold: {queueThreshold}). Potential save delays and item loss risk!";
+
+                    DiscordChatManager.SendDiscordMessage("DB DIAGNOSTICS", msg,
+                        ConfigManager.Config.Chat.PerformanceAlertsChannelId);
+
+                    dbQueueAlertsThisMinute++;
+                    lastDbQueueAlert = now;
+                }
+                catch
+                {
+                    // Silently fail on Discord errors to avoid log spam
+                }
+            }
         }
     }
 }
