@@ -317,9 +317,11 @@ namespace ACE.Server.Command.Handlers
                 if (parameters.Length == 1) // Deposit all
                 {
                     session.Player.DepositPyreals();
+                    session.Player.DepositTradeNotes();
+                    session.Player.DepositPeas();
                     session.Player.DepositLuminance();
                     session.Player.DepositEventTokens();
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all Pyreals, Luminance, and Event Tokens!", ChatMessageType.System));
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all Pyreals, Trade Notes, Peas, Luminance, and Event Tokens!", ChatMessageType.System));
                 }
                 else
                 {

@@ -980,7 +980,7 @@ namespace ACE.Server.WorldObjects
             }
 
             LogAndPrint($"[BANK_DEBUG] Player: {Name} | Starting WithdrawPyreals operation | Amount: {Amount:N0} | Current BankedPyreals: {BankedPyreals:N0}");
-            
+
             // Check if player has enough pyreals (outside lock for early exit)
             if (BankedPyreals < Amount)
             {
@@ -988,18 +988,61 @@ namespace ACE.Server.WorldObjects
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"You don't have enough pyreals banked. Need {Amount:N0} pyreals but only have {BankedPyreals:N0}.", ChatMessageType.System));
                 return;
             }
-            
-            // Create pyreal coins for the requested amount (outside lock)
-            log.Info($"[BANK_DEBUG] Player: {Name} | Creating {Amount:N0} pyreal coins");
-            long successfullyCreated = CreatePyreals(Amount);
-            log.Debug($"[BANK_DEBUG] Player: {Name} | Pyreal coin creation | Requested: {Amount:N0} | Successfully Created: {successfullyCreated:N0}");
-            
+
+            long successfullyCreated = 0;
+
+            // If amount is over 250k, create MMDs (250k trade notes - WCID 20630)
+            if (Amount > 250000)
+            {
+                log.Info($"[BANK_DEBUG] Player: {Name} | Creating MMDs (250k trade notes) for {Amount:N0} pyreals");
+                long mmdCount = Amount / 250000;
+                long remainder = Amount % 250000;
+
+                // Create MMDs (WCID 20630 - 250k trade note)
+                for (long i = 0; i < mmdCount; i++)
+                {
+                    var mmd = WorldObjectFactory.CreateNewWorldObject(20630);
+                    if (mmd != null)
+                    {
+                        if (this.TryCreateInInventoryWithNetworking(mmd))
+                        {
+                            successfullyCreated += 250000;
+                        }
+                        else
+                        {
+                            mmd.Destroy();
+                            log.Debug($"[BANK_DEBUG] Player: {Name} | Failed to create MMD (insufficient pack space) | Created so far: {successfullyCreated:N0}");
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        log.Error($"[BANK_DEBUG] Player: {Name} | Failed to create MMD (WCID 20630) - weenie not found");
+                        break;
+                    }
+                }
+
+                // Create coins for remainder (if any and if we have space)
+                if (remainder > 0 && successfullyCreated > 0)
+                {
+                    successfullyCreated += CreatePyreals(remainder);
+                }
+            }
+            else
+            {
+                // Create pyreal coins for amounts <= 250k
+                log.Info($"[BANK_DEBUG] Player: {Name} | Creating {Amount:N0} pyreal coins");
+                successfullyCreated = CreatePyreals(Amount);
+            }
+
+            log.Debug($"[BANK_DEBUG] Player: {Name} | Withdrawal creation | Requested: {Amount:N0} | Successfully Created: {successfullyCreated:N0}");
+
             // Update balance atomically (only lock for balance mutation)
             if (successfullyCreated > 0)
             {
                 long oldBalance;
                 long newBalance;
-                
+
                 lock (balanceLock)
                 {
                     oldBalance = BankedPyreals ?? 0;
@@ -1007,29 +1050,36 @@ namespace ACE.Server.WorldObjects
                     newBalance = BankedPyreals ?? 0;
                     LogBankChange("WithdrawPyreals", "Pyreals", successfullyCreated, oldBalance, newBalance, $"Withdrew {successfullyCreated:N0} pyreals");
                 }
-                
+
                 // Update client-side coin value tracking after adding pyreals
                 UpdateCoinValue();
-                
+
                 // Send notifications outside of lock
                 if (successfullyCreated == Amount)
                 {
                     // Full withdrawal successful
-                    log.Debug($"[BANK_DEBUG] Player: {Name} | Pyreal coins created successfully | Amount: {successfullyCreated:N0}");
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} pyreals", ChatMessageType.System));
+                    log.Debug($"[BANK_DEBUG] Player: {Name} | Withdrawal successful | Amount: {successfullyCreated:N0}");
+                    if (Amount > 250000)
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} pyreals as MMDs (250k trade notes)", ChatMessageType.System));
+                    }
+                    else
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} pyreals", ChatMessageType.System));
+                    }
                 }
                 else
                 {
                     // Partial withdrawal due to pack space
                     long remaining = Amount - successfullyCreated;
                     log.Debug($"[BANK_DEBUG] Player: {Name} | Partial withdrawal | Created: {successfullyCreated:N0} | Remaining: {remaining:N0} (insufficient pack space)");
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} pyreals (partial - insufficient pack space for remaining {remaining:N0} pyreals)", ChatMessageType.System));
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} pyreals (partial - insufficient pack space for remaining {remaining:N0})", ChatMessageType.System));
                 }
             }
             else
             {
-                log.Debug($"[BANK_DEBUG] Player: {Name} | Failed to create any pyreal coins - insufficient pack space");
-                Session.Network.EnqueueSend(new GameMessageSystemChat("Failed to create pyreal coins - check pack space. Withdrawal cancelled.", ChatMessageType.System));
+                log.Debug($"[BANK_DEBUG] Player: {Name} | Failed to create any pyreals or trade notes - insufficient pack space");
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Failed to create pyreals or trade notes - check pack space. Withdrawal cancelled.", ChatMessageType.System));
             }
         }
 

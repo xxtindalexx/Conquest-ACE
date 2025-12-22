@@ -132,10 +132,9 @@ namespace ACE.Server.WorldObjects.Entity
                     }
                 }*/
 
-                // CONQUEST: Add enlightenment stat bonus (+1 to all attributes per enlightenment level)
-                // At ENL 100, this gives +100 to all attributes
-                if (creature is Player player && player.Enlightenment > 0)
-                    total += (uint)player.Enlightenment;
+                // CONQUEST: Enlightenment bonus is now applied directly to StartingValue in Enlightenment.cs
+                // This ensures it displays correctly in both the character panel and inspection panel
+                // (Same method as augmentations)
 
                 return total;
             }

@@ -463,11 +463,33 @@ namespace ACE.Server.Entity
             // CONQUEST: Enlightenment bonuses are handled in the following locations:
             // - +1 to all skills: Handled dynamically in CreatureSkill based on Enlightenment property (similar to augmentations)
             // - +1% XP per ENL: Integrated into Player_Xp.cs (EarnXP and other XP gain methods)
-            // - +1 all stats per ENL: Integrated into Player.cs (attribute calculations)
+            // - +1 all stats per ENL: Applied directly to StartingValue below (same method as augmentations)
             // - +1 DR/DMG per 25 ENL: Integrated into Creature.cs via GetEnlightenmentRatingBonus() method
 
             player.Enlightenment += 1;
             player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.Enlightenment, player.Enlightenment));
+
+            // CONQUEST: Add +1 to all 6 attribute StartingValues (same method as augmentations)
+            // This ensures the bonus shows on both the character panel AND inspection panel
+            player.Attributes[PropertyAttribute.Strength].StartingValue += 1;
+            player.Attributes[PropertyAttribute.Endurance].StartingValue += 1;
+            player.Attributes[PropertyAttribute.Coordination].StartingValue += 1;
+            player.Attributes[PropertyAttribute.Quickness].StartingValue += 1;
+            player.Attributes[PropertyAttribute.Focus].StartingValue += 1;
+            player.Attributes[PropertyAttribute.Self].StartingValue += 1;
+
+            // CONQUEST: Send attribute updates to client
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Strength]));
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Endurance]));
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Coordination]));
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Quickness]));
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Focus]));
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Self]));
+
+            // CONQUEST: Refresh vitals since they depend on attributes (Health/Stamina from Endurance, Mana from Self)
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxHealth]));
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxStamina]));
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxMana]));
 
             player.SendMessage("You have become enlightened and view the world with new eyes.", ChatMessageType.Broadcast);
             player.SendMessage("Your available skill credits have been adjusted.", ChatMessageType.Broadcast);
