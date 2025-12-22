@@ -36,6 +36,10 @@ namespace ACE.Server.Managers
         public static bool WorldActive { get; private set; }
         private static volatile bool pendingWorldStop;
 
+        // Discord throttling for login block alerts
+        private static DateTime lastLoginBlockAlert = DateTime.MinValue;
+        private static int loginBlockAlertsThisMinute = 0;
+
         public enum WorldStatusState
         {
             Closed,
@@ -435,5 +439,40 @@ namespace ACE.Server.Managers
         /// Function to begin ending the operations inside of an active world.
         /// </summary>
         public static void StopWorld() { pendingWorldStop = true; }
+
+        /// <summary>
+        /// Sends Discord alert when a player login is delayed due to pending save (item loss prevention)
+        /// Called from login blocking logic when a character tries to login while their save is in progress
+        /// </summary>
+        public static void SendLoginBlockDiscordAlert(string characterName, double timeWaiting)
+        {
+            var now = DateTime.UtcNow;
+
+            if ((now - lastLoginBlockAlert).TotalMinutes >= 1)
+                loginBlockAlertsThisMinute = 0;
+
+            var maxAlerts = PropertyManager.GetLong("login_block_discord_max_alerts_per_minute").Item;
+            if (maxAlerts <= 0 || loginBlockAlertsThisMinute >= maxAlerts)
+                return;
+
+            if (!ConfigManager.Config.Chat.EnableDiscordConnection ||
+                ConfigManager.Config.Chat.PerformanceAlertsChannelId <= 0)
+                return;
+
+            try
+            {
+                var msg = $"⚠️ **LOGIN DELAYED**: `{characterName}` tried to login during save (pending {timeWaiting:N0}ms). Delayed 2s to prevent item loss.";
+
+                DiscordChatManager.SendDiscordMessage("ITEM LOSS PREVENTION", msg,
+                    ConfigManager.Config.Chat.PerformanceAlertsChannelId);
+
+                loginBlockAlertsThisMinute++;
+                lastLoginBlockAlert = now;
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to send login block alert to Discord: {ex.Message}");
+            }
+        }
     }
 }
