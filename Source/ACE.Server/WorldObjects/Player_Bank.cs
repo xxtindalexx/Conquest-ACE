@@ -990,28 +990,36 @@ namespace ACE.Server.WorldObjects
             }
 
             long successfullyCreated = 0;
+            long mmdCount = 0;
+            long remainderPyreals = 0;
 
-            // If amount is over 250k, create MMDs (250k trade notes - WCID 20630)
+            // If amount is over 250k, create MMDs (250k trade notes - WCID 20630) in stacks
             if (Amount > 250000)
             {
                 log.Info($"[BANK_DEBUG] Player: {Name} | Creating MMDs (250k trade notes) for {Amount:N0} pyreals");
-                long mmdCount = Amount / 250000;
-                long remainder = Amount % 250000;
+                long totalMMDsNeeded = Amount / 250000;
+                remainderPyreals = Amount % 250000;
 
-                // Create MMDs (WCID 20630 - 250k trade note)
-                for (long i = 0; i < mmdCount; i++)
+                // Create MMDs in stacks (max stack size from constant)
+                long mmdsRemaining = totalMMDsNeeded;
+                while (mmdsRemaining > 0)
                 {
+                    int stackSize = (int)Math.Min(mmdsRemaining, MMD_TRADE_NOTE_MAX_STACK);
                     var mmd = WorldObjectFactory.CreateNewWorldObject(20630);
                     if (mmd != null)
                     {
+                        mmd.SetStackSize(stackSize);
                         if (this.TryCreateInInventoryWithNetworking(mmd))
                         {
-                            successfullyCreated += 250000;
+                            successfullyCreated += (stackSize * 250000);
+                            mmdCount += stackSize;
+                            mmdsRemaining -= stackSize;
+                            log.Debug($"[BANK_DEBUG] Player: {Name} | Created MMD stack of {stackSize} | Total MMDs created: {mmdCount} | Remaining: {mmdsRemaining}");
                         }
                         else
                         {
                             mmd.Destroy();
-                            log.Debug($"[BANK_DEBUG] Player: {Name} | Failed to create MMD (insufficient pack space) | Created so far: {successfullyCreated:N0}");
+                            log.Debug($"[BANK_DEBUG] Player: {Name} | Failed to create MMD stack (insufficient pack space) | Created so far: {successfullyCreated:N0}");
                             break;
                         }
                     }
@@ -1022,10 +1030,12 @@ namespace ACE.Server.WorldObjects
                     }
                 }
 
-                // Create coins for remainder (if any and if we have space)
-                if (remainder > 0 && successfullyCreated > 0)
+                // Create coins for remainder (if any and if we successfully created MMDs)
+                if (remainderPyreals > 0 && mmdCount > 0)
                 {
-                    successfullyCreated += CreatePyreals(remainder);
+                    long pyrealCoinsCreated = CreatePyreals(remainderPyreals);
+                    successfullyCreated += pyrealCoinsCreated;
+                    log.Debug($"[BANK_DEBUG] Player: {Name} | Created {pyrealCoinsCreated:N0} pyreal coins for remainder");
                 }
             }
             else
@@ -1061,7 +1071,15 @@ namespace ACE.Server.WorldObjects
                     log.Debug($"[BANK_DEBUG] Player: {Name} | Withdrawal successful | Amount: {successfullyCreated:N0}");
                     if (Amount > 250000)
                     {
-                        Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} pyreals as MMDs (250k trade notes)", ChatMessageType.System));
+                        long mmdValue = mmdCount * 250000;
+                        if (remainderPyreals > 0)
+                        {
+                            Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {mmdValue:N0} pyreals as ({mmdCount:N0} MMDs) and {remainderPyreals:N0} remaining pyreals", ChatMessageType.System));
+                        }
+                        else
+                        {
+                            Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {mmdValue:N0} pyreals as ({mmdCount:N0} MMDs)", ChatMessageType.System));
+                        }
                     }
                     else
                     {
