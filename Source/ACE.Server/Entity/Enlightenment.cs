@@ -311,7 +311,14 @@ namespace ACE.Server.Entity
             var targetEnlightenment = player.Enlightenment + 1;
             long reqLum = targetEnlightenment * baseLumCost;
 
-            return player.SpendLuminance(reqLum);
+            // CONQUEST: Spend from BankedLuminance instead of AvailableLuminance
+            if (player.BankedLuminance < reqLum)
+                return false;
+
+            player.BankedLuminance -= reqLum;
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(player, PropertyInt64.BankedLuminance, player.BankedLuminance ?? 0));
+
+            return true;
         }
 
         public static void RemoveSociety(Player player)

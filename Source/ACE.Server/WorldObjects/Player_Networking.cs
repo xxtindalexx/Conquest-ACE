@@ -34,6 +34,9 @@ namespace ACE.Server.WorldObjects
             Character.TotalLogins++;
             CharacterChangesDetected = true;
 
+            // CONQUEST: Initialize account-wide quest completion count on login
+            QuestCompletionCount = Account.CachedQuestBonusCount;
+
             Sequences.SetSequence(SequenceType.ObjectInstance, new UShortSequence((ushort)Character.TotalLogins));
 
             if (BarberActive)

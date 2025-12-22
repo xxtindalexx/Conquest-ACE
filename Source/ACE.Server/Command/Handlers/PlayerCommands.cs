@@ -124,9 +124,9 @@ namespace ACE.Server.Command.Handlers
             var pkDungeonBonus = player.GetPKDungeonBonus();
             var pkDungeonBonusPercent = ((pkDungeonBonus - 1.0) * 100.0);
 
-            // Equipment Bonus (from enchantments)
-            var equipmentBonus = player.EnchantmentManager.GetXPBonus();
-            var equipmentBonusPercent = ((equipmentBonus - 1.0) * 100.0);
+            // Equipment Bonus (from enchantments) - GetXPBonus() returns additive modifier (e.g., 0.05 for 5%)
+            var equipmentBonus = 1.0 + player.EnchantmentManager.GetXPBonus();
+            var equipmentBonusPercent = (player.EnchantmentManager.GetXPBonus() * 100.0);
 
             session.Network.EnqueueSend(new GameMessageSystemChat("=== XP Bonuses ===", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Quest Bonus: {questBonusPercent:F2}% ({questCount:N0} quests)", ChatMessageType.Broadcast));
