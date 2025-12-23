@@ -2481,6 +2481,34 @@ namespace ACE.Server.WorldObjects
             else
                 Session.Network.EnqueueSend(new GameMessageSetStackSize(stack));
 
+            // Log chest deposit for splits from player to chest
+            bool isChestDeposit = stackRootOwner == this &&
+                                  containerRootOwner != this &&
+                                  container is Container &&
+                                  container.WeenieType != WeenieType.Corpse &&
+                                  !(container is Player);
+            if (isChestDeposit)
+            {
+                ACE.Server.Managers.TransferLogger.LogChestDeposit(this, newStack, container);
+            }
+
+            // Log chest withdrawal for splits from chest to player
+            bool isChestWithdrawal = stackRootOwner is Container &&
+                                     stackRootOwner.WeenieType != WeenieType.Corpse &&
+                                     !(stackRootOwner is Player) &&
+                                     containerRootOwner == this;
+            if (isChestWithdrawal)
+            {
+                ACE.Server.Managers.TransferLogger.LogChestWithdrawal(this, newStack, stackRootOwner as Container);
+            }
+
+            // Log ground pickup for splits from ground to player
+            bool isGroundPickup = stackRootOwner == null && containerRootOwner == this;
+            if (isGroundPickup)
+            {
+                ACE.Server.Managers.TransferLogger.LogGroundPickup(this, newStack, amount);
+            }
+
             return true;
         }
 
@@ -3059,6 +3087,19 @@ namespace ACE.Server.WorldObjects
 
                         if (DoHandleActionStackableMerge(sourceStack, targetStack, amount))
                         {
+                            // Log transfer monitoring (pickup chain path)
+                            if (sourceStackRootOwner == null && targetStackRootOwner == this)
+                            {
+                                ACE.Server.Managers.TransferLogger.LogGroundPickup(this, sourceStack, amount);
+                            }
+                            else if (sourceStackRootOwner is Container &&
+                                     sourceStackRootOwner.WeenieType != WeenieType.Corpse &&
+                                     !(sourceStackRootOwner is Player) &&
+                                     targetStackRootOwner == this)
+                            {
+                                ACE.Server.Managers.TransferLogger.LogChestWithdrawal(this, sourceStack, sourceStackRootOwner as Container, amount);
+                            }
+
                             // If the client used the R key to merge a partial stack from the landscape, it also tries to add the "ghosted" item of the picked up stack to the inventory as well.
                             if (sourceStackRootOwner != this && sourceStack.StackSize > 0)
                                 Session.Network.EnqueueSend(new GameMessageCreateObject(sourceStack));
@@ -3083,7 +3124,21 @@ namespace ACE.Server.WorldObjects
             }
             else // This is a self-contained movement
             {
-                DoHandleActionStackableMerge(sourceStack, targetStack, amount);
+                if (DoHandleActionStackableMerge(sourceStack, targetStack, amount))
+                {
+                    // Log transfer monitoring (self-contained path)
+                    if (sourceStackRootOwner == null && targetStackRootOwner == this)
+                    {
+                        ACE.Server.Managers.TransferLogger.LogGroundPickup(this, sourceStack, amount);
+                    }
+                    else if (sourceStackRootOwner is Container &&
+                             sourceStackRootOwner.WeenieType != WeenieType.Corpse &&
+                             !(sourceStackRootOwner is Player) &&
+                             targetStackRootOwner == this)
+                    {
+                        ACE.Server.Managers.TransferLogger.LogChestWithdrawal(this, sourceStack, sourceStackRootOwner as Container, amount);
+                    }
+                }
             }
         }
 
