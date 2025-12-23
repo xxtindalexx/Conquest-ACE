@@ -6,6 +6,7 @@ using System.Threading;
 using ACE.Entity.Enum;
 using ACE.Server.Physics.Managers;
 using ACE.Server.WorldObjects;
+using log4net;
 
 namespace ACE.Server.Physics.Common
 {
@@ -15,6 +16,7 @@ namespace ACE.Server.Physics.Common
     /// </summary>
     public class ObjectMaint
     {
+        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         /// <summary>
         /// The client automatically removes known objects if they remain outside visibility for this amount of time
         /// </summary>
@@ -292,12 +294,12 @@ namespace ACE.Server.Physics.Common
             }
         }
 
-        public List<PhysicsObj> GetVisibleObjectsValues()
+        public List<PhysicsObj> GetVisibleObjectsValues(int? Variation)
         {
             rwLock.EnterReadLock();
             try
             {
-                return VisibleObjects.Values.ToList();
+                return VisibleObjects.Values.Where(x => x.Position.Variation == Variation).ToList();
             }
             finally
             {
@@ -320,21 +322,29 @@ namespace ACE.Server.Physics.Common
 
         public List<Creature> GetVisibleObjectsValuesOfTypeCreature()
         {
-            rwLock.EnterReadLock();
             try
             {
-                return VisibleObjects.Values.Select(v => v.WeenieObj.WorldObject).OfType<Creature>().ToList();
+                rwLock.EnterReadLock();
+                try
+                {
+                    return VisibleObjects.Values.Select(v => v.WeenieObj.WorldObject).OfType<Creature>().ToList();
+                }
+                finally
+                {
+                    rwLock.ExitReadLock();
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                rwLock.ExitReadLock();
+                log.Warn($"{PhysicsObj.Name}.ObjectMaint.GetVisibleObjectsValuesOfTypeCreature(): thrown exception: {ex.Message}, {VisibleObjects?.Count}");
+                return new List<Creature>();
             }
         }
 
         /// <summary>
         /// Returns a list of objects that are currently visible from a cell
         /// </summary>
-        public List<PhysicsObj> GetVisibleObjects(ObjCell cell, VisibleObjectType type = VisibleObjectType.All)
+        public List<PhysicsObj> GetVisibleObjects(ObjCell cell, VisibleObjectType type = VisibleObjectType.All, int? VariationId = null)
         {
             rwLock.EnterReadLock();
             try
@@ -345,13 +355,13 @@ namespace ACE.Server.Physics.Common
                 // use PVS / VisibleCells for EnvCells not seen outside
                 // (mostly dungeons, also some large indoor areas ie. caves)
                 if (cell is EnvCell envCell)
-                    return GetVisibleObjects(envCell, type);
+                    return GetVisibleObjects(envCell, type, VariationId);
 
                 // use current landblock + adjacents for outdoors,
                 // and envcells seen from outside (all buildings)
                 var visibleObjs = PhysicsObj.CurLandblock.GetServerObjects(true);
 
-                return ApplyFilter(visibleObjs, type).Where(i => i.ID != PhysicsObj.ID && (!(i.CurCell is EnvCell indoors) || indoors.SeenOutside)).ToList();
+                return ApplyFilter(visibleObjs, type).Where(i => i.ID != PhysicsObj.ID && (i.CurCell is not EnvCell indoors || indoors.SeenOutside)).ToList();
             }
             finally
             {
@@ -362,7 +372,7 @@ namespace ACE.Server.Physics.Common
         /// <summary>
         /// Returns a list of objects that are currently visible from a dungeon cell
         /// </summary>
-        private List<PhysicsObj> GetVisibleObjects(EnvCell cell, VisibleObjectType type)
+        private List<PhysicsObj> GetVisibleObjects(EnvCell cell, VisibleObjectType type, int? VariationId = null)
         {
             var visibleObjs = new List<PhysicsObj>();
 
@@ -379,9 +389,14 @@ namespace ACE.Server.Physics.Common
             // if SeenOutside, add objects from outdoor landblock
             if (cell.SeenOutside)
             {
-                var outsideObjs = PhysicsObj.CurLandblock.GetServerObjects(true).Where(i => !(i.CurCell is EnvCell indoors) || indoors.SeenOutside);
+                var outsideObjs = PhysicsObj.CurLandblock.GetServerObjects(true).Where(i => i.CurCell is not EnvCell indoors || indoors.SeenOutside);
 
                 visibleObjs.AddRange(outsideObjs);
+            }
+
+            if (VariationId != null)
+            {
+                visibleObjs = ApplyFilter(visibleObjs, type).Where(i => i.Position.Variation == VariationId).Distinct().ToList(); //TODO: Test if this actually works?
             }
 
             return ApplyFilter(visibleObjs, type).Where(i => !i.DatObject && i.ID != PhysicsObj.ID).Distinct().ToList();
@@ -1020,12 +1035,12 @@ namespace ACE.Server.Physics.Common
             return VisibleTargets.Remove(obj.ID);
         }
 
-        public List<PhysicsObj> GetVisibleObjectsDist(ObjCell cell, VisibleObjectType type)
+        public List<PhysicsObj> GetVisibleObjectsDist(ObjCell cell, VisibleObjectType type, int? VariationId = null)
         {
             rwLock.EnterReadLock();
             try
             {
-                var visibleObjs = GetVisibleObjects(cell, type);
+                var visibleObjs = GetVisibleObjects(cell, type, VariationId);
 
                 var dist = new List<PhysicsObj>();
                 foreach (var obj in visibleObjs)

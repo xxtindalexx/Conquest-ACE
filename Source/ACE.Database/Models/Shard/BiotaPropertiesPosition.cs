@@ -33,6 +33,7 @@ public partial class BiotaPropertiesPosition
     public float AnglesY { get; set; }
 
     public float AnglesZ { get; set; }
+    public int? VariationId { get; set; }
 
     public virtual Biota Object { get; set; }
 }

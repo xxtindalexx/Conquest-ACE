@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Numerics;
-using System.Runtime;
 using System.Threading.Tasks;
+using System.Numerics;
 
 using log4net;
 
@@ -493,7 +492,7 @@ namespace ACE.Server.Command.Handlers
                     for (int y = 0; y <= 0xFE; y++)
                     {
                         var blockid = new LandblockId((byte)x, (byte)y);
-                        LandblockManager.GetLandblock(blockid, false, false);
+                        LandblockManager.GetLandblock(blockid, false, null, false);
                     }
                 }
 
@@ -1660,7 +1659,7 @@ namespace ACE.Server.Command.Handlers
 
             Console.WriteLine($"\nVisible objects to {target.Name}: {target.PhysicsObj.ObjMaint.GetVisibleObjectsCount()}");
 
-            foreach (var obj in target.PhysicsObj.ObjMaint.GetVisibleObjectsValues())
+            foreach (var obj in target.PhysicsObj.ObjMaint.GetVisibleObjectsValues(target.Location.Variation))
                 Console.WriteLine($"{obj.Name} ({obj.ID:X8})");
         }
 
@@ -2218,18 +2217,6 @@ namespace ACE.Server.Command.Handlers
             CommandHandlerHelper.WriteOutputInfo(session, ".NET Garbage Collection forced");
         }
 
-        [CommandHandler("forcegc2", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Forces .NET Garbage Collection with LOH Compact")]
-        public static void HandleForceGC2(Session session, params string[] parameters)
-        {
-            // https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals
-            // https://learn.microsoft.com/en-us/dotnet/api/system.runtime.gcsettings.largeobjectheapcompactionmode
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-
-            GC.Collect();
-
-            CommandHandlerHelper.WriteOutputInfo(session, ".NET Garbage Collection forced with LOH Compact");
-        }
-
         [CommandHandler("auditobjectmaint", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Iterates over physics objects to find leaks")]
         public static void HandleAuditObjectMaint(Session session, params string[] parameters)
         {
@@ -2459,7 +2446,7 @@ namespace ACE.Server.Command.Handlers
                 msg += $"------- IsInDeathProcess: {player.IsInDeathProcess}\n";
                 var foundOnLandblock = false;
                 if (player.CurrentLandblock != null)
-                    foundOnLandblock = LandblockManager.GetLandblock(player.CurrentLandblock.Id, false).GetObject(player.Guid) != null;
+                    foundOnLandblock = LandblockManager.GetLandblock(player.CurrentLandblock.Id, false, player.Location.Variation, false).GetObject(player.Guid) != null;
                 msg += $"------- FoundOnLandblock: {foundOnLandblock}\n";
                 var playerForcedLogOffRequested = player.ForcedLogOffRequested;
                 msg += $"------- ForcedLogOffRequested: {playerForcedLogOffRequested}\n";
@@ -3095,7 +3082,7 @@ namespace ACE.Server.Command.Handlers
             wo.Location.Pos = globalOrigin;
             wo.Location.Rotation *= zRotation;
 
-            session.Player.CurrentLandblock.AddWorldObject(wo);
+            session.Player.CurrentLandblock.AddWorldObject(wo, session.Player.Location.Variation);
 
             LastTestAim = wo;
         }
@@ -3104,23 +3091,24 @@ namespace ACE.Server.Command.Handlers
         public static void HandleReloadLandblocks(Session session, params string[] parameters)
         {
             var landblock = session.Player.CurrentLandblock;
+            var variation = session.Player.Location.Variation;
 
             var landblockId = landblock.Id.Raw | 0xFFFF;
 
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Reloading 0x{landblockId:X8}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Reloading 0x{landblockId:X8}, {variation ?? 0:N0}", ChatMessageType.Broadcast));
 
             // destroy all non-player server objects
             landblock.DestroyAllNonPlayerObjects();
 
             // clear landblock cache
-            DatabaseManager.World.ClearCachedInstancesByLandblock(landblock.Id.Landblock);
+            DatabaseManager.World.ClearCachedInstancesByLandblock(landblock.Id.Landblock, variation);
 
             // reload landblock
             var actionChain = new ActionChain();
             actionChain.AddDelayForOneTick();
-            actionChain.AddAction(session.Player, () =>
+            actionChain.AddAction(session.Player, ActionType.Landblock_Init, () =>
             {
-                landblock.Init(true);
+                landblock.Init(variation, true);
             });
             actionChain.EnqueueChain();
         }
@@ -3830,7 +3818,7 @@ namespace ACE.Server.Command.Handlers
                             msg += $"StackSize: {shopItem.StackSize ?? 1} | PaletteTemplate: {(PaletteTemplate)shopItem.PaletteTemplate} ({shopItem.PaletteTemplate}) | Shade: {shopItem.Shade:F3}\n";
                             var soldTimestamp = Time.GetDateTimeFromTimestamp(shopItem.SoldTimestamp ?? 0);
                             msg += $"SoldTimestamp: {soldTimestamp.ToLocalTime().ToCommonString()} ({(shopItem.SoldTimestamp.HasValue ? $"{shopItem.SoldTimestamp}" : "NULL")})\n";
-                            var rotTime = soldTimestamp.AddSeconds(PropertyManager.GetDouble("vendor_unique_rot_time").Item);
+                            var rotTime = soldTimestamp.AddSeconds(PropertyManager.GetDouble("vendor_unique_rot_time"));
                             msg += $"RotTimestamp: {rotTime.ToLocalTime().ToCommonString()}\n";
                             var payout = vendor.GetBuyCost(shopItem);
                             msg += $"Paid: {payout:N0} {(payout == 1 ? currencyWeenie.GetName() : currencyWeenie.GetPluralName())}\n";

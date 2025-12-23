@@ -490,7 +490,7 @@ namespace ACE.Server.Command.Handlers.Processors
         /// </summary>
         private static DirectoryInfo VerifyContentFolder(Session session, bool showError = true)
         {
-            var content_folder = PropertyManager.GetString("content_folder").Item;
+            var content_folder = PropertyManager.GetString("content_folder");
 
             var sep = Path.DirectorySeparatorChar;
 
@@ -574,7 +574,7 @@ namespace ACE.Server.Command.Handlers.Processors
             CommandHandlerHelper.WriteOutputInfo(session, $"Imported {sqlFile}");
 
             // clear any cached instances for this landblock
-            DatabaseManager.World.ClearCachedInstancesByLandblock(landblockId);
+            DatabaseManager.World.ClearCachedInstancesByLandblock(landblockId, null);
         }
 
         private static void ImportJsonQuest(Session session, string json_folder, string json_file)
@@ -762,6 +762,7 @@ namespace ACE.Server.Command.Handlers.Processors
         public static string json2sql_landblock(Session session, string folder, string json_filename)
         {
             var json_file = folder + json_filename;
+            var variation = session.Player.Location.Variation;
 
             // read json into gdle spawnmap
             var success = GDLELoader.TryLoadLandblock(json_file, out var result);
@@ -836,7 +837,7 @@ namespace ACE.Server.Command.Handlers.Processors
 
                 using (StreamWriter sqlFile = new StreamWriter(sqlFolder + sqlFilename))
                 {
-                    LandblockInstanceWriter.CreateSQLDELETEStatement(landblockInstances, sqlFile);
+                    LandblockInstanceWriter.CreateSQLDELETEStatement(landblockInstances, sqlFile, variation);
                     sqlFile.WriteLine();
 
                     LandblockInstanceWriter.CreateSQLINSERTStatement(landblockInstances, sqlFile);
@@ -985,7 +986,7 @@ namespace ACE.Server.Command.Handlers.Processors
             CommandHandlerHelper.WriteOutputInfo(session, $"Imported {sql_file}");
 
             // clear any cached instances for this landblock
-            DatabaseManager.World.ClearCachedInstancesByLandblock(landblockId);
+            DatabaseManager.World.ClearCachedInstancesByLandblock(landblockId, null);
 
             // load landblock instances from database
             var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblockId);
@@ -1321,10 +1322,11 @@ namespace ACE.Server.Command.Handlers.Processors
 
         public static LandblockInstanceWriter LandblockInstanceWriter;
 
-        [CommandHandler("createinst", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1, "Spawns a new wcid or classname as a landblock instance", "<wcid or classname>\n\nTo create a parent/child relationship: /createinst -p <parent guid> -c <wcid or classname>\nTo automatically get the parent guid from the last appraised object: /createinst -p -c <wcid or classname>\n\nTo manually specify a start guid: /createinst <wcid or classname> <start guid>\nStart guids can be in the range 0x000-0xFFF, or they can be prefixed with 0x7<landblock id>")]
+        [CommandHandler("createinst", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1, "Spawns a new wcid or classname as a landblock instance", "<wcid or classname>")]
         public static void HandleCreateInst(Session session, params string[] parameters)
         {
             var loc = new Position(session.Player.Location);
+            var variation = loc.Variation;
 
             var param = parameters[0];
 
@@ -1389,9 +1391,9 @@ namespace ACE.Server.Command.Handlers.Processors
             }
 
             // clear any cached instances for this landblock
-            DatabaseManager.World.ClearCachedInstancesByLandblock(landblock);
+            DatabaseManager.World.ClearCachedInstancesByLandblock(landblock, variation);
 
-            var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblock);
+            var instances = DatabaseManager.World.GetLandblockInstancesByLandblockBypassCache(landblock);
 
             // for link mode, ensure parent guid instance exists
             WorldObject parentObj = null;
@@ -1462,6 +1464,11 @@ namespace ACE.Server.Command.Handlers.Processors
                 return;
             }
 
+            if (wo.WeenieType != WeenieType.Creature)
+            {
+                wo.CreatedByAccountId = session.Player.Account.AccountId;
+            }
+
             var isLinkChild = parentInstance != null;
 
             if (!wo.Stuck && !isLinkChild)
@@ -1479,6 +1486,7 @@ namespace ACE.Server.Command.Handlers.Processors
             wo.Location.PositionZ += 0.05f;
 
             session.Network.EnqueueSend(new GameMessageSystemChat($"Creating new landblock instance {(isLinkChild ? "child object " : "")}@ {loc.ToLOCString()}\n{wo.WeenieClassId} - {wo.Name} ({nextStaticGuid:X8})", ChatMessageType.Broadcast));
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created a new landblock instance {(isLinkChild ? "child object " : "")}@ {loc.ToLOCString()}\n [WeenieID]: {wo.WeenieClassId} - {wo.Name} [GUID]: ({nextStaticGuid:X8})");
 
             if (!wo.EnterWorld())
             {
@@ -1487,7 +1495,7 @@ namespace ACE.Server.Command.Handlers.Processors
             }
 
             // create new landblock instance
-            var instance = CreateLandblockInstance(wo, isLinkChild);
+            var instance = CreateLandblockInstance(wo, isLinkChild, variation);
 
             instances.Add(instance);
 
@@ -1508,26 +1516,45 @@ namespace ACE.Server.Command.Handlers.Processors
                 parentObj.ChildLinks.Add(wo);
                 wo.ParentLink = parentObj;
             }
+            SaveInstanceToWorldDatabase(instance);
+            //SyncInstances(session, landblock, instances, variation);
+        }
 
-            SyncInstances(session, landblock, instances);
+        // Alias for createinst
+        [CommandHandler("cin", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1, "Alias for createinst - Spawns a new wcid or classname as a landblock instance", "<wcid or classname>")]
+        public static void HandleCreateInstAlias(Session session, params string[] parameters)
+        {
+            HandleCreateInst(session, parameters);
         }
 
         /// <summary>
         /// Serializes landblock instances to XXYY.sql file,
         /// import into database, and clears the cached landblock instances
         /// </summary>
-        public static void SyncInstances(Session session, ushort landblock, List<LandblockInstance> instances)
+        public static void SyncInstances(Session session, ushort landblock, List<LandblockInstance> instances, int? variationId)
         {
             // serialize to .sql file
             var contentFolder = VerifyContentFolder(session, false);
+            //specfically filter the instances to variation
+            if (variationId.HasValue)
+            {
+                instances = instances.Where(i => i.VariationId == variationId).ToList();
+            }
 
             var sep = Path.DirectorySeparatorChar;
             var folder = new DirectoryInfo($"{contentFolder.FullName}{sep}sql{sep}landblocks{sep}");
 
             if (!folder.Exists)
                 folder.Create();
-
-            var sqlFilename = $"{folder.FullName}{sep}{landblock:X4}.sql";
+            var sqlFilename = string.Empty;
+            if (variationId.HasValue)
+            {
+                sqlFilename = $"{folder.FullName}{sep}{landblock:X4}_{variationId.Value}.sql";
+            }
+            else
+            {
+                sqlFilename = $"{folder.FullName}{sep}{landblock:X4}.sql";
+            }
 
             if (instances.Count > 0)
             {
@@ -1539,7 +1566,7 @@ namespace ACE.Server.Command.Handlers.Processors
                     LandblockInstanceWriter.WeenieNames = DatabaseManager.World.GetAllWeenieNames();
                 }
 
-                LandblockInstanceWriter.CreateSQLDELETEStatement(instances, fileWriter);
+                LandblockInstanceWriter.CreateSQLDELETEStatement(instances, fileWriter, variationId);
 
                 fileWriter.WriteLine();
 
@@ -1554,16 +1581,24 @@ namespace ACE.Server.Command.Handlers.Processors
             {
                 // handle special case: deleting the last instance from landblock
                 File.Delete(sqlFilename);
+                if (variationId.HasValue)
+                {
+                    // handle special case: deleting the last instance from landblock
+                    using (var ctx = new WorldDbContext())
+                        ctx.Database.ExecuteSql($"DELETE FROM landblock_instance WHERE landblock={landblock} and variation_Id={variationId};");
+                }
+                else
+                {
+                    using (var ctx = new WorldDbContext())
+                        ctx.Database.ExecuteSql($"DELETE FROM landblock_instance WHERE landblock={landblock};");
+                }
 
-                using (var ctx = new WorldDbContext())
-                    ctx.Database.ExecuteSqlInterpolated($"DELETE FROM landblock_instance WHERE landblock={landblock};");
+                // clear landblock instances for this landblock (again)
+                DatabaseManager.World.ClearCachedInstancesByLandblock(landblock, variationId);
             }
-
-            // clear landblock instances for this landblock (again)
-            DatabaseManager.World.ClearCachedInstancesByLandblock(landblock);
         }
 
-        public static LandblockInstance CreateLandblockInstance(WorldObject wo, bool isLinkChild = false)
+        public static LandblockInstance CreateLandblockInstance(WorldObject wo, bool isLinkChild = false, int? variationId = null)
         {
             var instance = new LandblockInstance();
 
@@ -1587,6 +1622,7 @@ namespace ACE.Server.Command.Handlers.Processors
             instance.IsLinkChild = isLinkChild;
 
             instance.LastModified = DateTime.Now;
+            instance.VariationId = variationId;
 
             return instance;
         }
@@ -1638,6 +1674,7 @@ namespace ACE.Server.Command.Handlers.Processors
             if (wo?.Location == null) return;
 
             var landblock = (ushort)wo.Location.Landblock;
+            int? variation = wo.Location.Variation;
 
             // if generator child, try getting the "real" guid
             var guid = wo.Guid.Full;
@@ -1648,7 +1685,7 @@ namespace ACE.Server.Command.Handlers.Processors
                     guid = staticGuid.Value;
             }
 
-            var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblock);
+            var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblock, variation);
 
             var instance = instances.FirstOrDefault(i => i.Guid == guid);
 
@@ -1702,9 +1739,74 @@ namespace ACE.Server.Command.Handlers.Processors
 
             instances.Remove(instance);
 
-            SyncInstances(session, landblock, instances);
+            //SyncInstances(session, landblock, instances, variation);
+            DeleteInstanceFromWorldDatabase(instance);
 
             session.Network.EnqueueSend(new GameMessageSystemChat($"Removed {(instance.IsLinkChild ? "child " : "")}{wo.WeenieClassId} - {wo.Name} (0x{guid:X8}) from landblock instances", ChatMessageType.Broadcast));
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has removed {(instance.IsLinkChild ? "child " : "")}[WeenieID]: {wo.WeenieClassId} - {wo.Name} [GUID]: (0x{guid:X8}) from landblock instances");
+        }
+        /// <summary>
+        /// Saves a LandblockInstance to the World database.
+        /// WARNING: This is one of the few places where World database writes occur.
+        /// World database entities are generally read-only except through admin commands.
+        /// </summary>
+        public static void SaveInstanceToWorldDatabase(LandblockInstance instance)
+        {
+            try
+            {
+                using (var ctx = new WorldDbContext())
+                {
+                    ctx.LandblockInstance.Add(instance);
+                    ctx.SaveChanges();
+                }
+            }
+            catch (Exception)
+            {
+
+            }
+
+        }
+
+        /// <summary>
+        /// Deletes a LandblockInstance from the World database.
+        /// WARNING: This is one of the few places where World database writes occur.
+        /// World database entities are generally read-only except through admin commands.
+        /// </summary>
+        public static void DeleteInstanceFromWorldDatabase(LandblockInstance instance)
+        {
+            try
+            {
+                using (var ctx = new WorldDbContext())
+                {
+                    ctx.LandblockInstance.Remove(instance);
+                    ctx.SaveChanges();
+                }
+            }
+            catch (Exception)
+            {
+
+            }
+        }
+
+        /// <summary>
+        /// Updates a LandblockInstance in the World database.
+        /// WARNING: This is one of the few places where World database writes occur.
+        /// World database entities are generally read-only except through admin commands.
+        /// </summary>
+        public static void UpdateInstanceInWorldDatabase(LandblockInstance instance)
+        {
+            try
+            {
+                using (var ctx = new WorldDbContext())
+                {
+                    ctx.LandblockInstance.Update(instance);
+                    ctx.SaveChanges();
+                }
+            }
+            catch (Exception)
+            {
+
+            }
         }
 
         public static int GetNumChilds(Session session, LandblockInstanceLink link, List<LandblockInstance> instances)
@@ -1845,18 +1947,18 @@ namespace ACE.Server.Command.Handlers.Processors
 
             newPos.Frame.Origin.Z = session.Player.CurrentLandblock.PhysicsLandblock.GetZ(newPos.Frame.Origin);
 
-            wo.Location = new Position(newPos.ObjCellID, newPos.Frame.Origin, newPos.Frame.Orientation);
+            wo.Location = new Position(newPos.ObjCellID, newPos.Frame.Origin, newPos.Frame.Orientation, newPos.Variation);
 
-            var sortCell = Physics.Common.LScape.get_landcell(newPos.ObjCellID) as Physics.Common.SortCell;
+            var sortCell = Physics.Common.LScape.get_landcell(newPos.ObjCellID, newPos.Variation) as Physics.Common.SortCell;
             if (sortCell != null && sortCell.has_building())
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to create encounter near building cell", ChatMessageType.Broadcast));
                 return null;
             }
 
-            if (PropertyManager.GetBool("override_encounter_spawn_rates").Item)
+            if (PropertyManager.GetBool("override_encounter_spawn_rates"))
             {
-                wo.RegenerationInterval = PropertyManager.GetDouble("encounter_regen_interval").Item;
+                wo.RegenerationInterval = PropertyManager.GetDouble("encounter_regen_interval");
 
                 wo.ReinitializeHeartbeats();
 
@@ -2487,6 +2589,7 @@ namespace ACE.Server.Command.Handlers.Processors
             DirectoryInfo di = VerifyContentFolder(session, false);
 
             var sep = Path.DirectorySeparatorChar;
+            var variationId = session.Player.Location.Variation;
 
             if (!ushort.TryParse(Regex.Match(param, @"[0-9A-F]{4}", RegexOptions.IgnoreCase).Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var landblockId))
             {
@@ -2508,7 +2611,15 @@ namespace ACE.Server.Command.Handlers.Processors
             if (!di.Exists)
                 di.Create();
 
-            var sql_filename = $"{landblockId:X4}.sql";
+            string sql_filename = string.Empty;
+            if (variationId.HasValue)
+            {
+                sql_filename = $"{landblockId:X4}_{variationId:N0}.sql";
+            }
+            else
+            {
+                sql_filename = $"{landblockId:X4}.sql";
+            }
 
             try
             {
@@ -2518,25 +2629,14 @@ namespace ACE.Server.Command.Handlers.Processors
                     LandblockInstanceWriter.WeenieNames = DatabaseManager.World.GetAllWeenieNames();
                 }
 
-                using (StreamWriter sqlFile = new StreamWriter(sql_folder + sql_filename))
-                {
-                    // Check if the Landblock is empty
-                    if(instances.Count > 0)
-                        LandblockInstanceWriter.CreateSQLDELETEStatement(instances, sqlFile);
-                    else
-                    {
-                        // We'll just create a dummy list with a fake instance in our landblock so we don't anger CreateSQLDeleteStatement()
-                        CommandHandlerHelper.WriteOutputInfo(session, $"Landblock {landblockId:X4} is empty.");
-                        List<LandblockInstance> dummyList = new List<LandblockInstance> ();
-                        LandblockInstance dummyInstance = new LandblockInstance();
-                        dummyInstance.ObjCellId = (uint)(landblockId << 16);
-                        dummyList.Add(dummyInstance);
-                        LandblockInstanceWriter.CreateSQLDELETEStatement(dummyList, sqlFile);
-                    }
-                    sqlFile.WriteLine();
+                var sqlFile = new StreamWriter(sql_folder + sql_filename);
 
-                    LandblockInstanceWriter.CreateSQLINSERTStatement(instances, sqlFile);
-                }
+                LandblockInstanceWriter.CreateSQLDELETEStatement(instances, sqlFile, variationId);
+                sqlFile.WriteLine();
+
+                LandblockInstanceWriter.CreateSQLINSERTStatement(instances, sqlFile);
+
+                sqlFile.Close();
             }
             catch (Exception e)
             {
@@ -2987,50 +3087,80 @@ namespace ACE.Server.Command.Handlers.Processors
 
         public static void ExportDiscordLandblock(Session session, string param)
         {
-            if (!ushort.TryParse(param, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var landblockId))
-            {
-                CommandHandlerHelper.WriteOutputInfo(session, $"{param} not a valid landblock id (use hex format, e.g., A9B4)");
-                return;
-            }
+            var variationId = session.Player.Location.Variation;
+            ushort landblockId = 0;
 
-            var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblockId);
-            if (instances == null || instances.Count == 0)
+            if (!string.IsNullOrEmpty(param) && !param.ToLower().Contains("landblock"))
             {
-                CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find landblock instances for {landblockId:X4}");
-                return;
-            }
-
-            if (LandblockInstanceWriter == null)
-                LandblockInstanceWriter = new LandblockInstanceWriter();
-
-            using (MemoryStream mem = new MemoryStream())
-            {
-                using (StreamWriter sw = new StreamWriter(mem))
+                if (!ushort.TryParse(Regex.Match(param, @"[0-9A-F]{4}", RegexOptions.IgnoreCase).Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out landblockId))
                 {
-                    sw.AutoFlush = true;
-
-                    try
-                    {
-                        LandblockInstanceWriter.CreateSQLDELETEStatement(instances, sw);
-                        sw.WriteLine();
-                        LandblockInstanceWriter.CreateSQLINSERTStatement(instances, sw);
-                        sw.WriteLine();
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e);
-                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to generate SQL for landblock {landblockId:X4}");
-                        return;
-                    }
-
-                    mem.Position = 0;
-                    var fileName = landblockId.ToString("X4") + ".sql";
-                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported landblock {landblockId:X4}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
-
-                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported landblock {landblockId:X4} to Discord");
-                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported landblock {landblockId:X4} to Discord");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"{param} not a valid landblock");
+                    return;
                 }
             }
+            else
+            {
+                if (!ushort.TryParse(Regex.Match(session.Player.CurrentLandblock.Id.ToString(), @"[0-9A-F]{4}", RegexOptions.IgnoreCase).Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out landblockId))
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"{session.Player.CurrentLandblock.Id.ToString()} not a valid landblock");
+                    return;
+                }
+            }
+
+
+            var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblockId, variationId);
+            if (instances == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Couldn't find landblock {landblockId:X4}");
+                return;
+            }
+
+            string sql_filename = string.Empty;
+            if (variationId.HasValue)
+            {
+                sql_filename = $"{landblockId:X4}_{variationId:N0}.sql";
+            }
+            else
+            {
+                sql_filename = $"{landblockId:X4}.sql";
+            }
+
+            try
+            {
+                using (MemoryStream mem = new MemoryStream())
+                {
+                    using (StreamWriter sw = new StreamWriter(mem))
+                    {
+                        if (LandblockInstanceWriter == null)
+                        {
+                            LandblockInstanceWriter = new LandblockInstanceWriter();
+                            LandblockInstanceWriter.WeenieNames = DatabaseManager.World.GetAllWeenieNames();
+                        }
+
+                        sw.AutoFlush = true;
+
+                        LandblockInstanceWriter.CreateSQLDELETEStatement(instances, sw, variationId);
+                        sw.WriteLine();
+
+                        LandblockInstanceWriter.CreateSQLINSERTStatement(instances, sw);
+
+                        String result = System.Text.Encoding.UTF8.GetString(mem.ToArray(), 0, (int)mem.Length);
+
+                        //DiscordChatManager.SendDiscordMessage(session.Player.Name,"```" + result + "```", ConfigManager.Config.Chat.ExportsChannelId);
+                        DiscordChatManager.SendDiscordFile(session.Player.Name, sql_filename, ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, sql_filename));
+                        sw.Close();
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Exported {sql_filename} to Discord");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                CommandHandlerHelper.WriteOutputInfo(session, $"Failed to export {sql_filename}");
+                return;
+            }
+
+            //CommandHandlerHelper.WriteOutputInfo(session, $"Exported {sql_filename}");
         }
 
         // Alias for export-discord
@@ -3082,7 +3212,7 @@ namespace ACE.Server.Command.Handlers.Processors
 
                         mem.Position = 0;
                         var fileName = $"{clothingBaseId:X8}.json";
-                        DiscordChatManager.SendDiscordFile(session.Player.Name, $"ClothingBase {clothingBaseId:X8}.json", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
+                        DiscordChatManager.SendDiscordFile(session.Player.Name, $"ClothingBase {clothingBaseId:X8}.json", ConfigManager.Config.Chat.ClothingModExportChannelId, new Discord.FileAttachment(mem, fileName));
 
                         CommandHandlerHelper.WriteOutputInfo(session, $"Exported ClothingBase {clothingBaseId:X8} to Discord.");
                         PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported ClothingBase {clothingBaseId:X8} to Discord");
@@ -3103,6 +3233,31 @@ namespace ACE.Server.Command.Handlers.Processors
             HandleExportClothingToDiscord(session, parameters);
         }
 
+        [CommandHandler("refreshweenie", AccessLevel.Developer, CommandHandlerFlag.None, "Clears the weenie database cache for one specific weenie")]
+        public static void HandleRefreshWeenie(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                return;
+            }
+            uint weenieId = 0;
+            if (!uint.TryParse(parameters[0], out weenieId))
+            {
+                return;
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Clearing weenie cache for {weenieId}");
+            DatabaseManager.World.ClearCachedWeenie(weenieId);
+            //DatabaseManager.World.GetCachedWeenie(weenieId);
+        }
+
+        // Alias for refreshweenie
+        [CommandHandler("rw", AccessLevel.Developer, CommandHandlerFlag.None, "Alias for refreshweenie - Clears the weenie database cache for one specific weenie")]
+        public static void HandleRefreshWeenieAlias(Session session, params string[] parameters)
+        {
+            HandleRefreshWeenie(session, parameters);
+        }
+
         [CommandHandler("clearcache", AccessLevel.Developer, CommandHandlerFlag.None, "Clears the various database caches. This enables live editing of the database information")]
         public static void HandleClearCache(Session session, params string[] parameters)
         {
@@ -3119,6 +3274,10 @@ namespace ACE.Server.Command.Handlers.Processors
                     mode = CacheType.Weenie;
                 if (parameters[0].Contains("wield", StringComparison.OrdinalIgnoreCase))
                     mode = CacheType.WieldedTreasure;
+                if (parameters[0].Contains("quest", StringComparison.OrdinalIgnoreCase))
+                    mode = CacheType.Quests;
+                if (parameters[0].Contains("death", StringComparison.OrdinalIgnoreCase))
+                    mode = CacheType.DeathTreasure;
             }
 
             if (mode.HasFlag(CacheType.Landblock))
@@ -3146,11 +3305,42 @@ namespace ACE.Server.Command.Handlers.Processors
                 DatabaseManager.World.ClearWeenieCache();
             }
 
+            if (mode.HasFlag(CacheType.DeathTreasure))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Clearing treasure death cache");
+                DatabaseManager.World.ClearDeathTreasureCache();
+            }
+
             if (mode.HasFlag(CacheType.WieldedTreasure))
             {
                 CommandHandlerHelper.WriteOutputInfo(session, "Clearing wielded treasure cache");
                 DatabaseManager.World.ClearWieldedTreasureCache();
             }
+
+            if (mode.HasFlag(CacheType.Quests))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Clearing quest cache");
+                DatabaseManager.World.ClearAllCachedQuests();
+            }
+        }
+
+        // Alias for clearcache recipe
+        [CommandHandler("ccr", AccessLevel.Developer, CommandHandlerFlag.None, "Alias for clearcache recipe - Clears the recipe cache")]
+        public static void HandleClearCacheRecipeAlias(Session session, params string[] parameters)
+        {
+            var recipeParams = new string[] { "recipe" };
+            HandleClearCache(session, recipeParams);
+        }
+
+        // Alias for clear-clothing-cache
+        [CommandHandler("ccc", AccessLevel.Developer, CommandHandlerFlag.None, "Alias for clear-clothing-cache - Clears the clothing cache")]
+        public static void HandleClearClothingCacheAlias(Session session, params string[] parameters)
+        {
+            var response = CommandManager.GetCommandHandler(session, "clear-clothing-cache", parameters, out var commandInfo);
+            if (commandInfo != null && response == CommandHandlerResponse.Ok)
+                ((CommandHandler)commandInfo.Handler).Invoke(session, parameters);
+            else
+                CommandHandlerHelper.WriteOutputInfo(session, "clear-clothing-cache command not found");
         }
 
         [Flags]
@@ -3162,6 +3352,8 @@ namespace ACE.Server.Command.Handlers.Processors
             Spell           = 0x4,
             Weenie          = 0x8,
             WieldedTreasure = 0x10,
+            Quests          = 0x20,
+            DeathTreasure   = 0x40,
             All             = 0xFFFF
         };
 
@@ -3407,8 +3599,9 @@ namespace ACE.Server.Command.Handlers.Processors
             instance.OriginX = obj.Location.PositionX;
             instance.OriginY = obj.Location.PositionY;
             instance.OriginZ = obj.Location.PositionZ;
-
-            SyncInstances(session, landblock_id, instances);
+            instance.VariationId = obj.Location.Variation;
+            UpdateInstanceInWorldDatabase(instance);
+            //SyncInstances(session, landblock_id, instances);
         }
 
         public static Vector3? GetNudgeDir(string dir)
@@ -3545,8 +3738,8 @@ namespace ACE.Server.Command.Handlers.Processors
             instance.AnglesX = newRotation.X;
             instance.AnglesY = newRotation.Y;
             instance.AnglesZ = newRotation.Z;
-
-            SyncInstances(session, landblock_id, instances);
+            UpdateInstanceInWorldDatabase(instance);
+            //SyncInstances(session, landblock_id, instances);
 
             // broadcast new rotation
             obj.SendUpdatePosition(true);
@@ -3650,11 +3843,38 @@ namespace ACE.Server.Command.Handlers.Processors
             instance.AnglesX = newRotation.X;
             instance.AnglesY = newRotation.Y;
             instance.AnglesZ = newRotation.Z;
-
-            SyncInstances(session, landblock_id, instances);
+            UpdateInstanceInWorldDatabase(instance);
+            //SyncInstances(session, landblock_id, instances);
 
             // broadcast new rotation
             obj.SendUpdatePosition(true);
+        }
+
+        [CommandHandler("getnextweenieidinrange", AccessLevel.Developer, CommandHandlerFlag.None, 1, "Finds the next WeenieID from a start value", "Usage: @getnextweenieidinrange <start>")]
+        public static void HandleGetNextWeenieIDInRange(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: @getnextweenieidinrange <start>");
+                return;
+            }
+
+            if (!uint.TryParse(parameters[0], out var start))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Invalid start value: {parameters[0]}");
+                return;
+            }
+
+            var weenies = DatabaseManager.World.GetNextAvailableWeenieClassID(start);
+
+            if (weenies == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"No weenies found in range {start}");
+                return;
+            }
+
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Next available weenie id in range {start}: {weenies}");
         }
 
         [CommandHandler("generate-classnames", AccessLevel.Developer, CommandHandlerFlag.None, "Generates WeenieClassName.cs from current world database")]

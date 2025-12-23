@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 
 using log4net;
 
-using ACE.Common;
 using ACE.Common.Performance;
 using ACE.Database;
 using ACE.Database.Models.World;
@@ -28,6 +27,7 @@ using ACE.Server.Network.GameMessages;
 using ACE.Server.WorldObjects;
 
 using Position = ACE.Entity.Position;
+using ACE.Common;
 
 namespace ACE.Server.Entity
 {
@@ -41,6 +41,7 @@ namespace ACE.Server.Entity
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
+        public int? VariationId { get; set; }
         public static float AdjacencyLoadRange { get; } = 96f;
         public static float OutdoorChatRange { get; } = 75f;
         public static float IndoorChatRange { get; } = 25f;
@@ -70,6 +71,17 @@ namespace ACE.Server.Entity
         };
 
         public LandblockId Id { get; }
+
+        public override int GetHashCode()
+        {
+            var hash = base.GetHashCode(); hash ^= VariationId.GetHashCode();
+            return hash;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return base.Equals(obj) && this.VariationId == ((Landblock)obj).VariationId;
+        }
 
         /// <summary>
         /// Flag indicates if this landblock is permanently loaded (for example, towns on high-traffic servers)
@@ -205,38 +217,66 @@ namespace ACE.Server.Entity
             PhysicsLandblock = new Physics.Common.Landblock(cellLandblock);
         }
 
-        public void Init(bool reload = false)
+        public void Init(int? variationId, bool reload = false)
         {
             if (!reload)
                 PhysicsLandblock.PostInit();
 
             Task.Run(() =>
             {
-                CreateWorldObjects();
+                //Console.WriteLine($"Landblock.Init({Id}) task started, variation: {VariationId}, v: {variationId}");
+                CreateWorldObjects(variationId);
 
                 SpawnDynamicShardObjects();
 
                 SpawnEncounters();
+
+                SetEnvironmentConditions();
             });
 
             //LoadMeshes(objects);
+        }
+
+        public void SetEnvironmentConditions()
+        {
+            /*if (darkIsleZoneLandblocks.Contains(this.Id.Landblock))
+            {
+                this.SendEnvironChange(EnvironChangeType.BlackFog2);
+                this.SetFogColor(EnvironChangeType.BlackFog2);
+            }*/
+
+            /*if (ThaelarynIslandLandblocks.Contains(this.Id.Landblock))
+            {
+                this.SendEnvironChange(EnvironChangeType.BlackFog2);
+                this.SetFogColor(EnvironChangeType.BlackFog2);
+            }*/
         }
 
         /// <summary>
         /// Monster Locations, Generators<para />
         /// This will be called from a separate task from our constructor. Use thread safety when interacting with this landblock.
         /// </summary>
-        private void CreateWorldObjects()
+        private void CreateWorldObjects(int? variationId)
         {
-            var objects = DatabaseManager.World.GetCachedInstancesByLandblock(Id.Landblock);
-            var shardObjects = DatabaseManager.Shard.BaseDatabase.GetStaticObjectsByLandblock(Id.Landblock);
-            var factoryObjects = WorldObjectFactory.CreateNewWorldObjects(objects, shardObjects);
+            if (VariationId == null && variationId != null)
+            {
+                VariationId = variationId.Value;
+            }
+            //Console.WriteLine($"CreateWOs in landblock {this.Id} v:{variationId}, group: {this.CurrentLandblockGroup}\n");
+            //if (this.Id.ToString().StartsWith("019E"))
+            //{
 
-            actionQueue.EnqueueAction(new ActionEventDelegate(() =>
+            //    Console.WriteLine($"From: {new StackTrace()}");
+            //}
+            var objects = DatabaseManager.World.GetCachedInstancesByLandblock(Id.Landblock, variationId);
+            var shardObjects = DatabaseManager.Shard.BaseDatabase.GetStaticObjectsByLandblock(Id.Landblock, variationId);
+            var factoryObjects = WorldObjectFactory.CreateNewWorldObjects(objects, shardObjects, null, variationId);
+
+
+            actionQueue.EnqueueAction(new ActionEventDelegate(ActionType.Landblock_CreateWorldObjects, () =>
             {
                 // for mansion linking
                 var houses = new List<House>();
-
                 foreach (var fo in factoryObjects)
                 {
                     WorldObject parent = null;
@@ -258,7 +298,11 @@ namespace ACE.Server.Entity
                         }
                     }
 
-                    AddWorldObject(fo);
+                    var res = AddWorldObject(fo, variationId);
+                    if (!res)
+                    {
+                        Console.WriteLine($"Failed to add world object {fo.Name}, {fo.Guid} to landblock {Id.Landblock}");
+                    }
                     fo.ActivateLinks(objects, shardObjects, parent);
 
                     if (fo.PhysicsObj != null)
@@ -277,13 +321,13 @@ namespace ACE.Server.Entity
         /// </summary>
         private void SpawnDynamicShardObjects()
         {
-            var dynamics = DatabaseManager.Shard.BaseDatabase.GetDynamicObjectsByLandblock(Id.Landblock);
+            var dynamics = DatabaseManager.Shard.BaseDatabase.GetDynamicObjectsByLandblock(Id.Landblock, VariationId);
             var factoryShardObjects = WorldObjectFactory.CreateWorldObjects(dynamics);
 
-            actionQueue.EnqueueAction(new ActionEventDelegate(() =>
+            actionQueue.EnqueueAction(new ActionEventDelegate(ActionType.Landblock_SpawnDynamicShardObjects, () =>
             {
                 foreach (var fso in factoryShardObjects)
-                    AddWorldObject(fso);
+                    AddWorldObject(fso, VariationId);
             }));
         }
 
@@ -302,30 +346,31 @@ namespace ACE.Server.Entity
 
                 if (wo == null) continue;
 
-                actionQueue.EnqueueAction(new ActionEventDelegate(() =>
+                actionQueue.EnqueueAction(new ActionEventDelegate(ActionType.Landblock_SpawnEncounters, () =>
                 {
                     var xPos = Math.Clamp(encounter.CellX * 24.0f, 0.5f, 191.5f);
                     var yPos = Math.Clamp(encounter.CellY * 24.0f, 0.5f, 191.5f);
 
                     var pos = new Physics.Common.Position();
                     pos.ObjCellID = (uint)(Id.Landblock << 16) | 1;
+                    pos.Variation = VariationId;
                     pos.Frame = new Physics.Animation.AFrame(new Vector3(xPos, yPos, 0), Quaternion.Identity);
                     pos.adjust_to_outside();
 
                     pos.Frame.Origin.Z = PhysicsLandblock.GetZ(pos.Frame.Origin);
 
-                    wo.Location = new Position(pos.ObjCellID, pos.Frame.Origin, pos.Frame.Orientation);
+                    wo.Location = new Position(pos.ObjCellID, pos.Frame.Origin, pos.Frame.Orientation, pos.Variation);
+                    wo.Location.Variation = VariationId;
 
-                    var sortCell = LScape.get_landcell(pos.ObjCellID) as SortCell;
-                    if (sortCell != null && sortCell.has_building())
+                    if (LScape.get_landcell(pos.ObjCellID, pos.Variation) is SortCell sortCell && sortCell.has_building())
                     {
                         wo.Destroy();
                         return;
                     }
 
-                    if (PropertyManager.GetBool("override_encounter_spawn_rates").Item)
+                    if (PropertyManager.GetBool("override_encounter_spawn_rates"))
                     {
-                        wo.RegenerationInterval = PropertyManager.GetDouble("encounter_regen_interval").Item;
+                        wo.RegenerationInterval = PropertyManager.GetDouble("encounter_regen_interval");
 
                         wo.ReinitializeHeartbeats();
 
@@ -344,11 +389,11 @@ namespace ACE.Server.Entity
                             }
 
                             foreach (var profile in wo.Biota.PropertiesGenerator)
-                                profile.Delay = (float)PropertyManager.GetDouble("encounter_delay").Item;
+                                profile.Delay = (float)PropertyManager.GetDouble("encounter_delay");
                         }
                     }
 
-                    if (!AddWorldObject(wo))
+                    if (!AddWorldObject(wo, VariationId))
                         wo.Destroy();
                 }));
             }
@@ -467,9 +512,13 @@ namespace ACE.Server.Entity
             // - this.SpawnEncounters
             // - Adding items back onto the landblock from failed player movements: Player_Inventory.cs DoHandleActionPutItemInContainer()
             // - Executing trade between two players: Player_Trade.cs FinalizeTrade()
+            //var actionQueueCount = actionQueue.Count();
             actionQueue.RunActions();
             ServerPerformanceMonitor.AddToCumulativeEvent(ServerPerformanceMonitor.CumulativeEventHistoryType.Landblock_Tick_RunActions, stopwatch.Elapsed.TotalSeconds);
-
+            //if (stopwatch.Elapsed.TotalSeconds > 0.100f)
+            //{
+            //    log.Warn($"Landblock {Id.ToString()}.Tick({currentUnixTime}).Landblock_Tick_RunActions: {stopwatch.Elapsed.TotalSeconds} seconds, Count: {actionQueueCount}");
+            //}
             ProcessPendingWorldObjectAdditionsAndRemovals();
 
             // When a WorldObject Ticks, it can end up adding additional WorldObjects to this landblock
@@ -481,9 +530,10 @@ namespace ACE.Server.Entity
                 // Without this, 400+ creatures can cause 4+ second freezes
                 // Tuning: Lower = safer spikes (50-60), Higher = faster AI reactions (75-100)
                 // At 75: ~0.2s max spike, 447 creatures = 1.8s total delay for last creature
-                // Configurable via: /modifylong monster_tick_throttle_limit <value>
+                // Increased from 50 to 75 based on production saturation warnings
+                // Configurable via: /modifylong monster_tick_throttle_limit <value> (min: 50, recommended: 75-125)
                 int monstersProcessed = 0;
-                var throttleValue = (int)PropertyManager.GetLong("monster_tick_throttle_limit").Item;
+                var throttleValue = (int)PropertyManager.GetLong("monster_tick_throttle_limit", 75);
                 var maxMonstersPerTick = Math.Max(50, throttleValue); // Enforce minimum of 50 to prevent server lockup
 
                 if (throttleValue < 50 && throttleValue != maxMonstersPerTick)
@@ -615,7 +665,9 @@ namespace ACE.Server.Entity
                 // Decay world objects
                 if (lastHeartBeat != DateTime.MinValue)
                 {
-                    foreach (var wo in worldObjects.Values)
+                    // Make a copy since objects might get removed during decay
+                    var worldObjectsCopy = worldObjects.Values.ToList();
+                    foreach (var wo in worldObjectsCopy)
                     {
                         if (wo.IsDecayable())
                             wo.Decay(thisHeartBeat - lastHeartBeat);
@@ -639,7 +691,7 @@ namespace ACE.Server.Entity
                         IsDormant = true;
                     }
                     if (lastActiveTime + UnloadInterval < thisHeartBeat)
-                        LandblockManager.AddToDestructionQueue(this);
+                        LandblockManager.AddToDestructionQueue(this, this.VariationId);
                 }
 
                 //log.Info($"Landblock {Id.ToString()}.Tick({currentUnixTime}).Landblock_Tick_Heartbeat: thisHeartBeat: {thisHeartBeat.ToString()} | lastHeartBeat: {lastHeartBeat.ToString()} | worldObjects.Count: {worldObjects.Count()}");
@@ -894,46 +946,34 @@ namespace ACE.Server.Entity
         /// <summary>
         /// This will fail if the wo doesn't have a valid location.
         /// </summary>
-        public bool AddWorldObject(WorldObject wo)
+        public bool AddWorldObject(WorldObject wo, int? VariationId)
         {
             if (wo.Location == null)
             {
-                log.DebugFormat("Landblock 0x{0} failed to add 0x{1:X8} {2}. Invalid Location", Id, wo.Biota.Id, wo.Name);
+                Console.WriteLine("Landblock 0x{0} failed to add 0x{1:X8} {2}. Invalid Location", Id, wo.Biota.Id, wo.Name);
                 return false;
             }
 
-            return AddWorldObjectInternal(wo);
+            return AddWorldObjectInternal(wo, VariationId);
         }
 
-        public void AddWorldObjectForPhysics(WorldObject wo)
+        public void AddWorldObjectForPhysics(WorldObject wo, int? VariationId)
         {
-            AddWorldObjectInternal(wo);
+            AddWorldObjectInternal(wo, VariationId);
         }
 
-        private bool AddWorldObjectInternal(WorldObject wo)
+        private bool AddWorldObjectInternal(WorldObject wo, int? VariationId)
         {
             if (LandblockManager.CurrentlyTickingLandblockGroupsMultiThreaded)
             {
                 if (CurrentLandblockGroup != null && CurrentLandblockGroup != LandblockManager.CurrentMultiThreadedTickingLandblockGroup.Value)
                 {
-                    // Prevent possible multi-threaded crash
-                    // The following scenario can happen rarely in ACE, all in the same call stack with no ActionQueue usage:
-                    // Moster successfully lands an attack on a player that procs a cloak spell
-                    // The code goes through and does the LaunchSpellProjectiles() which adds the spell projectiles to (presumably) the players landblock
-                    // For some unknown reason, the LandblockGroup/Thread where the monster exists seems to be a different LandblockGroup/Thread where the spells are added to.
-                    // Maybe there's a player death race condition? Maybe it's a teleport race condition? I dunno.
-                    // Because this happens so rarely, and, it only seems to affect cloak projectiles, and, cloak projectiles are pretty benign, we simply don't add the object, and only log it as a warning.
-                    if (wo.WeenieType == WeenieType.ProjectileSpell)
-                    {
-                        log.Warn($"Landblock 0x{Id} entered AddWorldObjectInternal in a cross-thread operation for a ProjectileSpell. This is normally not an issue unless it's happening more than once an hour.");
-                        return false;
-                    }
-
                     log.Error($"Landblock 0x{Id} entered AddWorldObjectInternal in a cross-thread operation.");
                     log.Error($"Landblock 0x{Id} CurrentLandblockGroup: {CurrentLandblockGroup}");
+                    log.Error($"Variation: {VariationId}");
                     log.Error($"LandblockManager.CurrentMultiThreadedTickingLandblockGroup.Value: {LandblockManager.CurrentMultiThreadedTickingLandblockGroup.Value}");
 
-                    log.Error($"wo: 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}], previous landblock 0x{wo.CurrentLandblock?.Id}");
+                    log.Error($"wo: 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}], v:{wo.Location.Variation}, previous landblock 0x{wo.CurrentLandblock?.Id}");
 
                     if (wo.WeenieType == WeenieType.ProjectileSpell)
                     {
@@ -948,37 +988,43 @@ namespace ACE.Server.Entity
 
                     log.Error("PLEASE REPORT THIS TO THE ACE DEV TEAM !!!");
 
+                    // Prevent possible multi-threaded crash
+                    if (wo.WeenieType == WeenieType.ProjectileSpell)
+                        return false;
+
                     // This may still crash...
                 }
             }
 
             wo.CurrentLandblock = this;
+            //if (this.Id.ToString().StartsWith("019E"))
+            //{
+            //    Console.WriteLine($"{wo.Name}, {wo.WeenieClassId} is spawning in landblock {this.Id} v:{wo.CurrentLandblock.VariationId} wo.v:{wo.Location.Variation}");
+            //        //$"From: {new StackTrace()}");
+            //}                     
+            //wo.Location.Variation = VariationId;
 
             if (wo.PhysicsObj == null)
-                wo.InitPhysicsObj();
+                wo.InitPhysicsObj(VariationId);
             else
                 wo.PhysicsObj.set_object_guid(wo.Guid);  // re-add to ServerObjectManager
 
             if (wo.PhysicsObj.CurCell == null)
             {
-                var success = wo.AddPhysicsObj();
+                var success = wo.AddPhysicsObj(VariationId);
                 if (!success)
                 {
                     wo.CurrentLandblock = null;
 
                     if (wo.Generator != null)
                     {
-                        if (log.IsDebugEnabled)
-                            log.Debug($"AddWorldObjectInternal: couldn't spawn 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()} from generator {wo.Generator.WeenieClassId} - 0x{wo.Generator.Guid}:{wo.Generator.Name}");
+                        log.Debug($"AddWorldObjectInternal: couldn't spawn 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()} from generator {wo.Generator.WeenieClassId} - 0x{wo.Generator.Guid}:{wo.Generator.Name}");
                         wo.NotifyOfEvent(RegenerationType.PickUp); // Notify generator the generated object is effectively destroyed, use Pickup to catch both cases.
                     }
                     else if (wo.IsGenerator) // Some generators will fail random spawns if they're circumference spans over water or cliff edges
-                    {
-                        if (log.IsDebugEnabled)
-                            log.Debug($"AddWorldObjectInternal: couldn't spawn generator 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()}");
-                    }
-                    else if (wo.ProjectileTarget == null && !(wo is SpellProjectile))
-                        log.Warn($"AddWorldObjectInternal: couldn't spawn 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()}");
+                        log.Debug($"AddWorldObjectInternal: couldn't spawn generator 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()}");
+                    else if (wo.ProjectileTarget == null && wo is not SpellProjectile)
+                        Console.WriteLine($"AddWorldObjectInternal: couldn't spawn 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()}");
 
                     return false;
                 }
@@ -993,20 +1039,37 @@ namespace ACE.Server.Entity
             wo.NotifyPlayers();
 
             if (wo is Player player)
-                player.SetFogColor(FogColor);
-
-            if (wo is Corpse && wo.Level.HasValue)
             {
-                var corpseLimit = PropertyManager.GetLong("corpse_spam_limit").Item;
-                var corpseList = worldObjects.Values.Union(pendingAdditions.Values).Where(w => w is Corpse && w.Level.HasValue && w.VictimId == wo.VictimId).OrderBy(w => w.CreationTimestamp);
+                player.SetFogColor(FogColor);
+            }
+            // For player corpses, we prevent a single player from spamming corpses on a single
+            // landblock. We search for and mark their oldest corpse for early decay if they have  
+            // more than corpse_spam_limit corpses on a single landblock.
+            else if (wo is Corpse new_corpse && !new_corpse.IsMonster)
+            {
+                long perPlayerCorpseLimit = PropertyManager.GetLong("corpse_spam_limit");
+                int corpsesForThisPlayer = 0;
 
-                if (corpseList.Count() > corpseLimit)
+                Corpse oldestCorpseNotDecayingSoon = null;
+                foreach (WorldObject w in worldObjects.Values.Union(pendingAdditions.Values))
                 {
-                    var corpse = GetObject(corpseList.First(w => w.TimeToRot > Corpse.EmptyDecayTime).Guid);
+                    if (w is not Corpse existingCorpse) continue; // Not a corpse.
+                    if (existingCorpse.VictimId != new_corpse.VictimId) continue; // Not this player's corpse.
+                    corpsesForThisPlayer++;
+                    if (existingCorpse.TimeToRot <= Corpse.EmptyDecayTime) continue; // Corpse already decaying soon.
+                    if (oldestCorpseNotDecayingSoon == null || oldestCorpseNotDecayingSoon.CreationTimestamp > existingCorpse.CreationTimestamp)
+                    {
+                        oldestCorpseNotDecayingSoon = existingCorpse;
+                    }
+                }
+
+                if (corpsesForThisPlayer > perPlayerCorpseLimit && oldestCorpseNotDecayingSoon != null)
+                {
+                    var corpse = GetObject(oldestCorpseNotDecayingSoon.Guid);
 
                     if (corpse != null)
                     {
-                        log.Warn($"[CORPSE] Landblock.AddWorldObjectInternal(): {wo.Name} (0x{wo.Guid}) exceeds the per player limit of {corpseLimit} corpses for 0x{Id.Landblock:X4}. Adjusting TimeToRot for oldest {corpse.Name} (0x{corpse.Guid}), CreationTimestamp: {corpse.CreationTimestamp} ({Common.Time.GetDateTimeFromTimestamp(corpse.CreationTimestamp ?? 0).ToLocalTime():yyyy-MM-dd HH:mm:ss}), to Corpse.EmptyDecayTime({Corpse.EmptyDecayTime}).");
+                        log.Warn($"[CORPSE] Landblock.AddWorldObjectInternal(): {wo.Name} (0x{wo.Guid}) exceeds the per player limit of {perPlayerCorpseLimit} corpses for 0x{Id.Landblock:X4}. Adjusting TimeToRot for oldest {corpse.Name} (0x{corpse.Guid}), CreationTimestamp: {corpse.CreationTimestamp} ({Common.Time.GetDateTimeFromTimestamp(corpse.CreationTimestamp ?? 0).ToLocalTime():yyyy-MM-dd HH:mm:ss}), to Corpse.EmptyDecayTime({Corpse.EmptyDecayTime}).");
                         corpse.TimeToRot = Corpse.EmptyDecayTime;
                     }
                 }

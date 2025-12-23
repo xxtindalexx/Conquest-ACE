@@ -240,7 +240,13 @@
     <PackageReference Include="log4net" Version="2.0.17" />
     <PackageReference Include="Log4Net.Async.Standard" Version="3.1.0" />
     <PackageReference Include="McMaster.NETCore.Plugins" Version="2.0.0" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="7.0.8">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+      <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.17.2" />
     <PackageReference Include="MySqlConnector" Version="2.5.0" />
+      <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
   </ItemGroup>
 

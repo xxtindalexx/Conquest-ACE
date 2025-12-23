@@ -11,29 +11,38 @@ namespace ACE.Server.Physics.Animation
 {
     public enum TransitionState
     {
-        Invalid   = 0x0,
-        OK        = 0x1,
-        Collided  = 0x2,
-        Adjusted  = 0x3,
-        Slid      = 0x4
+        Invalid = 0x0,
+        OK = 0x1,
+        Collided = 0x2,
+        Adjusted = 0x3,
+        Slid = 0x4
     };
 
     public class Transition
     {
-        public ObjectInfo ObjectInfo;
+        private const float StepDownDefaultHeight = 0.039999999f;
+        private const float MaxSteps = 1000;
+
+        public readonly ObjectInfo ObjectInfo;
         public SpherePath SpherePath;
         public CollisionInfo CollisionInfo;
         public CellArray CellArray;
+        public int? VariationId;
         //public ObjCell NewCellPtr;
+
+        // Reusable objects to reduce allocations
+        private Vector3 _tempVector = new Vector3();
 
         public Transition()
         {
-            Init();
+            ObjectInfo = new ObjectInfo();
+            SpherePath = new SpherePath();
+            CollisionInfo = new CollisionInfo();
+            CellArray = new CellArray();
         }
 
-        public Vector3 AdjustOffset(Vector3 _offset)
+        public Vector3 AdjustOffset(Vector3 offset)
         {
-            var offset = new Vector3(_offset.X, _offset.Y, _offset.Z);
             var checkSlide = false;
 
             var slidingAngle = Vector3.Dot(offset, CollisionInfo.SlidingNormal);
@@ -88,10 +97,10 @@ namespace ACE.Server.Physics.Animation
 
         public void BuildCellArray(ref ObjCell newCell)
         {
-            SpherePath.CellArrayValid = true;
+            //SpherePath.CellArrayValid = true;
             SpherePath.HitsInteriorCell = false;
 
-            ObjCell.find_cell_list(CellArray, ref newCell, SpherePath);
+            ObjCell.find_cell_list(CellArray, ref newCell, SpherePath, VariationId);
         }
 
         public void CalcNumSteps(ref Vector3 offset, ref Vector3 offsetPerStep, ref int numSteps)
@@ -151,17 +160,17 @@ namespace ACE.Server.Physics.Animation
         {
             var result = TransitionState.OK;
 
-            SpherePath.CellArrayValid = true;
+            //SpherePath.CellArrayValid = true;
             SpherePath.HitsInteriorCell = false;
 
             //ObjCell newCell = null;
             var newCell = ObjCell.EmptyCell;    // null check?
-            ObjCell.find_cell_list(CellArray, ref newCell, SpherePath);
+            ObjCell.find_cell_list(CellArray, ref newCell, SpherePath, VariationId);
 
             for (var i = 0; i < CellArray.Cells.Count; i++)
             {
                 var cell = CellArray.Cells.Values.ElementAt(i);
-                if (cell == null || cell.Equals(currCell)) continue;
+                if (cell?.Equals(currCell) != false) continue;
 
                 var collides = cell.FindCollisions(this);
                 switch (collides)
@@ -196,7 +205,7 @@ namespace ACE.Server.Physics.Animation
                 SpherePath.AdjustCheckPos(checkPos.ObjCellID);
                 SpherePath.SetCheckPos(checkPos, null);
 
-                SpherePath.CellArrayValid = true;
+                //SpherePath.CellArrayValid = true;
 
                 return result;
             }
@@ -223,8 +232,10 @@ namespace ACE.Server.Physics.Animation
             if (stepHeight > globSphere.Radius * 2)
                 stepHeight *= 0.5f;
 
-            var offset = new Vector3(0, 0, -stepHeight);
-            SpherePath.AddOffsetToCheckPos(offset);
+            _tempVector.X = 0;
+            _tempVector.Y = 0;
+            _tempVector.Z = -stepHeight;
+            SpherePath.AddOffsetToCheckPos(_tempVector);
 
             var transitionState = TransitionalInsert(1);
 
@@ -312,7 +323,7 @@ namespace ACE.Server.Physics.Animation
             else
             {
                 SpherePath.Walkable = null;
-                SpherePath.CellArrayValid = true;
+                //SpherePath.CellArrayValid = true;
 
                 transitionState = TransitionState.Collided;
                 return true;
@@ -328,7 +339,7 @@ namespace ACE.Server.Physics.Animation
             CollisionInfo.ContactPlaneValid = false;
             CollisionInfo.ContactPlaneIsWater = false;
 
-            if (validCell) SpherePath.CellArrayValid = true;
+            //if (validCell) SpherePath.CellArrayValid = true;
 
             return transitionState;
         }
@@ -502,11 +513,8 @@ namespace ACE.Server.Physics.Animation
 
             CalcNumSteps(ref offset, ref offsetPerStep, ref numSteps);  // restructure as retval?
 
-            //var maxSteps = 30;
-            var maxSteps = 1000;
-            if (numSteps > maxSteps && !ObjectInfo.Object.IsSightObj)
+            if (numSteps > MaxSteps && !ObjectInfo.Object.IsSightObj)
             {
-                //Console.WriteLine("NumSteps: " + numSteps);
                 return false;
             }
 
@@ -521,11 +529,11 @@ namespace ACE.Server.Physics.Animation
                 if ((ObjectInfo.State & ObjectInfoState.FreeRotate) == 0)  // ?
                     SpherePath.CurPos.Frame.set_rotate(SpherePath.EndPos.Frame.Orientation);
 
-                SpherePath.CellArrayValid = true;
+                //SpherePath.CellArrayValid = true;
                 SpherePath.HitsInteriorCell = false;
 
                 ObjCell empty = null;
-                ObjCell.find_cell_list(CellArray, ref empty, SpherePath);
+                ObjCell.find_cell_list(CellArray, ref empty, SpherePath, VariationId);
                 return true;
             }
 
@@ -599,15 +607,6 @@ namespace ACE.Server.Physics.Animation
                 return FindTransitionalPosition();
             else
                 return FindPlacementPosition();
-        }
-
-        public void Init()
-        {
-            ObjectInfo = new ObjectInfo();
-            SpherePath = new SpherePath();
-            CollisionInfo = new CollisionInfo();
-            CellArray = new CellArray();
-            //NewCellPtr = new ObjCell();
         }
 
         public void InitContactPlane(uint cellID, Plane contactPlane, bool isWater)
@@ -689,9 +688,7 @@ namespace ACE.Server.Physics.Animation
         /// <returns></returns>
         public static Transition MakeTransition()
         {
-            var transition = new Transition();
-            transition.Init();
-            return transition;
+            return new Transition();
         }
 
         public TransitionState PlacementInsert()
@@ -717,15 +714,17 @@ namespace ACE.Server.Physics.Animation
 
             if (!SpherePath.StepUp)
             {
-                SpherePath.CellArrayValid = false;
+                //SpherePath.CellArrayValid = false;
 
-                var offset = new Vector3(0, 0, -stepDownHeight);
+                _tempVector.X = 0;
+                _tempVector.Y = 0;
+                _tempVector.Z = -stepDownHeight;
 
                 SpherePath.CheckPos.Frame.Origin.Z -= stepDownHeight;
-                SpherePath.CacheGlobalSphere(offset);
+                SpherePath.CacheGlobalSphere(_tempVector);
             }
 
-            var transitionState = TransitionalInsert(5);
+            var transitionState = TransitionalInsert(3); //was 5
             SpherePath.StepDown = false;
 
             if (transitionState == TransitionState.OK && CollisionInfo.ContactPlaneValid && CollisionInfo.ContactPlane.Normal.Z >= zVal &&
@@ -751,7 +750,7 @@ namespace ACE.Server.Physics.Animation
             SpherePath.StepUp = true;
             SpherePath.StepUpNormal = new Vector3(collisionNormal.X, collisionNormal.Y, collisionNormal.Z);
 
-            var stepDownHeight = 0.039999999f;  // set global?
+            var stepDownHeight = StepDownDefaultHeight;
 
             var zLandingValue = PhysicsGlobals.LandingZ;
 
@@ -847,7 +846,7 @@ namespace ACE.Server.Physics.Animation
                             }
 
                             var zVal = PhysicsGlobals.LandingZ;
-                            var stepDownHeight = 0.039999999f;  // set global
+                            var stepDownHeight = StepDownDefaultHeight;
 
                             if ((ObjectInfo.State & ObjectInfoState.OnWalkable) != 0)
                             {

@@ -672,7 +672,7 @@ namespace ACE.Server.WorldObjects
             // this crouch down motion exited the animation queue immediately
 
             // here we are just skipping the animation if the player is jumping
-            if (IsJumping && PropertyManager.GetBool("allow_jump_loot").Item)
+            if (IsJumping && PropertyManager.GetBool("allow_jump_loot"))
                 return MotionCommand.Invalid;
 
             MotionCommand pickupMotion;
@@ -773,7 +773,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(animTime);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerInventory_SetPickupDone, () =>
             {
                 PickupState = PickupState.None;
                 IsBusy = false;
@@ -896,7 +896,7 @@ namespace ACE.Server.WorldObjects
 
             if (container is Hook hook)
             {
-                if (PropertyManager.GetBool("house_hook_limit").Item)
+                if (PropertyManager.GetBool("house_hook_limit"))
                 {
                     if (hook.House.HouseMaxHooksUsable != -1 && hook.House.HouseCurrentHooksUsable <= 0)
                     {
@@ -905,7 +905,7 @@ namespace ACE.Server.WorldObjects
                     }
                 }
 
-                if (PropertyManager.GetBool("house_hookgroup_limit").Item)
+                if (PropertyManager.GetBool("house_hookgroup_limit"))
                 {
                     var itemHookGroup = item.HookGroup ?? HookGroupType.Undef;
                     var houseHookGroupMax = hook.House.GetHookGroupMaxCount(itemHookGroup);
@@ -1040,7 +1040,7 @@ namespace ACE.Server.WorldObjects
                     var pickupMotion = GetPickupMotion(moveToTarget);
                     var pickupChain = AddPickupChainToMoveToChain(pickupMotion);
 
-                    pickupChain.AddAction(this, () =>
+                    pickupChain.AddAction(this, ActionType.PlayerInventory_DoPickup, () =>
                     {
                         // Was this item picked up by someone else?
                         if (itemRootOwner == null && item.CurrentLandblock == null)
@@ -1101,7 +1101,7 @@ namespace ACE.Server.WorldObjects
                                 }
                             }
 
-                            if (PropertyManager.GetBool("house_hook_limit").Item)
+                            if (PropertyManager.GetBool("house_hook_limit"))
                             {
                                 if (container is Hook toHook && toHook.House.HouseMaxHooksUsable != -1 && toHook.House.HouseCurrentHooksUsable <= 0)
                                 {
@@ -1113,7 +1113,7 @@ namespace ACE.Server.WorldObjects
                                 }
                             }
 
-                            if (PropertyManager.GetBool("house_hookgroup_limit").Item)
+                            if (PropertyManager.GetBool("house_hookgroup_limit"))
                             {
                                 if (container is Hook toHook)
                                 {
@@ -1327,9 +1327,9 @@ namespace ACE.Server.WorldObjects
                     var landblockReturn = new ActionChain();
 
                     landblockReturn.AddDelaySeconds(1);
-                    landblockReturn.AddAction(prevLandblock, () => RemoveTrackedObject(item, false));
+                    landblockReturn.AddAction(prevLandblock, ActionType.PlayerInventory_RemoveTrackedObject, () => RemoveTrackedObject(item, false));
                     landblockReturn.AddDelaySeconds(1);
-                    landblockReturn.AddAction(prevLandblock, () =>
+                    landblockReturn.AddAction(prevLandblock, ActionType.PlayerInventory_AddObjectToLandblock, () =>
                     {
                         item.Location = new Position(prevLocation);
                         LandblockManager.AddObject(item);
@@ -1419,7 +1419,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = StartPickupChain();
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerInventory_DropItem, () =>
             {
                 if (CurrentLandblock == null) // Maybe we were teleported as we were motioning to drop the item
                 {
@@ -1493,7 +1493,7 @@ namespace ACE.Server.WorldObjects
             var ethereal = item.Ethereal;
             item.Ethereal = true;
 
-            if (!CurrentLandblock.AddWorldObject(item))
+            if (!CurrentLandblock.AddWorldObject(item, item.Location.Variation))
                 return false;
 
             // use radius?
@@ -1507,7 +1507,7 @@ namespace ACE.Server.WorldObjects
             {
                 item.PhysicsObj.SetPositionInternal(transit);
 
-                item.SyncLocation();
+                item.SyncLocation(item.Location.Variation);
 
                 item.SendUpdatePosition(true);
             }
@@ -1615,7 +1615,7 @@ namespace ACE.Server.WorldObjects
                     var pickupMotion = GetPickupMotion(rootOwner ?? item);
                     var pickupChain = AddPickupChainToMoveToChain(pickupMotion);
 
-                    pickupChain.AddAction(this, () =>
+                    pickupChain.AddAction(this, ActionType.PlayerInventory_GetAndWieldInventory, () =>
                     {
                         // Was this item picked up by someone else?
                         if (rootOwner == null && item.CurrentLandblock == null)
@@ -2094,7 +2094,7 @@ namespace ACE.Server.WorldObjects
 
         private WeenieError CheckWieldRequirements(WorldObject item)
         {
-            if (!PropertyManager.GetBool("use_wield_requirements").Item)
+            if (!PropertyManager.GetBool("use_wield_requirements"))
                 return WeenieError.None;
 
             var heritageSpecificArmor = item.GetProperty(PropertyInt.HeritageSpecificArmor);
@@ -2390,7 +2390,7 @@ namespace ACE.Server.WorldObjects
                     var pickupMotion = GetPickupMotion(moveToObject);
                     var pickupChain = AddPickupChainToMoveToChain(pickupMotion);
 
-                    pickupChain.AddAction(this, () =>
+                    pickupChain.AddAction(this, ActionType.PlayerInventory_StackableSplitToContainer, () =>
                     {
                         // We make sure the stack is still valid. It could have changed during our pickup animation
                         if (stackOriginalContainer != stack.ContainerId || stack.StackSize < amount)
@@ -2576,7 +2576,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = StartPickupChain();
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerInventory_StackableSplitToLandblock, () =>
             {
                 if (CurrentLandblock == null) // Maybe we were teleported as we were motioning to drop the item
                 {
@@ -2612,7 +2612,6 @@ namespace ACE.Server.WorldObjects
                 if (TryDropItem(newStack))
                 {
                     EnqueueBroadcast(new GameMessageSound(Guid, Sound.DropItem));
-
                     // Log ground drop for transfer monitoring
                     ACE.Server.Managers.TransferLogger.LogGroundDrop(this, newStack);
                 }
@@ -2764,7 +2763,7 @@ namespace ACE.Server.WorldObjects
                     var pickupMotion = GetPickupMotion(moveToObject);
                     var pickupChain = AddPickupChainToMoveToChain(pickupMotion);
 
-                    pickupChain.AddAction(this, () =>
+                    pickupChain.AddAction(this, ActionType.PlayerInventory_StackableSplitToWield, () =>
                     {
                         // We make sure the stack is still valid. It could have changed during our pickup animation
                         if (stackOriginalContainer != stack.ContainerId || stack.StackSize < amount)
@@ -3073,7 +3072,7 @@ namespace ACE.Server.WorldObjects
                     var pickupMotion = GetPickupMotion(moveToObject);
                     var pickupChain = AddPickupChainToMoveToChain(pickupMotion);
 
-                    pickupChain.AddAction(this, () =>
+                    pickupChain.AddAction(this, ActionType.PlayerInventory_StackableMerge, () =>
                     {
                         // We make sure the stack is still valid. It could have changed during our pickup animation
                         if (sourceStackOriginalContainer != sourceStack.ContainerId || sourceStack.StackSize < amount)
@@ -3087,6 +3086,7 @@ namespace ACE.Server.WorldObjects
 
                         if (DoHandleActionStackableMerge(sourceStack, targetStack, amount))
                         {
+
                             // Log transfer monitoring (pickup chain path)
                             if (sourceStackRootOwner == null && targetStackRootOwner == this)
                             {
@@ -3099,7 +3099,6 @@ namespace ACE.Server.WorldObjects
                             {
                                 ACE.Server.Managers.TransferLogger.LogChestWithdrawal(this, sourceStack, sourceStackRootOwner as Container, amount);
                             }
-
                             // If the client used the R key to merge a partial stack from the landscape, it also tries to add the "ghosted" item of the picked up stack to the inventory as well.
                             if (sourceStackRootOwner != this && sourceStack.StackSize > 0)
                                 Session.Network.EnqueueSend(new GameMessageCreateObject(sourceStack));
@@ -3427,7 +3426,7 @@ namespace ACE.Server.WorldObjects
             // Player A equips weapon, gives weapon (while equipped) to player B.
             // Player B then gives weapon back to A. Player B is now bugged. The fix is to fix RemoveTrackedEquippedObject
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerInventory_GiveObjectToPlayer, () =>
             {
                 if (!target.TryCreateInInventoryWithNetworking(itemToGive, out _))
                 {
@@ -3573,7 +3572,7 @@ namespace ACE.Server.WorldObjects
             Session.Network.EnqueueSend(new GameMessageSystemChat($"You allow {target.Name} to examine your {iouToTurnIn.NameWithMaterial}.", ChatMessageType.Broadcast));
             Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, iouToTurnIn.Guid.Full, WeenieError.TradeAiRefuseEmote));
 
-            if (!PropertyManager.GetBool("iou_trades").Item)
+            if (!PropertyManager.GetBool("iou_trades"))
             {
                 Session.Network.EnqueueSend(new GameEventTell(target, "Sorry! I'm not taking IOUs right now, but if you do wish to discard them, drop them in to the garbage barrels found at the Mana Forges in Hebian-To, Zaikhal, and Cragstone.", this, ChatMessageType.Tell));
                 //Session.Network.EnqueueSend(new GameEventWeenieErrorWithString(Session, (WeenieErrorWithString)WeenieError.TradeAiDoesntWant, target.Name));
@@ -3623,7 +3622,7 @@ namespace ACE.Server.WorldObjects
                                     Session.Network.EnqueueSend(new GameMessageSystemChat($"{target.Name} gives you {item.Name}.", ChatMessageType.Broadcast));
                                     target.EnqueueBroadcast(new GameMessageSound(target.Guid, Sound.ReceiveItem));
 
-                                    if (PropertyManager.GetBool("player_receive_immediate_save").Item)
+                                    if (PropertyManager.GetBool("player_receive_immediate_save"))
                                         RushNextPlayerSave(5);
 
                                     log.DebugFormat("[IOU] {0} (0x{1}) traded in a IOU (0x{2}) for {3} which became {4} (0x{5}).", Name, Guid, iouToTurnIn.Guid, wcid, item.Name, item.Guid);
@@ -3881,7 +3880,7 @@ namespace ACE.Server.WorldObjects
             {
                 log.Warn($"Player.GiveFromEmote: itemStacks <= 0: emoter: {emoter.Name} (0x{emoter.Guid}) - {emoter.WeenieClassId} | weenieClassId: {weenieClassId} | amount: {amount}");
 
-                if (PropertyManager.GetBool("iou_trades").Item)
+                if (PropertyManager.GetBool("iou_trades"))
                 {
                     var item = PlayerFactory.CreateIOU(weenieClassId);
                     TryCreateForGive(emoter, item);
@@ -3909,7 +3908,7 @@ namespace ACE.Server.WorldObjects
                 EnqueueBroadcast(new GameMessageSound(Guid, Sound.ReceiveItem));
             }
 
-            if (PropertyManager.GetBool("player_receive_immediate_save").Item)
+            if (PropertyManager.GetBool("player_receive_immediate_save"))
                 RushNextPlayerSave(5);
 
             return true;

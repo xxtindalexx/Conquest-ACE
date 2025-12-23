@@ -8,6 +8,11 @@ namespace ACE.Database.Models.World;
 /// </summary>
 public partial class LandblockInstance
 {
+
+    public LandblockInstance()
+    {
+        LandblockInstanceLink = new HashSet<LandblockInstanceLink>();
+    }
     /// <summary>
     /// Unique Id of this Instance
     /// </summary>
@@ -42,6 +47,8 @@ public partial class LandblockInstance
     public bool IsLinkChild { get; set; }
 
     public DateTime LastModified { get; set; }
+
+    public int? VariationId { get; set; }
 
     public virtual ICollection<LandblockInstanceLink> LandblockInstanceLink { get; set; } = new List<LandblockInstanceLink>();
 }

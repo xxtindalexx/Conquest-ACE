@@ -93,13 +93,13 @@ namespace ACE.Server.Managers
         /// <param name="fallback">The value to return if the property cannot be found.</param>
         /// <param name="cacheFallback">Whether or not the fallback property should be cached.</param>
         /// <returns>A boolean value representing the property</returns>
-        public static Property<bool> GetBool(string key, bool fallback = false, bool cacheFallback = true)
+        public static bool GetBool(string key, bool fallback = false, bool cacheFallback = true)
         {
             // first, check the cache. If the key exists in the cache, grab it regardless of its modified value
             // then, check the database. if the key exists in the database, grab it and cache it
             // finally, set it to a default of false.
-            if (CachedBooleanSettings.ContainsKey(key))
-                return new Property<bool>(CachedBooleanSettings[key].Item, CachedBooleanSettings[key].Description);
+            if (CachedBooleanSettings.TryGetValue(key, out ConfigurationEntry<bool> cachedBooleanSetting))
+                return cachedBooleanSetting.Item;
 
             var dbValue = DatabaseManager.ShardConfig.GetBool(key);
 
@@ -110,7 +110,7 @@ namespace ACE.Server.Managers
             if (!useFallback || cacheFallback)
                 CachedBooleanSettings[key] = new ConfigurationEntry<bool>(useFallback, value, dbValue?.Description);
 
-            return new Property<bool>(value, dbValue?.Description);
+            return value;
         }
 
         /// <summary>
@@ -147,10 +147,10 @@ namespace ACE.Server.Managers
         /// <param name="fallback">The value to return if the property cannot be found.</param>
         /// <param name="cacheFallback">Whether or not the fallback property should be cached</param>
         /// <returns>An integer value representing the property</returns>
-        public static Property<long> GetLong(string key, long fallback = 0, bool cacheFallback = true)
+        public static long GetLong(string key, long fallback = 0, bool cacheFallback = true)
         {
-            if (CachedLongSettings.ContainsKey(key))
-                return new Property<long>(CachedLongSettings[key].Item, CachedLongSettings[key].Description);
+            if (CachedLongSettings.TryGetValue(key, out ConfigurationEntry<long> cachedLongSetting))
+                return cachedLongSetting.Item;
 
             var dbValue = DatabaseManager.ShardConfig.GetLong(key);
 
@@ -161,7 +161,7 @@ namespace ACE.Server.Managers
             if (!useFallback || cacheFallback)
                 CachedLongSettings[key] = new ConfigurationEntry<long>(useFallback, value, dbValue?.Description);
 
-            return new Property<long>(value, dbValue?.Description);
+            return value;
         }
 
         /// <summary>
@@ -197,10 +197,10 @@ namespace ACE.Server.Managers
         /// <param name="fallback">The value to return if the property cannot be found.</param>
         /// <param name="cacheFallback">Whether or not the fallpack property should be cached</param>
         /// <returns>A float value representing the property</returns>
-        public static Property<double> GetDouble(string key, double fallback = 0.0f, bool cacheFallback = true)
+        public static double GetDouble(string key, double fallback = 0.0f, bool cacheFallback = true)
         {
-            if (CachedDoubleSettings.ContainsKey(key))
-                return new Property<double>(CachedDoubleSettings[key].Item, CachedDoubleSettings[key].Description);
+            if (CachedDoubleSettings.TryGetValue(key, out ConfigurationEntry<double> cachedDoubleSetting))
+                return cachedDoubleSetting.Item;
 
             var dbValue = DatabaseManager.ShardConfig.GetDouble(key);
 
@@ -211,7 +211,7 @@ namespace ACE.Server.Managers
             if (!useFallback || cacheFallback)
                 CachedDoubleSettings[key] = new ConfigurationEntry<double>(useFallback, value, dbValue?.Description);
 
-            return new Property<double>(value, dbValue?.Description);
+            return value;
         }
 
         /// <summary>
@@ -261,10 +261,10 @@ namespace ACE.Server.Managers
         /// <param name="fallback">The value to return if the property cannot be found.</param>
         /// <param name="cacheFallback">Whether or not the fallback value will be cached.</param>
         /// <returns>A string value representing the property</returns>
-        public static Property<string> GetString(string key, string fallback = "", bool cacheFallback = true)
+        public static string GetString(string key, string fallback = "", bool cacheFallback = true)
         {
-            if (CachedStringSettings.ContainsKey(key))
-                return new Property<string>(CachedStringSettings[key].Item, CachedStringSettings[key].Description);
+            if (CachedStringSettings.TryGetValue(key, out ConfigurationEntry<string> cachedStringSetting))
+                return cachedStringSetting.Item;
 
             var dbValue = DatabaseManager.ShardConfig.GetString(key);
 
@@ -275,7 +275,7 @@ namespace ACE.Server.Managers
             if (!useFallback || cacheFallback)
                 CachedStringSettings[key] = new ConfigurationEntry<string>(useFallback, value, dbValue?.Description);
 
-            return new Property<string>(value, dbValue?.Description);
+            return value;
         }
 
         /// <summary>
@@ -387,15 +387,15 @@ namespace ACE.Server.Managers
         {
             string props = "Boolean properties:\n";
             foreach (var item in DefaultPropertyManager.DefaultBooleanProperties)
-                props += string.Format("\t{0}: {1} (current is {2}, default is {3})\n", item.Key, item.Value.Description, GetBool(item.Key).Item, item.Value.Item);
+                props += string.Format("\t{0}: {1} (current is {2}, default is {3})\n", item.Key, item.Value.Description, GetBool(item.Key), item.Value.Item);
 
             props += "\nLong properties:\n";
             foreach (var item in DefaultPropertyManager.DefaultLongProperties)
-                props += string.Format("\t{0}: {1} (current is {2}, default is {3})\n", item.Key, item.Value.Description, GetLong(item.Key).Item, item.Value.Item);
+                props += string.Format("\t{0}: {1} (current is {2}, default is {3})\n", item.Key, item.Value.Description, GetLong(item.Key), item.Value.Item);
 
             props += "\nDouble properties:\n";
             foreach (var item in DefaultPropertyManager.DefaultDoubleProperties)
-                props += string.Format("\t{0}: {1} (current is {2}, default is {3})\n", item.Key, item.Value.Description, GetDouble(item.Key).Item, item.Value.Item);
+                props += string.Format("\t{0}: {1} (current is {2}, default is {3})\n", item.Key, item.Value.Description, GetDouble(item.Key), item.Value.Item);
 
             props += "\nString properties:\n";
             foreach (var item in DefaultPropertyManager.DefaultStringProperties)
@@ -405,7 +405,7 @@ namespace ACE.Server.Managers
         }
     }
 
-    public struct Property<T>
+    public readonly struct Property<T>
     {
         public Property(T item, string description) : this()
         {
@@ -549,6 +549,7 @@ namespace ACE.Server.Managers
                 ("craft_exact_msg", new Property<bool>(false, "If TRUE, and player has crafting chance of success dialog enabled, shows them an additional message in their chat window with exact %")),
                 ("creature_name_check", new Property<bool>(true, "if enabled, creature names in world database restricts player names during character creation")),
                 ("creatures_drop_createlist_wield", new Property<bool>(false, "If FALSE then Wielded items in CreateList will not drop. Retail defaulted to TRUE but there are currently data errors")),
+                ("enl_removes_society", new Property<bool>(true, "if true, enlightenment will remove society flags")),
                 ("fastbuff", new Property<bool>(true, "If TRUE, enables the fast buffing trick from retail.")),
                 ("fellow_busy_no_recruit", new Property<bool>(true, "if FALSE, fellows can be recruited while they are busy, different from retail")),
                 ("fellow_kt_killer", new Property<bool>(true, "if FALSE, fellowship kill tasks will share with the fellowship, even if the killer doesn't have the quest")),
@@ -612,7 +613,7 @@ namespace ACE.Server.Managers
                 ("vendor_shop_uses_generator", new Property<bool>(false, "enables or disables vendors using generator system in addition to createlist to create artificial scarcity")),
                 ("world_closed", new Property<bool>(false, "enable this to startup world as a closed to players world"))
                 );
-
+        
         public static readonly ReadOnlyDictionary<string, Property<long>> DefaultLongProperties =
             DictOf(
                 ("action_queue_discord_max_alerts_per_minute", new Property<long>(3, "ActionQueue tracking: Maximum number of Discord alerts per minute to prevent API throttling. 0 = disable Discord alerts.")),
@@ -684,7 +685,17 @@ namespace ACE.Server.Managers
                 ("vitae_penalty", new Property<double>(0.05, "the amount of vitae penalty a player gets per death")),
                 ("vitae_penalty_max", new Property<double>(0.40, "the maximum vitae penalty a player can have")),
                 ("void_pvp_modifier", new Property<double>(0.5, "Scales the amount of damage players take from Void Magic. Defaults to 0.5, as per retail. For earlier content where DRR isn't as readily available, this can be adjusted for balance.")),
-                ("xp_modifier", new Property<double>(1.0, "scales the amount of xp received by players"))
+                ("xp_modifier", new Property<double>(1.0, "scales the amount of xp received by players")),
+                ("melee/missile_aug_crit_modifier", new Property<double>(0.002, "the maximum crit damage bonus from melee and missile augs")),
+                ("finesse_attribute_multiplier", new Property<double>(1.5, "the multiplier applied to coordination for calculating finesse weapons attribute damage modifiers")),
+                ("light_attribute_multiplier", new Property<double>(1.0, "the multiplier applied to strength for calculating light weapons attribute damage modifiers")),
+                ("heavy_attribute_multiplier", new Property<double>(1.0, "the multiplier applied to strength for calculating heavy weapons attribute damage modifiers")),
+                ("twohanded_attribute_multiplier", new Property<double>(0.8, "the multiplier applied to strength for calculating two handed weapons attribute damage modifiers")),
+                ("missile_attribute_multiplier", new Property<double>(1.0, "the multiplier applied to coordination for calculating missile weapons attribute damage modifiers")),
+                ("new_life_aug_curve_pct", new Property<double>(0.0, "a value between 0 and 1 representing the amount of the new curve to apply. 0 means the old curve will be used, 1 means the new curve will be used, and 0.5 means the midpoint between the curves will be used.")),
+                ("life_aug_prot_tuning_constant", new Property<double>(0.0034597, "the tuning constant r used in the  (1.0 - (1.0 - r)^a) life aug scaling formula - controls the size of step for each augmentation, relative to remaining cap (0.0034597 means every 200 augs halves the remaining bonus)")),
+                ("life_aug_prot_max_bonus", new Property<double>(0.32, "the maximum bonus that the life aug scaling can approach at infinite augs - T8 protection spells provide 68% base, so a bonus above 32% makes it possible to achieve full protection"))
+
                 );
 
         public static readonly ReadOnlyDictionary<string, Property<string>> DefaultStringProperties =

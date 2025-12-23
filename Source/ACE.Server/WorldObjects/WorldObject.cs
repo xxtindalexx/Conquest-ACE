@@ -137,13 +137,13 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Initializes a new default physics object
         /// </summary>
-        public virtual void InitPhysicsObj()
+        public virtual void InitPhysicsObj(int? VariationId)
         {
             //Console.WriteLine($"InitPhysicsObj({Name} - {Guid})");
 
             var defaultState = CalculatedPhysicsState();
 
-            if (!(this is Creature))
+            if (this is not Creature)
             {
                 var isDynamic = Static == null || !Static.Value;
                 var setupTableId = SetupTableId;
@@ -161,7 +161,7 @@ namespace ACE.Server.WorldObjects
             }
             else
             {
-                PhysicsObj = new PhysicsObj();
+                PhysicsObj = new PhysicsObj(VariationId);
                 PhysicsObj.makeAnimObject(SetupTableId, true);
             }
 
@@ -181,7 +181,7 @@ namespace ACE.Server.WorldObjects
                 PhysicsObj.Velocity = new Vector3(0, 0, 0.5f);
         }
 
-        public bool AddPhysicsObj()
+        public bool AddPhysicsObj(int? VariationId)
         {
             if (PhysicsObj.CurCell != null)
                 return false;
@@ -191,7 +191,7 @@ namespace ACE.Server.WorldObjects
             // exclude linkspots from spawning
             if (WeenieClassId == 10762) return true;
 
-            var cell = LScape.get_landcell(Location.Cell);
+            var cell = LScape.get_landcell(Location.Cell, VariationId);
             if (cell == null)
             {
                 PhysicsObj.DestroyObject();
@@ -205,6 +205,8 @@ namespace ACE.Server.WorldObjects
             location.ObjCellID = cell.ID;
             location.Frame.Origin = Location.Pos;
             location.Frame.Orientation = Location.Rotation;
+            location.Variation = VariationId;
+            //Console.WriteLine($"PhysicsObj {Name} Location.Variation: {Location.Variation}");
 
             var success = PhysicsObj.enter_world(location);
 
@@ -212,16 +214,35 @@ namespace ACE.Server.WorldObjects
             {
                 PhysicsObj.DestroyObject();
                 PhysicsObj = null;
-                //Console.WriteLine($"AddPhysicsObj: failure: {Name} @ {cell.ID.ToString("X8")} - {Location.Pos} - {Location.Rotation} - SetupID: {SetupTableId.ToString("X8")}, MTableID: {MotionTableId.ToString("X8")}");
+                //Console.WriteLine($"AddPhysicsObj: failure: {Name} @ {cell.ID.ToString("X8")} - {Location.Pos} - {Location.Rotation} - lv: {Location.Variation}, v: {VariationId} - SetupID: {SetupTableId.ToString("X8")}, MTableID: {MotionTableId.ToString("X8")}");
                 return false;
             }
 
             //Console.WriteLine($"AddPhysicsObj: success: {Name} ({Guid})");
-            SyncLocation();
+            SyncLocation(VariationId);
 
             SetPosition(PositionType.Home, new Position(Location));
 
             return true;
+        }
+
+        public void SyncLocation(int? Variation)
+        {
+            Location.LandblockId = new LandblockId(PhysicsObj.Position.ObjCellID, Variation);
+
+            // skip ObjCellID check when updating from physics
+            // TODO: update to newer version of ACE.Entity.Position
+            Location.PositionX = PhysicsObj.Position.Frame.Origin.X;
+            Location.PositionY = PhysicsObj.Position.Frame.Origin.Y;
+            Location.PositionZ = PhysicsObj.Position.Frame.Origin.Z;
+
+            Location.Rotation = PhysicsObj.Position.Frame.Orientation;
+            if (!PhysicsObj.Position.Variation.HasValue && Variation.HasValue)
+            {
+                PhysicsObj.Position.Variation = Variation;
+            }
+            Location.Variation = Variation ?? PhysicsObj.Position.Variation;
+
         }
 
         public void SyncLocation()
@@ -746,7 +767,7 @@ namespace ACE.Server.WorldObjects
         {
             if (pos == null) return false;
 
-            var landblock = LScape.get_landblock(pos.Cell);
+            var landblock = LScape.get_landblock(pos.Cell, pos.Variation);
             if (landblock == null || !landblock.HasDungeon) return false;
 
             var dungeonID = pos.Cell >> 16;
@@ -767,7 +788,7 @@ namespace ACE.Server.WorldObjects
         {
             if (pos == null) return false;
 
-            var landblock = LScape.get_landblock(pos.Cell);
+            var landblock = LScape.get_landblock(pos.Cell, pos.Variation);
             if (landblock == null || !landblock.HasDungeon) return false;
 
             var dungeonID = pos.Cell >> 16;
@@ -901,7 +922,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(1.0f);
-            actionChain.AddAction(this, () => Destroy(raiseNotifyOfDestructionEvent));
+            actionChain.AddAction(this, ActionType.WorldObject_Destroy, () => Destroy(raiseNotifyOfDestructionEvent));
             actionChain.EnqueueChain();
         }
 
@@ -951,7 +972,7 @@ namespace ACE.Server.WorldObjects
                 motionInterp.apply_raw_movement(true, true);
             }
 
-            if (persist && PropertyManager.GetBool("persist_movement").Item)
+            if (persist && PropertyManager.GetBool("persist_movement"))
                 motion.Persist(CurrentMotionState);
 
             // hardcoded ready?
@@ -974,7 +995,7 @@ namespace ACE.Server.WorldObjects
         {
             var motion = new Motion(stance);
 
-            if (PropertyManager.GetBool("persist_movement").Item)
+            if (PropertyManager.GetBool("persist_movement"))
                 motion.Persist(CurrentMotionState);
 
             CurrentMotionState = motion;

@@ -1,9 +1,9 @@
-using System;
-
 using ACE.Common.Extensions;
+using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
+using System;
 
 namespace ACE.Server.Network.GameAction.Actions
 {
@@ -41,6 +41,7 @@ namespace ACE.Server.Network.GameAction.Actions
                         }
 
                         PlayerManager.BroadcastToChannel(groupChatType, session.Player, message, true);
+                        DiscordChatManager.SendDiscordMessage(session.Player.Name, message, ConfigManager.Config.Chat.AdminChannelId);
                     }
                     break;
                 case Channel.Audit:

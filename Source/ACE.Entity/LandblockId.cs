@@ -7,7 +7,6 @@ namespace ACE.Entity
     {
         public uint Raw { get; }
 
-        // CONQUEST: Dungeon Variations - allows creating multiple instances of the same dungeon
         public int? Variation_Id;
 
         public LandblockId(uint raw)
@@ -22,7 +21,6 @@ namespace ACE.Entity
             Variation_Id = null;
         }
 
-        // CONQUEST: Dungeon Variations - constructors with variation support
         public LandblockId(uint raw, int? variationId)
         {
             Raw = raw;

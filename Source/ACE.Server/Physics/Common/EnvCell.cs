@@ -1,36 +1,36 @@
+using ACE.Entity.Enum;
+using ACE.Server.Physics.Animation;
+using ACE.Server.Physics.BSP;
+using ACE.Server.Physics.Collision;
+using ACE.Server.Physics.Extensions;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-
-using ACE.Entity.Enum;
-using ACE.Server.Physics.BSP;
-using ACE.Server.Physics.Animation;
-using ACE.Server.Physics.Collision;
-using ACE.Server.Physics.Extensions;
 
 namespace ACE.Server.Physics.Common
 {
     public class EnvCell: ObjCell, IEquatable<EnvCell>
     {
-        public int NumSurfaces;
+        //public int NumSurfaces;
         //public List<Surface> Surfaces;
         public CellStruct CellStructure;
         public uint CellStructureID;
         //public Environment Env;
-        public int NumPortals;
+        //public int NumPortals;
         public List<DatLoader.Entity.CellPortal> Portals;
         public int NumStaticObjects;
         public List<uint> StaticObjectIDs;
         public List<AFrame> StaticObjectFrames;
         public List<PhysicsObj> StaticObjects;
-        public List<ushort> LightArray;
-        public int InCellTimestamp;
+        //public List<ushort> LightArray;
+        //public int InCellTimestamp;
         public List<ushort> VisibleCellIDs;
-        public new Dictionary<uint, EnvCell> VisibleCells;
-        public EnvCellFlags Flags;
+        public ConcurrentDictionary<uint, EnvCell> VisibleCells;
+        //public EnvCellFlags Flags;
         public uint EnvironmentID;
-        public DatLoader.FileTypes.EnvCell _envCell;
+        //public DatLoader.FileTypes.EnvCell _envCell;
         public DatLoader.FileTypes.Environment Environment;
 
         public EnvCell() : base()
@@ -38,16 +38,16 @@ namespace ACE.Server.Physics.Common
             Init();
         }
 
-        public EnvCell(DatLoader.FileTypes.EnvCell envCell): base()
+        public EnvCell(DatLoader.FileTypes.EnvCell envCell, int? Variation) : base()
         {
-            _envCell = envCell;
+            //_envCell = envCell;
 
-            Flags = envCell.Flags;
+           // Flags = envCell.Flags;
             ID = envCell.Id;
-            ShadowObjectIDs = envCell.Surfaces;
+            //ShadowObjectIDs = envCell.Surfaces;
             Pos = new Position(ID, new AFrame(envCell.Position));
             Portals = envCell.CellPortals;
-            NumPortals = Portals.Count;
+            //NumPortals = Portals.Count;
             StaticObjectIDs = new List<uint>();
             StaticObjectFrames = new List<AFrame>();
             NumStaticObjects = envCell.StaticObjects.Count;
@@ -56,7 +56,7 @@ namespace ACE.Server.Physics.Common
                 StaticObjectIDs.Add(staticObj.Id);
                 StaticObjectFrames.Add(new AFrame(staticObj.Frame));
             }
-            NumStabs = StaticObjectIDs.Count;
+            //NumStabs = StaticObjectIDs.Count;
             VisibleCellIDs = envCell.VisibleCells;
             RestrictionObj = envCell.RestrictionObj;
             SeenOutside = envCell.SeenOutside;
@@ -71,13 +71,13 @@ namespace ACE.Server.Physics.Common
             if (Environment?.Cells != null && Environment.Cells.TryGetValue(CellStructureID, out var cellStruct))
                 CellStructure = new CellStruct(cellStruct);
 
-            NumSurfaces = envCell.Surfaces.Count;
+            //NumSurfaces = envCell.Surfaces.Count;
         }
 
-        public void PostInit()
+        public void PostInit(int? variation)
         {
             build_visible_cells();
-            init_static_objects();
+            init_static_objects(variation);
         }
 
         public override TransitionState FindEnvCollisions(Transition transition)
@@ -114,15 +114,25 @@ namespace ACE.Server.Physics.Common
 
         public void build_visible_cells()
         {
-            VisibleCells = new Dictionary<uint, EnvCell>();
-
+            //if (VisibleCells != null && VisibleCellIDs != null && VisibleCells.Count == VisibleCellIDs.Count)
+            //{
+            //    return; // already built
+            //}
+            VisibleCells ??= new ConcurrentDictionary<uint, EnvCell>();
             foreach (var visibleCellID in VisibleCellIDs)
             {
                 var blockCellID = ID & 0xFFFF0000 | visibleCellID;
-                if (VisibleCells.ContainsKey(blockCellID)) continue;
-                var cell = (EnvCell)LScape.get_landcell(blockCellID);
-                VisibleCells.Add(visibleCellID, cell);
+                var cell = (EnvCell)LScape.get_landcell(blockCellID, this.Pos.Variation);
+                VisibleCells.TryAdd(visibleCellID, cell);
             }
+            //Parallel.ForEach(VisibleCellIDs, ConfigManager.Config.Server.Threading.LandblockManagerParallelOptions, visibleCellID =>
+            //{
+            //    var blockCellID = ID & 0xFFFF0000 | visibleCellID;                
+            //    var cell = (EnvCell)LScape.get_landcell(blockCellID, this.Pos.Variation);
+            //    VisibleCells.TryAdd(visibleCellID, cell);
+            //});
+
+            //Console.WriteLine($"CellID: {this.ID}, VisibleCells Count: {VisibleCells.Count}");
         }
 
         public void check_building_transit(ushort portalId, Position pos, int numSphere, List<Sphere> spheres, CellArray cellArray, SpherePath path)
@@ -219,7 +229,7 @@ namespace ACE.Server.Physics.Common
             return null;
         }
 
-        public new EnvCell GetVisible(uint cellID)
+        public EnvCell GetVisible(uint cellID)
         {
             EnvCell envCell = null;
             VisibleCells.TryGetValue(cellID, out envCell);
@@ -232,13 +242,13 @@ namespace ACE.Server.Physics.Common
             StaticObjectIDs = new List<uint>();
             StaticObjectFrames = new List<AFrame>();
             //StaticObjects = new List<PhysicsObj>();
-            VisibleCells = new Dictionary<uint, EnvCell>();
+            VisibleCells = new ConcurrentDictionary<uint, EnvCell>();
         }
 
-        public EnvCell add_visible_cell(uint cellID)
+        public EnvCell add_visible_cell(uint cellID, int? Variation)
         {
-            var envCell = DBObj.GetEnvCell(cellID);
-            VisibleCells.Add(cellID, envCell);
+            var envCell = DBObj.GetEnvCell(cellID, Variation);
+            VisibleCells.TryAdd(cellID, envCell);
             return envCell;
         }
 
@@ -370,14 +380,14 @@ namespace ACE.Server.Physics.Common
                 LandCell.add_all_outside_cells(position, numSphere, spheres, cellArray);
         }
 
-        public void init_static_objects()
+        public void init_static_objects(int? variation)
         {
             if (StaticObjects != null)
             {
                 foreach (var staticObj in StaticObjects)
                 {
                     if (!staticObj.is_completely_visible())
-                        staticObj.calc_cross_cells_static();
+                        staticObj.calc_cross_cells_static(variation);
                 }
             }
             else
@@ -388,7 +398,7 @@ namespace ACE.Server.Physics.Common
                 {
                     var staticObj = PhysicsObj.makeObject(StaticObjectIDs[i], 0, false);
                     staticObj.DatObject = true;
-                    staticObj.add_obj_to_cell(this, StaticObjectFrames[i]);
+                    staticObj.add_obj_to_cell(this, StaticObjectFrames[i], variation);
                     if (staticObj.CurCell == null)
                     {
                         //Console.WriteLine($"EnvCell {ID:X8}: failed to add {staticObj.ID:X8}");
@@ -403,17 +413,17 @@ namespace ACE.Server.Physics.Common
             }
         }
 
-        public static ObjCell get_visible(uint cellID)
+        public static ObjCell get_visible(uint cellID, int? variationId)
         {
-            var cell = (EnvCell)LScape.get_landcell(cellID);
+            var cell = (EnvCell)LScape.get_landcell(cellID, variationId);
             return cell.VisibleCells.Values.First();
         }
 
-        public void grab_visible(List<uint> stabs)
-        {
-            foreach (var stab in stabs)
-                add_visible_cell(stab);
-        }
+        ///public void grab_visible(List<uint> stabs)
+        //{
+        //    foreach (var stab in stabs)
+        //        add_visible_cell(stab);
+        //}
 
         public override bool point_in_cell(Vector3 point)
         {
@@ -421,11 +431,11 @@ namespace ACE.Server.Physics.Common
             return CellStructure.point_in_cell(localPoint);
         }
 
-        public void release_visible(List<uint> stabs)
-        {
-            foreach (var stab in stabs)
-                VisibleCells.Remove(stab);
-        }
+        //public void release_visible(List<uint> stabs)
+        //{
+        //    foreach (var stab in stabs)
+        //        VisibleCells.Remove(stab, out _);
+        //}
 
         public bool Equals(EnvCell envCell)
         {

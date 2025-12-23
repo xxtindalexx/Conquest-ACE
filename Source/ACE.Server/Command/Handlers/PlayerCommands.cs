@@ -34,7 +34,7 @@ namespace ACE.Server.Command.Handlers
         [CommandHandler("myquests", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows your quest log")]
         public static void HandleQuests(Session session, params string[] parameters)
         {
-            if (!PropertyManager.GetBool("quest_info_enabled").Item)
+            if (!PropertyManager.GetBool("quest_info_enabled"))
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("The command \"myquests\" is not currently enabled on this server.", ChatMessageType.Broadcast));
                 return;
@@ -61,7 +61,7 @@ namespace ACE.Server.Command.Handlers
 
                 var minDelta = quest.MinDelta;
                 if (QuestManager.CanScaleQuestMinDelta(quest))
-                    minDelta = (uint)(quest.MinDelta * PropertyManager.GetDouble("quest_mindelta_rate").Item);
+                    minDelta = (uint)(quest.MinDelta * PropertyManager.GetDouble("quest_mindelta_rate"));
 
                 text += $"{playerQuest.QuestName.ToLower()} - {playerQuest.NumTimesCompleted} solves ({playerQuest.LastTimeCompleted})";
                 text += $"\"{quest.Message}\" {quest.MaxSolves} {minDelta}";
@@ -70,27 +70,25 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        [CommandHandler("aug", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your luminance augmentation levels")]
+        [CommandHandler("aug", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your advanced augmentation levels")]
         public static void HandleAugmentations(Session session, params string[] parameters)
         {
             var player = session.Player;
 
-            session.Network.EnqueueSend(new GameMessageSystemChat("=== Luminance Augmentation Levels ===", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Damage Rating: {player.LumAugDamageRating}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Damage Reduction Rating: {player.LumAugDamageReductionRating}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Critical Damage Rating: {player.LumAugCritDamageRating}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Critical Reduction Rating: {player.LumAugCritReductionRating}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Surge Chance Rating: {player.LumAugSurgeChanceRating}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Healing Rating: {player.LumAugHealingRating}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Item Mana Usage: {player.LumAugItemManaUsage}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Item Mana Gain: {player.LumAugItemManaGain}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Vitality: {player.LumAugVitality}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"All Skills: {player.LumAugAllSkills}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Skilled Craft: {player.LumAugSkilledCraft}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Skilled Spec: {player.LumAugSkilledSpec}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"---------------------------", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Advanced Augmentation Levels:", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Creature:{session.Player.LuminanceAugmentCreatureCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Item:{session.Player.LuminanceAugmentItemCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Life:{session.Player.LuminanceAugmentLifeCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"War:{session.Player.LuminanceAugmentWarCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Void:{session.Player.LuminanceAugmentVoidCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Duration: {session.Player.LuminanceAugmentSpellDurationCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Specialization: {session.Player.LuminanceAugmentSpecializeCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Melee: {session.Player.LuminanceAugmentMeleeCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Missile: {session.Player.LuminanceAugmentMissileCount:N0}", ChatMessageType.Broadcast));
         }
 
-        [CommandHandler("augs", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your luminance augmentation levels")]
+        [CommandHandler("augs", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your advanced augmentation levels")]
         public static void HandleAugmentations2(Session session, params string[] parameters)
         {
             HandleAugmentations(session, parameters);
@@ -101,7 +99,6 @@ namespace ACE.Server.Command.Handlers
         {
             var player = session.Player;
             var questCount = player.QuestCompletionCount ?? 0;
-
             session.Network.EnqueueSend(new GameMessageSystemChat("=== Quest Bonus (QB) ===", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Total Quests Completed: {questCount:N0}", ChatMessageType.Broadcast));
         }
@@ -156,19 +153,19 @@ namespace ACE.Server.Command.Handlers
             HandleEnlighten(session, parameters);
         }
 
-        [CommandHandler("top", AccessLevel.Player, CommandHandlerFlag.None, "Show current leaderboards", "use /top qb, /top level, /top enl, /top bank, or /top lum")]
+        [CommandHandler("top", AccessLevel.Player, CommandHandlerFlag.None, "Show current leaderboards", "use /top qb, /top level, /top enl, /top bank, /top lum, /top augs, /top deaths, or /top titles")]
         public static async void HandleTop(Session session, params string[] parameters)
         {
             if (parameters.Length < 1)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("[TOP] Specify a leaderboard: /top qb, /top level, /top enl, /top bank, or /top lum", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("[TOP] Specify a leaderboard: /top qb, /top level, /top enl, /top bank, /top lum, /top augs, /top deaths, or /top titles", ChatMessageType.Broadcast));
                 return;
             }
 
             // Rate limit check for /top qb command
             if (parameters[0]?.ToLower() == "qb")
             {
-                var qbCommandLimit = PropertyManager.GetLong("qb_command_limit").Item;
+                var qbCommandLimit = PropertyManager.GetLong("qb_command_limit");
                 var timeSinceLastCommand = DateTime.UtcNow - session.LastQBCommandTime;
                 if (timeSinceLastCommand.TotalSeconds < qbCommandLimit)
                 {
@@ -192,7 +189,7 @@ namespace ACE.Server.Command.Handlers
                         list = await cache.GetTopQBAsync(context);
                         if (list.Count > 0)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 50 Players by Quest Bonus:", ChatMessageType.Broadcast));
+                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Quest Bonus:", ChatMessageType.Broadcast));
                         }
                         break;
 
@@ -200,7 +197,7 @@ namespace ACE.Server.Command.Handlers
                         list = await cache.GetTopLevelAsync(context);
                         if (list.Count > 0)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 50 Players by Level:", ChatMessageType.Broadcast));
+                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Level:", ChatMessageType.Broadcast));
                         }
                         break;
 
@@ -209,7 +206,7 @@ namespace ACE.Server.Command.Handlers
                         list = await cache.GetTopEnlAsync(context);
                         if (list.Count > 0)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 50 Players by Enlightenment:", ChatMessageType.Broadcast));
+                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Enlightenment:", ChatMessageType.Broadcast));
                         }
                         break;
 
@@ -217,7 +214,7 @@ namespace ACE.Server.Command.Handlers
                         list = await cache.GetTopBankAsync(context);
                         if (list.Count > 0)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 50 Players by Banked Pyreals:", ChatMessageType.Broadcast));
+                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Banked Pyreals:", ChatMessageType.Broadcast));
                         }
                         break;
 
@@ -226,7 +223,35 @@ namespace ACE.Server.Command.Handlers
                         list = await cache.GetTopLumAsync(context);
                         if (list.Count > 0)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 50 Players by Banked Luminance:", ChatMessageType.Broadcast));
+                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Banked Luminance:", ChatMessageType.Broadcast));
+                        }
+                        break;
+
+                    case "augs":
+                    case "aug":
+                    case "augmentations":
+                        list = await cache.GetTopAugsAsync(context);
+                        if (list.Count > 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Total Augmentations:", ChatMessageType.Broadcast));
+                        }
+                        break;
+
+                    case "deaths":
+                    case "death":
+                        list = await cache.GetTopDeathsAsync(context);
+                        if (list.Count > 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Death Count:", ChatMessageType.Broadcast));
+                        }
+                        break;
+
+                    case "titles":
+                    case "title":
+                        list = await cache.GetTopTitlesAsync(context);
+                        if (list.Count > 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Title Count:", ChatMessageType.Broadcast));
                         }
                         break;
 
@@ -275,19 +300,19 @@ namespace ACE.Server.Command.Handlers
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"---------------------------", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Bank Commands:", ChatMessageType.System));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit (or /b d) - Deposit all pyreals, luminance, and event tokens", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit (or /b d) - Deposit all Pyreals, Luminance, Conquest Coins, Soul Fragments, and Event Tokens", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit pyreals 100 (or /b d p 100) - Deposit specific amount", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw pyreals 100 (or /b w p 100) - Withdraw 100 pyreals", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank transfer pyreals 100 CharName - Transfer 100 pyreals to CharName", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank balance (or /b b) - View your bank balance", ChatMessageType.System));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: pyreals (p), luminance (l), eventtokens (e)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s) Eventtokens (e)", ChatMessageType.System));
                 return;
             }
 
             // Rate limit check (only for deposit/withdraw/transfer, not for balance or help)
             if (parameters[0] == "deposit" || parameters[0] == "d" || parameters[0] == "withdraw" || parameters[0] == "w" || parameters[0] == "transfer" || parameters[0] == "t")
             {
-                var bankCommandLimit = PropertyManager.GetLong("bank_command_limit").Item;
+                var bankCommandLimit = PropertyManager.GetLong("bank_command_limit");
                 var timeSinceLastCommand = DateTime.UtcNow - session.LastBankCommandTime;
                 if (timeSinceLastCommand.TotalSeconds < bankCommandLimit)
                 {
@@ -302,6 +327,8 @@ namespace ACE.Server.Command.Handlers
             if (session.Player.BankedPyreals < 0) session.Player.BankedPyreals = 0;
             if (session.Player.BankedLuminance < 0) session.Player.BankedLuminance = 0;
             if (session.Player.EventTokens < 0) session.Player.EventTokens = 0;
+            if (session.Player.ConquestCoins < 0) session.Player.ConquestCoins = 0;
+            if (session.Player.SoulFragments < 0) session.Player.SoulFragments = 0;
 
             int iType = 0; // 0=all, 1=pyreals, 2=luminance, 3=eventtokens
             long amount = -1;
@@ -309,9 +336,11 @@ namespace ACE.Server.Command.Handlers
 
             if (parameters.Length >= 2)
             {
-                if (parameters[1] == "pyreals" || parameters[1] == "p") iType = 1;
-                else if (parameters[1] == "luminance" || parameters[1] == "l") iType = 2;
-                else if (parameters[1] == "eventtokens" || parameters[1] == "e") iType = 3;
+                if (parameters[1] == "Pyreals" || parameters[1] == "p") iType = 1;
+                else if (parameters[1] == "Luminance" || parameters[1] == "l") iType = 2;
+                else if (parameters[1] == "Eventtokens" || parameters[1] == "e") iType = 3;
+                else if (parameters[1] == "ConquestCoins" || parameters[1] == "c") iType = 4;
+                else if (parameters[1] == "SoulFragments" || parameters[1] == "s") iType = 5;
             }
 
             if (parameters.Length == 3 || parameters.Length == 4)
@@ -349,7 +378,9 @@ namespace ACE.Server.Command.Handlers
                     session.Player.DepositPeas();
                     session.Player.DepositLuminance();
                     session.Player.DepositEventTokens();
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all Pyreals, Trade Notes, Peas, Luminance, and Event Tokens!", ChatMessageType.System));
+                    session.Player.DepositConquestCoins();
+                    session.Player.DepositSoulFragments();
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all Pyreals, Trade Notes, Peas, Luminance, Conquest Coins, Soul Fragments, and Event Tokens!", ChatMessageType.System));
                 }
                 else
                 {
@@ -376,6 +407,14 @@ namespace ACE.Server.Command.Handlers
                         case 3: // Event Tokens
                             session.Player.DepositEventTokens();
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all event tokens!", ChatMessageType.System));
+                            break;
+                        case 4: // Conquest Coins
+                            session.Player.DepositConquestCoins();
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all conquest coins!", ChatMessageType.System));
+                            break;
+                        case 5: // Soul Fragments
+                            session.Player.DepositSoulFragments();
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all soul fragments!", ChatMessageType.System));
                             break;
                     }
                 }
@@ -430,6 +469,32 @@ namespace ACE.Server.Command.Handlers
                         }
                         session.Player.WithdrawEventTokens(amount);
                         break;
+                    case 4: // Withdraw conquest coins
+                        if (session.Player.ConquestCoins != null && amount > session.Player.ConquestCoins)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked conquest coins.", ChatMessageType.System));
+                            break;
+                        }
+                        if (amount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to withdraw.", ChatMessageType.System));
+                            break;
+                        }
+                        session.Player.WithdrawConquestCoins(amount);
+                        break;
+                    case 5: // Withdraw event tokens
+                        if (session.Player.SoulFragments != null && amount > session.Player.SoulFragments)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked soul fragments.", ChatMessageType.System));
+                            break;
+                        }
+                        if (amount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to withdraw.", ChatMessageType.System));
+                            break;
+                        }
+                        session.Player.WithdrawSoulFragments(amount);
+                        break;
                 }
             }
 
@@ -455,11 +520,7 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to transfer.", ChatMessageType.System));
                             break;
                         }
-                        if (session.Player.TransferPyreals(amount, transferTargetName))
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {amount:N0} Pyreal to {transferTargetName}", ChatMessageType.System));
-                        }
-                        else
+                        if (!session.Player.TransferPyreals(amount, transferTargetName))
                         {
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Pyreals to {transferTargetName}", ChatMessageType.System));
                         }
@@ -475,11 +536,7 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to transfer.", ChatMessageType.System));
                             break;
                         }
-                        if (session.Player.TransferLuminance(amount, transferTargetName))
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {amount:N0} Luminance to {transferTargetName}", ChatMessageType.System));
-                        }
-                        else
+                        if (!session.Player.TransferLuminance(amount, transferTargetName))
                         {
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Luminance to {transferTargetName}", ChatMessageType.System));
                         }
@@ -495,11 +552,7 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to transfer.", ChatMessageType.System));
                             break;
                         }
-                        if (session.Player.TransferEventTokens(amount, transferTargetName))
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {amount:N0} Event Tokens to {transferTargetName}", ChatMessageType.System));
-                        }
-                        else
+                        if (!session.Player.TransferEventTokens(amount, transferTargetName))
                         {
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Event Tokens to {transferTargetName}", ChatMessageType.System));
                         }
@@ -620,7 +673,7 @@ namespace ACE.Server.Command.Handlers
                 // Check PK timer (cannot turn off during/after recent PK combat)
                 if (session.Player.PKTimerActive)
                 {
-                    var pkTimer = PropertyManager.GetLong("pk_timer").Item;
+                    var pkTimer = PropertyManager.GetLong("pk_timer");
                     session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot disable PK status while your PK timer is active (lasts {pkTimer} seconds after PK combat).", ChatMessageType.Broadcast));
                     return;
                 }
@@ -708,7 +761,7 @@ namespace ACE.Server.Command.Handlers
             // update house panel for current player
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(3.0f);  // wait for slumlord inventory biotas above to save
-            actionChain.AddAction(session.Player, session.Player.HandleActionQueryHouse);
+            actionChain.AddAction(session.Player, ActionType.PlayerHouse_HandleActionQueryHouse, session.Player.HandleActionQueryHouse);
             actionChain.EnqueueChain();
 
             Console.WriteLine("OK");
@@ -845,7 +898,7 @@ namespace ACE.Server.Command.Handlers
         [CommandHandler("config", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 1, "Manually sets a character option on the server.\nUse /config list to see a list of settings.", "<setting> <on/off>")]
         public static void HandleConfig(Session session, params string[] parameters)
         {
-            if (!PropertyManager.GetBool("player_config_command").Item)
+            if (!PropertyManager.GetBool("player_config_command"))
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("The command \"config\" is not currently enabled on this server.", ChatMessageType.Broadcast));
                 return;
@@ -936,7 +989,7 @@ namespace ACE.Server.Command.Handlers
         [CommandHandler("aceversion", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows this server's version data")]
         public static void HandleACEversion(Session session, params string[] parameters)
         {
-            if (!PropertyManager.GetBool("version_info_enabled").Item)
+            if (!PropertyManager.GetBool("version_info_enabled"))
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("The command \"aceversion\" is not currently enabled on this server.", ChatMessageType.Broadcast));
                 return;
@@ -973,7 +1026,7 @@ namespace ACE.Server.Command.Handlers
             )]
         public static void HandleReportbug(Session session, params string[] parameters)
         {
-            if (!PropertyManager.GetBool("reportbug_enabled").Item)
+            if (!PropertyManager.GetBool("reportbug_enabled"))
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("The command \"reportbug\" is not currently enabled on this server.", ChatMessageType.Broadcast));
                 return;

@@ -1,12 +1,12 @@
+using ACE.Common;
+using ACE.DatLoader;
+using ACE.DatLoader.FileTypes;
+using ACE.Entity.Enum;
+using ACE.Server.Physics.Entity;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
-
-using ACE.Entity.Enum;
-using ACE.DatLoader;
-using ACE.DatLoader.FileTypes;
-using ACE.Server.Physics.Entity;
 
 namespace ACE.Server.Physics.Common
 {
@@ -14,6 +14,7 @@ namespace ACE.Server.Physics.Common
     {
         public uint ID;
         //public Vector3 VertexLighting;    // RGBColor
+        public int? VariationId { get; set; }
         public LandDefs.Direction TransDir;
         public int SideVertexCount;
         public int SidePolyCount;
@@ -26,7 +27,7 @@ namespace ACE.Server.Physics.Common
         //public List<int> SurfaceStrips;     // SurfaceTriStrips
         //public int BlockSurfaceIndex;
         public readonly object LandCellMutex = new object();
-        public ConcurrentDictionary<int, ObjCell> LandCells;
+        public ConcurrentDictionary<VariantCacheId, ObjCell> LandCells;
         public List<bool> SWtoNEcut { get; set; }
 
         // client-only
@@ -44,20 +45,22 @@ namespace ACE.Server.Physics.Common
 
         static LandblockStruct()
         {
-            LandUVs = new List<Vector2>(4);
-            LandUVs.AddRange(new List<Vector2>()
-            {
-                new Vector2(0, 1),
-                new Vector2(1, 1),
-                new Vector2(1, 0),
-                new Vector2(0, 0)
-            });
+            //LandUVs = new List<Vector2>(4);
+            //LandUVs.AddRange(new List<Vector2>()
+            //{
+            //    new Vector2(0, 1),
+            //    new Vector2(1, 1),
+            //    new Vector2(1, 0),
+            //    new Vector2(0, 0)
+            //});
 
-            LandUVsRotated = new Dictionary<byte, List<Vector2>>();
-            LandUVsRotated.Add(0, new List<Vector2>() { LandUVs[0], LandUVs[1], LandUVs[2], LandUVs[3] });
-            LandUVsRotated.Add(1, new List<Vector2>() { LandUVs[3], LandUVs[0], LandUVs[1], LandUVs[2] });
-            LandUVsRotated.Add(2, new List<Vector2>() { LandUVs[2], LandUVs[3], LandUVs[0], LandUVs[1] });
-            LandUVsRotated.Add(3, new List<Vector2>() { LandUVs[1], LandUVs[2], LandUVs[3], LandUVs[0] });
+            //LandUVsRotated = new Dictionary<byte, List<Vector2>>
+            //{
+            //    { 0, new List<Vector2>() { LandUVs[0], LandUVs[1], LandUVs[2], LandUVs[3] } },
+            //    { 1, new List<Vector2>() { LandUVs[3], LandUVs[0], LandUVs[1], LandUVs[2] } },
+            //    { 2, new List<Vector2>() { LandUVs[2], LandUVs[3], LandUVs[0], LandUVs[1] } },
+            //    { 3, new List<Vector2>() { LandUVs[1], LandUVs[2], LandUVs[3], LandUVs[0] } }
+            //};
 
             SurfChar = new List<ushort>()
             {
@@ -67,20 +70,20 @@ namespace ACE.Server.Physics.Common
                 0, 0, 0, 0, 0, 0, 0, 0
             };
 
-            SW_Corner = new List<byte>() { 0, 3, 2, 1 };
-            SE_Corner = new List<byte>() { 1, 0, 3, 2 };
-            NE_Corner = new List<byte>() { 2, 1, 0, 3 };
-            NW_Corner = new List<byte>() { 3, 2, 1, 0 };
+            //SW_Corner = new List<byte>() { 0, 3, 2, 1 };
+            //SE_Corner = new List<byte>() { 1, 0, 3, 2 };
+            //NE_Corner = new List<byte>() { 2, 1, 0, 3 };
+            //NW_Corner = new List<byte>() { 3, 2, 1, 0 };
         }
 
-        public LandblockStruct()
+        public LandblockStruct(int? variationId)
         {
-            Init();
+            Init(variationId);
         }
 
-        public LandblockStruct(CellLandblock landblock)
+        public LandblockStruct(CellLandblock landblock, int? variationId)
         {
-            Init();
+            Init(variationId);
             Height = landblock.Height;
             Terrain = landblock.Terrain;
             // originally called from LScape.update_block()
@@ -155,22 +158,25 @@ namespace ACE.Server.Physics.Common
                     {
                         bool cellHasWater, cellFullyFlooded;
                         CalcCellWater(x, y, out cellHasWater, out cellFullyFlooded);
-
+                        var cacheKey = new VariantCacheId { Landblock = (ushort)(x * SideCellCount + y), Variant = VariationId ?? 0 };
                         if (cellHasWater)
                         {
                             hasWater = true;
 
                             if (cellFullyFlooded)
-                                LandCells[x * SideCellCount + y].WaterType = LandDefs.WaterType.EntirelyWater;
+                            {
+
+                                LandCells[cacheKey].WaterType = LandDefs.WaterType.EntirelyWater;
+                            }
                             else
                             {
-                                LandCells[x * SideCellCount + y].WaterType = LandDefs.WaterType.PartiallyWater;
+                                LandCells[cacheKey].WaterType = LandDefs.WaterType.PartiallyWater;
                                 waterblock = false;
                             }
                         }
                         else
                         {
-                            LandCells[x * SideCellCount + y].WaterType = LandDefs.WaterType.NotWater;
+                            LandCells[cacheKey].WaterType = LandDefs.WaterType.NotWater;
                             waterblock = false;
                         }
                     }
@@ -200,7 +206,8 @@ namespace ACE.Server.Physics.Common
                     var lcoordY = (int)lcoord.Y + y;
                     var magicB = seedB;
                     var magicA = seedA + 1813693831;
-
+                    var cellIdx = x * SideCellCount + y;
+                    VariantCacheId cacheKey = new VariantCacheId { Landblock = (ushort)cellIdx, Variant = VariationId ?? 0 };
                     for (var i = 0; i < LandDefs.VertexPerCell; i++)
                     {
                         var idxI = vertexCnt + i;
@@ -210,20 +217,18 @@ namespace ACE.Server.Physics.Common
                         {
                             var splitDir = (uint)(((int)lcoord.Y * LandDefs.VertexPerCell + idxJ) * magicA - magicB - 1369149221);
                             var polyIdx = (LandDefs.VertexPerCell * i + j) * 2;
-
-                            var cellIdx = x * SideCellCount + y;
                             var vertIdx = idxI * SideVertexCount + idxJ;
                             var firstVertex = (idxI * SidePolyCount + idxJ) * 2;
                             var nextVertIdx = (idxI + 1) * SideVertexCount + idxJ;
 
-                            var lcell = (LandCell)LandCells[cellIdx];
+                            var lcell = (LandCell)LandCells[cacheKey];
 
                             if (splitDir * 2.3283064e-10 < 0.5f)
                             {
-                                 //  2    1---0
-                                 //  | \   \  |
-                                 //  |  \   \ |
-                                 //  0---1    2
+                                //  2    1---0
+                                //  | \   \  |
+                                //  |  \   \ |
+                                //  0---1    2
 
                                 SWtoNEcut[cellIdx] = false;
 
@@ -249,7 +254,7 @@ namespace ACE.Server.Physics.Common
                     }
 
                     var cellID = (uint)LandDefs.lcoord_to_gid(lcoordX, lcoordY);
-                    var landCell = LandCells[x * SideCellCount + y];
+                    var landCell = LandCells[cacheKey];
                     landCell.ID = cellID;
                     landCell.Pos.ObjCellID = cellID;
                     landCell.Pos.Frame.Origin.X = originX * LandDefs.HalfSquareLength;
@@ -473,15 +478,15 @@ namespace ACE.Server.Physics.Common
             //return (uint)(sizeBits + t4 + 32 * (t3 + 32 * (t2 + 32 * (t1 + 32 * (r4 + 4 * (r3 + 4 * (r2 + 4 * r1)))))));
         }
 
-        public void Init()
+        public void Init(int? variationId)
         {
             TransDir = LandDefs.Direction.Unknown;
             WaterType = LandDefs.WaterType.NotWater;
             //BlockSurfaceIndex = -1;
 
             // init for landcell
-            LandCells = new ConcurrentDictionary<int, ObjCell>();
-            for (uint i = 1; i <= 64; i++) LandCells.TryAdd((int)i, new LandCell((i)));
+            LandCells = new ConcurrentDictionary<VariantCacheId, ObjCell>();
+            for (uint i = 1; i <= 64; i++) LandCells.TryAdd(new VariantCacheId { Landblock = (ushort)i, Variant = variationId ?? 0 }, new LandCell((i)));
         }
 
         /// <summary>
@@ -506,9 +511,9 @@ namespace ACE.Server.Physics.Common
             for (var i = 0; i < numSquares; i++)
                 SWtoNEcut.Add(false);
 
-            LandCells = new ConcurrentDictionary<int, ObjCell>(1, numCells);
+            LandCells = new ConcurrentDictionary<VariantCacheId, ObjCell>(1, numCells);
             for (uint i = 0; i < numCells; i++)
-                LandCells.TryAdd((int)i, new LandCell((ID & LandDefs.BlockMask) + i));
+                LandCells.TryAdd(new VariantCacheId { Landblock = (ushort)i, Variant = VariationId ?? 0 }, new LandCell((ID & LandDefs.BlockMask) + i));
         }
 
         /// <summary>

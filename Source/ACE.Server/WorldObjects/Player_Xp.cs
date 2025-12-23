@@ -1,6 +1,3 @@
-using System;
-using System.Linq;
-
 using ACE.Common.Extensions;
 using ACE.DatLoader;
 using ACE.Entity.Enum;
@@ -9,6 +6,8 @@ using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
+using System;
+using System.Linq;
 
 namespace ACE.Server.WorldObjects
 {
@@ -30,8 +29,8 @@ namespace ACE.Server.WorldObjects
             //Console.WriteLine($"{Name}.EarnXP({amount}, {sharable}, {fixedAmount})");
 
             // apply xp modifiers.  Quest XP is multiplicative with general XP modification
-            var questModifier = PropertyManager.GetDouble("quest_xp_modifier").Item;
-            var modifier = PropertyManager.GetDouble("xp_modifier").Item;
+            var questModifier = PropertyManager.GetDouble("quest_xp_modifier");
+            var modifier = PropertyManager.GetDouble("xp_modifier");
             if (xpType == XpType.Quest)
                 modifier *= questModifier;
 
@@ -48,9 +47,26 @@ namespace ACE.Server.WorldObjects
 
             if (m_amount < 0)
             {
-                log.Warn($"{Name}.EarnXP({amount}, {shareType})");
-                log.Warn($"modifier: {modifier}, enchantment: {enchantment}, m_amount: {m_amount}");
+                Console.WriteLine($"{Name}.EarnXP({amount}, {shareType})");
+                Console.WriteLine($"modifier: {modifier}, enchantment: {enchantment}, m_amount: {m_amount}");
                 return;
+            }
+
+            // DEBUG: Show XP breakdown for testing
+            if (xpType == XpType.Kill || xpType == XpType.Quest)
+            {
+                var bonusXP = m_amount - amount;
+                var questBonusPercent = (questBonus - 1.0) * 100;
+                var pkBonusPercent = (pkDungeonBonus - 1.0) * 100;
+
+                // Separate enlightenment and equipment bonuses
+                var enlightenmentBonusPercent = Enlightenment * 1.0; // +1% per enlightenment level
+                var equipmentBonusPercent = EnchantmentManager.GetXPBonus() * 100; // Equipment XP bonus
+
+                Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"XP Breakdown: {amount:N0} base → {m_amount:N0} total (+{bonusXP:N0} bonus)\n" +
+                    $"Modifiers: Quest {questBonusPercent:F2}% | PK Dungeon {pkBonusPercent:F0}% | Enlightenment {enlightenmentBonusPercent:F0}% | Equipment {equipmentBonusPercent:F0}%",
+                    ChatMessageType.Broadcast));
             }
 
             GrantXP(m_amount, xpType, shareType);
@@ -81,7 +97,7 @@ namespace ACE.Server.WorldObjects
             }
 
             // Make sure UpdateXpAndLevel is done on this players thread
-            EnqueueAction(new ActionEventDelegate(() => UpdateXpAndLevel(amount, xpType)));
+            EnqueueAction(new ActionEventDelegate(ActionType.PlayerXp_UpdateXpAndLevel, () => UpdateXpAndLevel(amount, xpType)));
 
             // for passing XP up the allegiance chain,
             // this function is only called at the very beginning, to start the process.
@@ -104,23 +120,22 @@ namespace ACE.Server.WorldObjects
             var maxLevel = GetMaxLevel();
             // CONQUEST: Use dynamic XP calculation for level 300 instead of retail max (275)
             // Use Math.Ceiling to round up (avoid truncation issues with fractional XP)
-            var maxLevelXp = (long)Math.Ceiling(GenerateDynamicLevelPostMax(maxLevel));
+            var maxLevelXp = (long)Math.Ceiling(GenerateDynamicLevelPostMax((int?)maxLevel));
 
             if (Level != maxLevel)
             {
                 var addAmount = amount;
 
                 var amountLeftToEnd = (long)maxLevelXp - (TotalExperience ?? 0);
-
                 if (amount > amountLeftToEnd)
                     addAmount = amountLeftToEnd;
 
-                if (Level >= 299)
+               /* if (Level >= 299)
                 {
                     Console.WriteLine($"[XP GRANT DEBUG] Level {Level}: Granting {amount:N0} XP");
                     Console.WriteLine($"[XP GRANT DEBUG] TotalXP={TotalExperience:N0}, MaxLevelXP={maxLevelXp:N0}, AmountLeftToEnd={amountLeftToEnd:N0}");
                     Console.WriteLine($"[XP GRANT DEBUG] Final addAmount={addAmount:N0} XP");
-                }
+                }*/
 
                 AvailableExperience += addAmount;
                 TotalExperience += addAmount;
@@ -191,7 +206,7 @@ namespace ACE.Server.WorldObjects
             {
                 var actionChain = new ActionChain();
                 actionChain.AddDelaySeconds(2.0f);
-                actionChain.AddAction(this, () =>
+                actionChain.AddAction(this, ActionType.PlayerXp_RemoveVitae, () =>
                 {
                     var vitae = EnchantmentManager.GetVitae();
                     if (vitae != null)
@@ -207,9 +222,9 @@ namespace ACE.Server.WorldObjects
 
         /// <summary>
         /// Returns the maximum possible character level
-        /// CONQUEST: Capped at 300 instead of retail 275
+        /// /// CONQUEST: Capped at 300 instead of retail 275
         /// </summary>
-        public static int GetMaxLevel()
+        public static uint GetMaxLevel()
         {
             return 300; // CONQUEST: Max level is 300
         }
@@ -221,7 +236,7 @@ namespace ACE.Server.WorldObjects
 
         /// <summary>
         /// Returns the remaining XP required to reach a level
-        /// CONQUEST: Supports levels 276-300 using dynamic XP formula
+        /// /// CONQUEST: Supports levels 276-300 using dynamic XP formula
         /// </summary>
         public long? GetRemainingXP(int level)
         {
@@ -243,7 +258,7 @@ namespace ACE.Server.WorldObjects
 
         /// <summary>
         /// Returns the remaining XP required to the next level
-        /// CONQUEST: Supports levels 276-300 using dynamic XP formula
+        /// /// CONQUEST: Supports levels 276-300 using dynamic XP formula
         /// </summary>
         public ulong GetRemainingXP()
         {
@@ -321,7 +336,7 @@ namespace ACE.Server.WorldObjects
 
         /// <summary>
         /// Determines if the player has advanced a level
-        /// CONQUEST: Supports levels 276-300 using dynamic XP formula
+        /// /// CONQUEST: Supports levels 276-300 using dynamic XP formula
         /// </summary>
         private void CheckForLevelup()
         {
@@ -335,12 +350,12 @@ namespace ACE.Server.WorldObjects
             bool creditEarned = false;
 
             // DEBUG: Check XP values at level 299
-            if (Level >= 299)
+           /* if (Level >= 299)
             {
                 var xpNeeded = GenerateDynamicLevelPostMax(Level + 1);
                 Console.WriteLine($"[LEVELUP CHECK] Level {Level}: Current XP = {TotalExperience:N0}, XP Needed for {Level + 1} = {xpNeeded:N0}");
                 Console.WriteLine($"[LEVELUP CHECK] Comparison: {(double)(TotalExperience ?? 0)} > {xpNeeded} = {(double)(TotalExperience ?? 0) > xpNeeded}");
-            }
+            }*/
 
             // CONQUEST: increases until the correct level is found
             // Supports both retail levels (1-275) and extended levels (276-300)
@@ -349,15 +364,13 @@ namespace ACE.Server.WorldObjects
                 || (Level >= 275 && (double)(TotalExperience ?? 0) > GenerateDynamicLevelPostMax(Level + 1)) // Extended levels
             )
             {
-                // DEBUG: Log XP check for levels near 300
+                /*// DEBUG: Log XP check for levels near 300
                 if (Level >= 298)
                 {
                     var xpNeeded = GenerateDynamicLevelPostMax(Level + 1);
                     Console.WriteLine($"[LEVELUP DEBUG] Level {Level} -> {Level + 1}: Current XP = {TotalExperience:N0}, XP Needed = {xpNeeded:N0}, Difference = {((double)(TotalExperience ?? 0) - xpNeeded):N0}");
-                }
-
+                }*/
                 Level++;
-
                 // CONQUEST: increase the skill credits
                 if (Level <= 274)
                 {
@@ -371,7 +384,7 @@ namespace ACE.Server.WorldObjects
                 }
                 else
                 {
-                    // CONQUEST: Levels 275+, award 1 skill credit every 5 levels
+                    // CONQUEST: levels 275+, award 1 skill credit every 5 levels
                     if (Level % 5 == 0)
                     {
                         AvailableSkillCredits++;
@@ -493,7 +506,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(5.0f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerXp_HandleMissingXp, () =>
             {
                 var xpType = verifyXp > 0 ? "unassigned experience" : "experience points";
 
@@ -570,7 +583,7 @@ namespace ACE.Server.WorldObjects
                 OnItemLevelUp(item, prevItemLevel);
 
                 var actionChain = new ActionChain();
-                actionChain.AddAction(this, () =>
+                actionChain.AddAction(this, ActionType.PlayerXp_ItemIncreasedInPower, () =>
                 {
                     var msg = $"Your {item.Name} has increased in power to level {newItemLevel}!";
                     Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
@@ -656,8 +669,8 @@ namespace ACE.Server.WorldObjects
             double prevXpDelta = xp274to275delta;
             double nextXpCost = xp275;
 
-            Console.WriteLine($"[XP CALC DEBUG] Calculating XP for level {target}");
-            Console.WriteLine($"[XP CALC DEBUG] Starting: nextXpCost={nextXpCost:N0}, nextXpDelta={nextXpDelta:N0}");
+            //Console.WriteLine($"[XP CALC DEBUG] Calculating XP for level {target}");
+            //Console.WriteLine($"[XP CALC DEBUG] Starting: nextXpCost={nextXpCost:N0}, nextXpDelta={nextXpDelta:N0}");
 
             int iterations = 0;
             for (int i = 275; i < target; i++)
@@ -668,7 +681,7 @@ namespace ACE.Server.WorldObjects
                 iterations++;
             }
 
-            Console.WriteLine($"[XP CALC DEBUG] Iterations: {iterations}, Final nextXpCost={nextXpCost:N0}");
+            //Console.WriteLine($"[XP CALC DEBUG] Iterations: {iterations}, Final nextXpCost={nextXpCost:N0}");
 
             return nextXpCost;
         }

@@ -167,7 +167,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(0.001f);
-            actionChain.AddAction(target, () =>
+            actionChain.AddAction(target, ActionType.PlayerTrade_EnqueueSendAddToTrade, () =>
             {
                 target.Session.Network.EnqueueSend(new GameEventAddToTrade(target.Session, itemGuid, TradeSide.Partner));
             });
@@ -256,7 +256,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(0.5f);
-            actionChain.AddAction(CurrentLandblock, () =>
+            actionChain.AddAction(CurrentLandblock, ActionType.PlayerTrade_FinalizeTrade, () =>
             {
                 foreach (var wo in myEscrow)
                     TryCreateInInventoryWithNetworking(wo);

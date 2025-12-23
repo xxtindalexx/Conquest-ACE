@@ -67,7 +67,7 @@ namespace ACE.Server.Entity
             // Then do teleport
             player.IsBusy = true;
             // CONQUEST: Removed ActionType.Enlightenment_DoEnlighten (ILT-specific enum)
-            enlChain.AddAction(player, () =>
+            enlChain.AddAction(player, ActionType.Enlightenment_DoEnlighten, () =>
             {
                 player.IsBusy = false;
                 var endPos = new ACE.Entity.Position(player.Location);
@@ -111,7 +111,7 @@ namespace ACE.Server.Entity
         {
             if (player.Level < 300)
             {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must be level 300 to enlighten.", ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must be level 300 to enlighten further.", ChatMessageType.Broadcast));
                 return false;
             }
 
@@ -134,7 +134,7 @@ namespace ACE.Server.Entity
             }
 
             // CONQUEST: Removed Variation parameter (ILT-specific for dungeon variations)
-            Landblock currentLandblock = LandblockManager.GetLandblock(player.Location.LandblockId, false, false);
+            Landblock currentLandblock = LandblockManager.GetLandblock(player.Location.LandblockId, false, player.Location.Variation, false);
             if (currentLandblock != null && currentLandblock.IsDungeon)
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot enlighten while inside a dungeon. Find an exit or recall to begin your enlightenment.", ChatMessageType.System));
@@ -167,7 +167,7 @@ namespace ACE.Server.Entity
                 return false;
             }
 
-            // CONQUEST: Luminance auras required after enlightenment 10 (admin bypass)
+            // CONQUEST: Luminance auras required after enlightenment 10
             if (targetEnlightenment > 10 && !player.IsPlussed)
             {
                 if (!VerifyLumAugs(player))
@@ -177,7 +177,7 @@ namespace ACE.Server.Entity
                 }
             }
 
-            // CONQUEST: Society master rank required after enlightenment 30 (admin bypass)
+            // CONQUEST: Society master rank required after enlightenment 30
             if (targetEnlightenment > 30 && !player.IsPlussed)
             {
                 if (!VerifySocietyMaster(player))
@@ -190,7 +190,7 @@ namespace ACE.Server.Entity
             // CONQUEST: Currency requirement - TODO: Replace placeholder weenie 999999999 with actual currency weenie
             // Required amount scales with enlightenment level
             int currencyRequired = targetEnlightenment; // 1 per enlightenment level, adjust as needed
-            var currencyCount = player.GetNumInventoryItemsOfWCID(13370021);
+            var currencyCount = player.GetNumInventoryItemsOfWCID(13370022);
             if (currencyCount < currencyRequired)
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {currencyRequired} Enlightenment Currency to reach enlightenment level {targetEnlightenment}. You have {currencyCount}.", ChatMessageType.Broadcast));
@@ -300,7 +300,7 @@ namespace ACE.Server.Entity
             // CONQUEST: Consume enlightenment currency
             // TODO: Replace placeholder weenie 999999999 with actual currency weenie
             int currencyRequired = player.Enlightenment + 1;
-            return player.TryConsumeFromInventoryWithNetworking(13370021, currencyRequired);
+            return player.TryConsumeFromInventoryWithNetworking(13370022, currencyRequired);
         }
 
         public static bool SpendLuminance(Player player)
@@ -324,7 +324,7 @@ namespace ACE.Server.Entity
         public static void RemoveSociety(Player player)
         {
             // Leave society alone if server prop is false
-            if (PropertyManager.GetBool("enl_removes_society").Item)
+            if (PropertyManager.GetBool("enl_removes_society"))
             {
                 player.QuestManager.Erase("SocietyMember");
                 player.QuestManager.Erase("CelestialHandMember");
@@ -463,7 +463,7 @@ namespace ACE.Server.Entity
             // CONQUEST: Enlightenment bonuses are handled in the following locations:
             // - +1 to all skills: Handled dynamically in CreatureSkill based on Enlightenment property (similar to augmentations)
             // - +1% XP per ENL: Integrated into Player_Xp.cs (EarnXP and other XP gain methods)
-            // - +1 all stats per ENL: Applied directly to StartingValue below (same method as augmentations)
+            // - +1 all stats per ENL: Integrated into Player.cs (attribute calculations)
             // - +1 DR/DMG per 25 ENL: Integrated into Creature.cs via GetEnlightenmentRatingBonus() method
 
             player.Enlightenment += 1;
@@ -478,7 +478,7 @@ namespace ACE.Server.Entity
             player.Attributes[PropertyAttribute.Focus].StartingValue += 1;
             player.Attributes[PropertyAttribute.Self].StartingValue += 1;
 
-            // CONQUEST: Send attribute updates to client
+            // CONQUEST: Refresh all 6 attributes on client to show enlightenment bonus (+1 per ENL)
             player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Strength]));
             player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Endurance]));
             player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Attributes[PropertyAttribute.Coordination]));

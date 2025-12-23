@@ -25,6 +25,10 @@ namespace ACE.Server.Physics.Common
         public bool IsCombatPet { get; set; }
 
         public bool IsFactionMob { get; set; }
+        public readonly bool IsPlayer;
+        public readonly bool IsCreature;
+        public readonly bool IsStorage;
+        public readonly bool IsCorpse;
 
         public FactionBits Faction1Bits { get; set; }
 
@@ -33,17 +37,29 @@ namespace ACE.Server.Physics.Common
         public PlayerKillerStatus PlayerKillerStatus { get; set; }
 
         public WeenieObject() { }
+        public static readonly WeenieObject DummyObject = new();
 
         public WeenieObject(WorldObject worldObject)
         {
             WorldObjectInfo = new WorldObjectInfo(worldObject);
 
-            if (!(worldObject is Creature creature))
+            if (worldObject is not Creature creature)
+            {
+                if (worldObject is Corpse)
+                    IsCorpse = true;
+                else if (worldObject is Storage)
+                    IsStorage = true;
                 return;
+            }
 
-            IsCombatPet = worldObject is CombatPet;
+            IsCreature = true;
 
-            IsMonster = creature.IsMonster && !IsCombatPet;
+            if (creature is Player)
+                IsPlayer = true;
+            else if (creature is CombatPet)
+                IsCombatPet = true;
+            else if (creature.IsMonster)
+                IsMonster = true;
 
             Faction1Bits = creature.Faction1Bits ?? FactionBits.None;
 
@@ -134,11 +150,6 @@ namespace ACE.Server.Physics.Common
             return true;
         }
 
-        public bool IsCorpse()
-        {
-            return WorldObject is Corpse;
-        }
-
         public bool IsImpenetrable()
         {
             return WorldObject is Player player && player.PlayerKillerStatus == PlayerKillerStatus.Free;
@@ -152,21 +163,6 @@ namespace ACE.Server.Physics.Common
         public bool IsPKLite()
         {
             return WorldObject is Player player && player.IsPKL;
-        }
-
-        public bool IsPlayer()
-        {
-            return WorldObject is Player;
-        }
-
-        public bool IsCreature()
-        {
-            return WorldObject is Creature;
-        }
-
-        public bool IsStorage()
-        {
-            return WorldObject is Storage;
         }
 
         public float JumpStaminaCost(float extent, int staminaCost)
@@ -195,7 +191,7 @@ namespace ACE.Server.Physics.Common
                 prof.Flags |= ObjCollisionProfileFlags.Door;
         }
 
-        public int DoCollision(ObjCollisionProfile prof, ObjectGuid guid, PhysicsObj target)
+        public int DoCollision(ObjectGuid guid, PhysicsObj target)
         {
             var wo = WorldObject;
 

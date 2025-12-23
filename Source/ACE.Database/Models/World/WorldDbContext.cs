@@ -313,6 +313,8 @@ public partial class WorldDbContext : DbContext
             entity.Property(e => e.WeenieClassId)
                 .HasComment("Weenie Class Id of object to spawn")
                 .HasColumnName("weenie_Class_Id");
+
+            entity.Property(e => e.VariationId).HasColumnName("variation_Id");
         });
 
         modelBuilder.Entity<LandblockInstanceLink>(entity =>
@@ -1777,6 +1779,8 @@ public partial class WorldDbContext : DbContext
             entity.HasOne(d => d.Object).WithMany(p => p.WeeniePropertiesPosition)
                 .HasForeignKey(d => d.ObjectId)
                 .HasConstraintName("wcid_position");
+
+            entity.Property(e => e.VariationId).HasColumnName("variation_Id");
         });
 
         modelBuilder.Entity<WeeniePropertiesSkill>(entity =>

@@ -407,7 +407,7 @@ namespace ACE.Server.Managers
             uint nextSolveTime;
 
             if (CanScaleQuestMinDelta(quest))
-                nextSolveTime = playerQuest.LastTimeCompleted + (uint)(quest.MinDelta * PropertyManager.GetDouble("quest_mindelta_rate", 1).Item);
+                nextSolveTime = playerQuest.LastTimeCompleted + (uint)(quest.MinDelta * PropertyManager.GetDouble("quest_mindelta_rate", 1));
             else
                 nextSolveTime = playerQuest.LastTimeCompleted + quest.MinDelta;
 

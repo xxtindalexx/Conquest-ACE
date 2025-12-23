@@ -10,6 +10,7 @@ using ACE.Server.Physics.Animation;
 using ACE.Server.Physics.BSP;
 using ACE.Server.Physics.Extensions;
 using ACE.Server.Managers;
+using ACE.Common;
 
 namespace ACE.Server.Physics.Common
 {
@@ -35,31 +36,28 @@ namespace ACE.Server.Physics.Common
 
         public static bool UseSceneFiles = true;
 
-        public Landblock() : base()
+        public Landblock(CellLandblock landblock, int? Variation)
+            : base(landblock, Variation)
         {
             Init();
-        }
-
-        public Landblock(CellLandblock landblock)
-            : base(landblock)
-        {
-            Init();
-
+            VariationId = Variation;
             ID = landblock.Id;
             //Console.WriteLine("Loading landblock " + ID.ToString("X8"));
             BlockInfoExists = landblock.HasObjects;
             if (BlockInfoExists)
                 Info = DBObj.GetLandblockInfo(ID - 1);
             BlockCoord = LandDefs.blockid_to_lcoord(landblock.Id).Value;
-            _landblock = landblock;
+            //_landblock = landblock;
+
             get_land_limits();
+
         }
 
-        public new void Init()
+        public void Init()
         {
-            InView = BoundingType.Outside;
-            Dir = LandDefs.Direction.Unknown;
-            Closest = new Vector2(-1, -1);
+            //InView = BoundingType.Outside;
+            //Dir = LandDefs.Direction.Unknown;
+            //Closest = new Vector2(-1, -1);
             BlockCoord = new Vector2();
             StaticObjects = new List<PhysicsObj>();
             Buildings = new List<BuildingObj>();
@@ -145,7 +143,7 @@ namespace ACE.Server.Physics.Common
             var cellY = (int)point.Y / 24;
 
             var blockCellID = (ID & 0xFFFF0000) | (uint)(cellX * 8 + cellY) + 1;
-            return (LandCell)LScape.get_landcell((uint)blockCellID);
+            return (LandCell)LScape.get_landcell((uint)blockCellID, VariationId);
         }
 
         public void destroy_buildings()
@@ -182,9 +180,9 @@ namespace ACE.Server.Physics.Common
         public void get_land_scenes()
         {
             //Console.WriteLine("Loading scenery for " + ID.ToString("X8"));
-            
+
             // ported from Scenery
-            Scenery = new List<PhysicsObj>();
+            //Scenery = new List<PhysicsObj>();
 
             // get the landblock cell offsets
             var blockX = (ID >> 24) * 8;
@@ -274,10 +272,10 @@ namespace ACE.Server.Physics.Common
                             continue;
                         }
 
-                        physicsObj.add_obj_to_cell(cell, pos.Frame);
+                        physicsObj.add_obj_to_cell(cell, pos.Frame, VariationId);
                         var scale = ObjectDesc.ScaleObj(obj, globalCellX, globalCellY, j);
                         physicsObj.SetScaleStatic(scale);
-                        Scenery.Add(physicsObj);
+                        //Scenery.Add(physicsObj);
                     }
                 }
             }
@@ -410,9 +408,10 @@ namespace ACE.Server.Physics.Common
             var lcoord = LandDefs.gid_to_lcoord(cellID).Value;
 
             var idx = ((int)lcoord.Y & 7) + ((int)lcoord.X & 7) * SideCellCount;
-
-            if (LandCells[idx].ID == cellID)
-                return (LandCell)LandCells[idx];
+            VariantCacheId cacheKey = new VariantCacheId { Landblock = (ushort)idx, Variant = VariationId ?? 0 };
+            var found = LandCells.TryGetValue(cacheKey, out var cell);
+            if (found && cell.ID == cellID)
+                return (LandCell)LandCells[cacheKey];
             else
                 return null;
         }
@@ -438,15 +437,15 @@ namespace ACE.Server.Physics.Common
             foreach (var info in Info.Buildings)
             {
                 var building = BuildingObj.makeBuilding(info.ModelId, info.Portals, info.NumLeaves);
-                var position = new Position(ID, new AFrame(info.Frame));
+                var position = new Position(ID, new AFrame(info.Frame), VariationId);
                 var outside = LandDefs.AdjustToOutside(position);
                 var cell = get_landcell(position.ObjCellID);
                 if (cell == null) continue;
                 building.set_initial_frame(position.Frame);
 
                 // hack
-                building.PartArray.Parts[0].Pos = position;
-                building.Position = position;
+                building.PartArray.Parts[0].Pos = new Position(position);
+                building.Position = new Position(position);
                 cell.Building = building;
 
                 building.add_to_cell(cell); // SortCell?
@@ -462,8 +461,8 @@ namespace ACE.Server.Physics.Common
 
             for (var i = 0; i < SideCellCount; i++)
             {
-                var cell = (ObjCell)LandCells[i];
-                var offset = i * SideCellCount * 11;    // ?
+                VariantCacheId cacheKey = new VariantCacheId { Landblock = (ushort)i, Variant = VariationId ?? 0 };
+                var cell = (ObjCell)LandCells[cacheKey];
                 cell.init_objects();
             }
             DynObjsInitDone = true;
@@ -484,7 +483,7 @@ namespace ACE.Server.Physics.Common
                 adjust_scene_obj_height();
                 foreach (var obj in StaticObjects)
                     if (!obj.is_completely_visible())
-                        obj.calc_cross_cells_static();
+                        obj.calc_cross_cells_static(VariationId);
             }
             else if (Info != null)
             {
@@ -492,7 +491,7 @@ namespace ACE.Server.Physics.Common
                 {
                     var obj = PhysicsObj.makeObject(info.Id, 0, false);
                     obj.DatObject = true;
-                    var position = new Position(ID, new AFrame(info.Frame));
+                    var position = new Position(ID, new AFrame(info.Frame), VariationId);
                     var outside = LandDefs.AdjustToOutside(position);
                     var cell = get_landcell(position.ObjCellID);
                     if (cell == null)
@@ -501,7 +500,7 @@ namespace ACE.Server.Physics.Common
                         obj.DestroyObject();
                         continue;
                     }
-                    obj.add_obj_to_cell(cell, position.Frame);
+                    obj.add_obj_to_cell(cell, position.Frame, VariationId);
                     add_static_object(obj);
                 }
 
@@ -514,8 +513,11 @@ namespace ACE.Server.Physics.Common
                         if (lcoord == null) continue;
 
                         var idx = ((int)lcoord.Value.Y & 7) + ((int)lcoord.Value.X & 7) * SideCellCount;
-
-                        LandCells[idx].RestrictionObj = kvp.Value;
+                        var cacheKey = new VariantCacheId { Landblock = (ushort)idx, Variant = VariationId ?? 0 };
+                        if (LandCells.TryGetValue(cacheKey, out ObjCell landcell))
+                        {
+                            landcell.RestrictionObj = kvp.Value;
+                        }
                     }
                 }
             }
@@ -523,33 +525,33 @@ namespace ACE.Server.Physics.Common
                 get_land_scenes();
         }
 
-        public void notify_change_size()
-        {
-            release_visible_cells();
-            release_objs();
-            destroy_static_objects();
-            destroy_buildings();
-            Closest = new Vector2(-1, -1);
-        }
+        //public void notify_change_size()
+        //{
+        //    release_visible_cells();
+        //    release_objs();
+        //    destroy_static_objects();
+        //    destroy_buildings();
+        //    //Closest = new Vector2(-1, -1);
+        //}
 
-        public void release_all()
-        {
-            release_objs();
-            release_visible_cells();
-        }
+        //public void release_all()
+        //{
+        //    release_objs();
+        //    release_visible_cells();
+        //}
 
-        public void release_objs()
-        {
-            if (SideVertexCount != 9) return;
+        //public void release_objs()
+        //{
+        //    if (SideVertexCount != 9) return;
 
-            for (var i = 0; i < SideCellCount; i++)
-            {
-                var cell = (ObjCell)LandCells[i];
-                var offset = i * SideCellCount * 11;    // ?
-                cell.release_objects();
-            }
-            DynObjsInitDone = false;
-        }
+        //    for (var i = 0; i < SideCellCount; i++)
+        //    {
+        //        var cacheKey = new VariantCacheId { Landblock = (ushort)i, Variant = VariationId ?? 0 };
+        //        var cell = (ObjCell)LandCells[cacheKey];
+        //        cell.release_objects();
+        //    }
+        //    DynObjsInitDone = false;
+        //}
 
         /// <summary>
         /// Release shadow objects pointing to cells in this landblock
@@ -685,7 +687,7 @@ namespace ACE.Server.Physics.Common
             var cellID = startCell;
             for (var i = 0; i < Info.NumCells; i++)
             {
-                var envCell = (EnvCell)LScape.get_landcell(cellID++);
+                var envCell = (EnvCell)LScape.get_landcell(cellID++, VariationId);
                 if (envCell != null)
                     envcells.Add(envCell);
                 else

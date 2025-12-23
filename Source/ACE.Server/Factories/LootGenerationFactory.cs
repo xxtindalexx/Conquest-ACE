@@ -398,7 +398,7 @@ namespace ACE.Server.Factories
 
         private static WorldObject TryRollAetheria(TreasureDeath profile)
         {
-            var aetheria_drop_rate = (float)PropertyManager.GetDouble("aetheria_drop_rate").Item;
+            var aetheria_drop_rate = (float)PropertyManager.GetDouble("aetheria_drop_rate");
 
             if (aetheria_drop_rate <= 0.0f)
                 return null;

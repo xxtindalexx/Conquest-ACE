@@ -99,6 +99,7 @@ namespace ACE.Entity.Enum.Properties
         PCAPRecordedTimestamp9           = 8029,
         PCAPRecordedMaxVelocityEstimated = 8030,
         PCAPPhysicsDIDDataTemplatedFrom  = 8044,
+        CreatedByAccountId               = 9027
     }
 
     public static class PropertyDataIdExtensions

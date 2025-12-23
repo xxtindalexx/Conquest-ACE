@@ -100,6 +100,57 @@ namespace ACE.Database.Models.Auth
                 return new List<Leaderboard>();
             }
         }
+
+        /// <summary>
+        /// Retrieves the top players by total augmentation count from the database asynchronously.
+        /// Calls MySQL stored procedure: TopAugmentations
+        /// </summary>
+        public static async Task<List<Leaderboard>> GetTopAugsLeaderboardAsync(AuthDbContext context)
+        {
+            try
+            {
+                return await context.Leaderboard.FromSql($"CALL TopAugments").AsNoTracking().ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to get TopAugments leaderboard: {ex.Message}");
+                return new List<Leaderboard>();
+            }
+        }
+
+        /// <summary>
+        /// Retrieves the top players by death count from the database asynchronously.
+        /// Calls MySQL stored procedure: TopDeaths
+        /// </summary>
+        public static async Task<List<Leaderboard>> GetTopDeathsLeaderboardAsync(AuthDbContext context)
+        {
+            try
+            {
+                return await context.Leaderboard.FromSql($"CALL TopDeaths").AsNoTracking().ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to get TopDeaths leaderboard: {ex.Message}");
+                return new List<Leaderboard>();
+            }
+        }
+
+        /// <summary>
+        /// Retrieves the top players by title count from the database asynchronously.
+        /// Calls MySQL stored procedure: TopTitles
+        /// </summary>
+        public static async Task<List<Leaderboard>> GetTopTitlesLeaderboardAsync(AuthDbContext context)
+        {
+            try
+            {
+                return await context.Leaderboard.FromSql($"CALL TopTitles").AsNoTracking().ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to get TopTitles leaderboard: {ex.Message}");
+                return new List<Leaderboard>();
+            }
+        }
     }
 
     /// <summary>
@@ -119,6 +170,9 @@ namespace ACE.Database.Models.Auth
         private static readonly SemaphoreSlim _enlCacheSemaphore = new SemaphoreSlim(1, 1);
         private static readonly SemaphoreSlim _bankCacheSemaphore = new SemaphoreSlim(1, 1);
         private static readonly SemaphoreSlim _lumCacheSemaphore = new SemaphoreSlim(1, 1);
+        private static readonly SemaphoreSlim _augsCacheSemaphore = new SemaphoreSlim(1, 1);
+        private static readonly SemaphoreSlim _deathsCacheSemaphore = new SemaphoreSlim(1, 1);
+        private static readonly SemaphoreSlim _titlesCacheSemaphore = new SemaphoreSlim(1, 1);
 
         static LeaderboardCache()
         {
@@ -144,6 +198,9 @@ namespace ACE.Database.Models.Auth
         public List<Leaderboard> EnlCache = new List<Leaderboard>();
         public List<Leaderboard> BankCache = new List<Leaderboard>();
         public List<Leaderboard> LumCache = new List<Leaderboard>();
+        public List<Leaderboard> AugsCache = new List<Leaderboard>();
+        public List<Leaderboard> DeathsCache = new List<Leaderboard>();
+        public List<Leaderboard> TitlesCache = new List<Leaderboard>();
 
         /// <summary>
         /// Timestamp indicating when the cache was last updated (UTC). This represents the time when the cache was refreshed with new data from the database.
@@ -153,6 +210,9 @@ namespace ACE.Database.Models.Auth
         public DateTime EnlLastUpdate = DateTime.UtcNow;
         public DateTime BanksLastUpdate = DateTime.UtcNow;
         public DateTime LumLastUpdate = DateTime.UtcNow;
+        public DateTime AugsLastUpdate = DateTime.UtcNow;
+        public DateTime DeathsLastUpdate = DateTime.UtcNow;
+        public DateTime TitlesLastUpdate = DateTime.UtcNow;
 
         /// <summary>
         /// Updates the QB cache with new data and sets the next update time with variance to prevent database load spikes.
@@ -197,6 +257,33 @@ namespace ACE.Database.Models.Auth
         {
             LumCache = list;
             LumLastUpdate = DateTime.UtcNow.AddMinutes(cacheTimeout).AddSeconds(ThreadSafeRandom.Next(15, 120)); //vary the cache duration to prevent DB slamming
+        }
+
+        /// <summary>
+        /// Updates the Augmentations cache with new data and sets the next update time with variance to prevent database load spikes.
+        /// </summary>
+        public void UpdateAugsCache(List<Leaderboard> list)
+        {
+            AugsCache = list;
+            AugsLastUpdate = DateTime.UtcNow.AddMinutes(cacheTimeout).AddSeconds(ThreadSafeRandom.Next(15, 120));
+        }
+
+        /// <summary>
+        /// Updates the Deaths cache with new data and sets the next update time with variance to prevent database load spikes.
+        /// </summary>
+        public void UpdateDeathsCache(List<Leaderboard> list)
+        {
+            DeathsCache = list;
+            DeathsLastUpdate = DateTime.UtcNow.AddMinutes(cacheTimeout).AddSeconds(ThreadSafeRandom.Next(15, 120));
+        }
+
+        /// <summary>
+        /// Updates the Titles cache with new data and sets the next update time with variance to prevent database load spikes.
+        /// </summary>
+        public void UpdateTitlesCache(List<Leaderboard> list)
+        {
+            TitlesCache = list;
+            TitlesLastUpdate = DateTime.UtcNow.AddMinutes(cacheTimeout).AddSeconds(ThreadSafeRandom.Next(15, 120));
         }
 
         /// <summary>
@@ -377,6 +464,111 @@ namespace ACE.Database.Models.Auth
                 log.Debug($"Luminance Cache hit - using {LumCache.Count} cached records, last updated: {LumLastUpdate:yyyy-MM-dd HH:mm:ss} UTC");
             }
             return LumCache;
+        }
+
+        /// <summary>
+        /// Gets the top players by total augmentation count from cache, refreshing if necessary.
+        /// </summary>
+        public async Task<List<Leaderboard>> GetTopAugsAsync(AuthDbContext context)
+        {
+            if (AugsCache.Count == 0 || AugsLastUpdate < DateTime.UtcNow)
+            {
+                log.Debug($"Augs Cache miss - Count: {AugsCache.Count}, NextUpdate: {AugsLastUpdate:yyyy-MM-dd HH:mm:ss}, Now: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
+                await _augsCacheSemaphore.WaitAsync();
+                try
+                {
+                    if (AugsCache.Count == 0 || AugsLastUpdate < DateTime.UtcNow)
+                    {
+                        log.Debug("Augs Cache refresh starting - calling database");
+                        var result = await Leaderboard.GetTopAugsLeaderboardAsync(context);
+                        UpdateAugsCache(result);
+                        log.Debug($"Augs Cache refresh completed - {result.Count} records cached, next update: {AugsLastUpdate:yyyy-MM-dd HH:mm:ss}");
+                    }
+                    else
+                    {
+                        log.Debug("Augs Cache was refreshed by another thread - using cached data");
+                    }
+                }
+                finally
+                {
+                    _augsCacheSemaphore.Release();
+                }
+            }
+            else
+            {
+                log.Debug($"Augs Cache hit - using {AugsCache.Count} cached records, last updated: {AugsLastUpdate:yyyy-MM-dd HH:mm:ss} UTC");
+            }
+            return AugsCache;
+        }
+
+        /// <summary>
+        /// Gets the top players by death count from cache, refreshing if necessary.
+        /// </summary>
+        public async Task<List<Leaderboard>> GetTopDeathsAsync(AuthDbContext context)
+        {
+            if (DeathsCache.Count == 0 || DeathsLastUpdate < DateTime.UtcNow)
+            {
+                log.Debug($"Deaths Cache miss - Count: {DeathsCache.Count}, NextUpdate: {DeathsLastUpdate:yyyy-MM-dd HH:mm:ss}, Now: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
+                await _deathsCacheSemaphore.WaitAsync();
+                try
+                {
+                    if (DeathsCache.Count == 0 || DeathsLastUpdate < DateTime.UtcNow)
+                    {
+                        log.Debug("Deaths Cache refresh starting - calling database");
+                        var result = await Leaderboard.GetTopDeathsLeaderboardAsync(context);
+                        UpdateDeathsCache(result);
+                        log.Debug($"Deaths Cache refresh completed - {result.Count} records cached, next update: {DeathsLastUpdate:yyyy-MM-dd HH:mm:ss}");
+                    }
+                    else
+                    {
+                        log.Debug("Deaths Cache was refreshed by another thread - using cached data");
+                    }
+                }
+                finally
+                {
+                    _deathsCacheSemaphore.Release();
+                }
+            }
+            else
+            {
+                log.Debug($"Deaths Cache hit - using {DeathsCache.Count} cached records, last updated: {DeathsLastUpdate:yyyy-MM-dd HH:mm:ss} UTC");
+            }
+            return DeathsCache;
+        }
+
+        /// <summary>
+        /// Gets the top players by title count from cache, refreshing if necessary.
+        /// </summary>
+        public async Task<List<Leaderboard>> GetTopTitlesAsync(AuthDbContext context)
+        {
+            if (TitlesCache.Count == 0 || TitlesLastUpdate < DateTime.UtcNow)
+            {
+                log.Debug($"Titles Cache miss - Count: {TitlesCache.Count}, NextUpdate: {TitlesLastUpdate:yyyy-MM-dd HH:mm:ss}, Now: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
+                await _titlesCacheSemaphore.WaitAsync();
+                try
+                {
+                    if (TitlesCache.Count == 0 || TitlesLastUpdate < DateTime.UtcNow)
+                    {
+                        log.Debug("Titles Cache refresh starting - calling database");
+                        var result = await Leaderboard.GetTopTitlesLeaderboardAsync(context);
+                        UpdateTitlesCache(result);
+                        log.Debug($"Titles Cache refresh completed - {result.Count} records cached, next update: {TitlesLastUpdate:yyyy-MM-dd HH:mm:ss}");
+                    }
+                    else
+                    {
+                        log.Debug("Titles Cache was refreshed by another thread - using cached data");
+                    }
+                }
+                finally
+                {
+                    _titlesCacheSemaphore.Release();
+                }
+            }
+            else
+            {
+                log.Debug($"Titles Cache hit - using {TitlesCache.Count} cached records, last updated: {TitlesLastUpdate:yyyy-MM-dd HH:mm:ss} UTC");
+            }
+            return TitlesCache;
         }
     }
 }

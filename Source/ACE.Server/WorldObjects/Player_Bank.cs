@@ -30,8 +30,8 @@ namespace ACE.Server.WorldObjects
 
         // Banking system constants
         private const int PYREAL_MAX_STACK = 25000;
-        private const int ENLIGHTENED_COIN_MAX_STACK = 25000;
-        private const int WEAKLY_ENLIGHTENED_COIN_MAX_STACK = 25000;
+        private const int CONQUEST_COIN_MAX_STACK = 25000;
+        private const int SOUL_FRAGMENT_MAX_STACK = 25000;
         private const int EVENT_TOKEN_MAX_STACK = 25000;
         private const int TRADE_NOTE_MAX_STACK = 250;
         private const int MMD_TRADE_NOTE_MAX_STACK = 5000;
@@ -1298,7 +1298,7 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         /// <param name="Amount">Total amount of Conquest Coins to create</param>
         /// <returns>Number of Conquest Coins successfully created</returns>
-        private long CreateEnlightenedCoins(long Amount)
+        private long CreateConquestCoins(long Amount)
         {
             long remaining = Amount;
             long successfullyCreated = 0;
@@ -1306,9 +1306,9 @@ namespace ACE.Server.WorldObjects
 
             while (remaining > 0)
             {
-                int stackSize = (int)Math.Min(remaining, (long)ENLIGHTENED_COIN_MAX_STACK);
+                int stackSize = (int)Math.Min(remaining, (long)CONQUEST_COIN_MAX_STACK);
 
-                WorldObject wo = WorldObjectFactory.CreateNewWorldObject(300004);
+                WorldObject wo = WorldObjectFactory.CreateNewWorldObject(13370001);
                 if (wo == null)
                     break; // Can't create more items
 
@@ -1364,7 +1364,7 @@ namespace ACE.Server.WorldObjects
             }
             
             // Create Conquest Coins (outside lock)
-            long successfullyCreated = CreateEnlightenedCoins(Amount);
+            long successfullyCreated = CreateConquestCoins(Amount);
             
             // Update balance atomically (only lock for balance mutation)
             if (successfullyCreated > 0)
@@ -1396,7 +1396,7 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         /// <param name="Amount">Total amount of weakly Conquest Coins to create</param>
         /// <returns>Number of weakly Conquest Coins successfully created</returns>
-        private long CreateWeaklyEnlightenedCoins(long Amount)
+        private long CreateSoulFragments(long Amount)
         {
             long remaining = Amount;
             long successfullyCreated = 0;
@@ -1404,9 +1404,9 @@ namespace ACE.Server.WorldObjects
 
             while (remaining > 0)
             {
-                int stackSize = (int)Math.Min(remaining, (long)WEAKLY_ENLIGHTENED_COIN_MAX_STACK);
+                int stackSize = (int)Math.Min(remaining, (long)SOUL_FRAGMENT_MAX_STACK);
 
-                WorldObject wo = WorldObjectFactory.CreateNewWorldObject(300003);
+                WorldObject wo = WorldObjectFactory.CreateNewWorldObject(13370003);
                 if (wo == null)
                     break; // Can't create more items
 
@@ -1416,7 +1416,7 @@ namespace ACE.Server.WorldObjects
                 var itemCreated = this.TryAddToInventory(wo, out _);
                 if (!itemCreated)
                 {
-                    log.Debug($"[BANK_DEBUG] Player: {Name} | Failed to create weakly enlightened coin stack of {stackSize} - insufficient pack space");
+                    log.Debug($"[BANK_DEBUG] Player: {Name} | Failed to create soul fragment stack of {stackSize} - insufficient pack space");
                     break; // Stop creating, but keep what we've made so far
                 }
 
@@ -1426,7 +1426,7 @@ namespace ACE.Server.WorldObjects
                 // Only log every 10th stack to reduce log spam
                 if (createdItems.Count % 10 == 0 || remaining - stackSize == 0)
                 {
-                    log.Debug($"[BANK_DEBUG] Player: {Name} | Created {createdItems.Count} weakly enlightened coin stacks | Total: {successfullyCreated:N0} | Remaining: {remaining - stackSize:N0}");
+                    log.Debug($"[BANK_DEBUG] Player: {Name} | Created {createdItems.Count} soul fragment stacks | Total: {successfullyCreated:N0} | Remaining: {remaining - stackSize:N0}");
                 }
 
                 remaining -= stackSize;
@@ -1439,7 +1439,7 @@ namespace ACE.Server.WorldObjects
                 {
                     Session.Network.EnqueueSend(new GameMessageCreateObject(item));
                 }
-                log.Debug($"[BANK_DEBUG] Player: {Name} | Sent batched network update for {createdItems.Count} weakly enlightened coin stacks");
+                log.Debug($"[BANK_DEBUG] Player: {Name} | Sent batched network update for {createdItems.Count} soul fragment stacks");
             }
 
             // Return the amount that was successfully created
@@ -1513,12 +1513,12 @@ namespace ACE.Server.WorldObjects
             // Check if player has enough weakly Conquest Coins (outside lock for early exit)
             if (SoulFragments < Amount)
             {
-                Session.Network.EnqueueSend(new GameMessageSystemChat($"You don't have enough weakly Conquest Coins banked. Need {Amount:N0} coins but only have {SoulFragments:N0}.", ChatMessageType.System));
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"You don't have enough soul fragments banked. Need {Amount:N0} coins but only have {SoulFragments:N0}.", ChatMessageType.System));
                 return;
             }
             
             // Create weakly Conquest Coins (outside lock)
-            long successfullyCreated = CreateWeaklyEnlightenedCoins(Amount);
+            long successfullyCreated = CreateSoulFragments(Amount);
             
             // Update balance atomically (only lock for balance mutation)
             if (successfullyCreated > 0)
@@ -1531,16 +1531,16 @@ namespace ACE.Server.WorldObjects
                 // Send notifications outside of lock
                 if (successfullyCreated == Amount)
                 {
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} weakly Conquest Coins", ChatMessageType.System));
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} soul fragments", ChatMessageType.System));
                 }
                 else
                 {
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} weakly Conquest Coins (partial - insufficient pack space for remaining {Amount - successfullyCreated:N0} weakly Conquest Coins)", ChatMessageType.System));
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Withdrew {successfullyCreated:N0} soul fragments (partial - insufficient pack space for remaining {Amount - successfullyCreated:N0} weakly Conquest Coins)", ChatMessageType.System));
                 }
             }
             else
             {
-                Session.Network.EnqueueSend(new GameMessageSystemChat("Failed to create weakly Conquest Coins - check pack space. Withdrawal cancelled.", ChatMessageType.System));
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Failed to create soul fragments - check pack space. Withdrawal cancelled.", ChatMessageType.System));
             }
         }
 

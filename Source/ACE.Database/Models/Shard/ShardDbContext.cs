@@ -906,6 +906,8 @@ public partial class ShardDbContext : DbContext
             entity.HasOne(d => d.Object).WithMany(p => p.BiotaPropertiesPosition)
                 .HasForeignKey(d => d.ObjectId)
                 .HasConstraintName("wcid_position");
+
+            entity.Property(e => e.VariationId).HasColumnName("variation_Id");
         });
 
         modelBuilder.Entity<BiotaPropertiesSkill>(entity =>

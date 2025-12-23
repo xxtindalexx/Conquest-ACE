@@ -80,21 +80,24 @@ namespace ACE.Server.Managers
         public static void SendDiscordFile(string player, string message, long channelId, FileAttachment fileContent)
         {
             if (!ConfigManager.Config.Chat.EnableDiscordConnection)
+            {
+                log.Warn("[DiscordRelay] EnableDiscordConnection is false");
                 return;
+            }
 
             try
             {
                 // Check if Discord client is initialized
                 if (_discordSocketClient == null)
                 {
-                    log.Warn("[DiscordRelay] Discord client is not initialized.");
+                    log.Error("[DiscordRelay] Discord client is not initialized (NULL).");
                     return;
                 }
 
                 // Check if client is connected
                 if (_discordSocketClient.ConnectionState != ConnectionState.Connected)
                 {
-                    log.Warn($"[DiscordRelay] Discord client is not connected. State: {_discordSocketClient.ConnectionState}");
+                    log.Error($"[DiscordRelay] Discord client is not connected. State: {_discordSocketClient.ConnectionState}");
                     return;
                 }
 
@@ -102,7 +105,7 @@ namespace ACE.Server.Managers
                 var guild = _discordSocketClient.GetGuild((ulong)ConfigManager.Config.Chat.ServerId);
                 if (guild == null)
                 {
-                    log.Warn($"[DiscordRelay] Could not find guild with ID {ConfigManager.Config.Chat.ServerId}");
+                    log.Error($"[DiscordRelay] Could not find guild with ID {ConfigManager.Config.Chat.ServerId}");
                     return;
                 }
 
@@ -110,17 +113,19 @@ namespace ACE.Server.Managers
                 var channel = guild.GetTextChannel((ulong)channelId);
                 if (channel == null)
                 {
-                    log.Warn($"[DiscordRelay] Could not find channel with ID {channelId}");
+                    log.Error($"[DiscordRelay] Could not find channel with ID {channelId}");
                     return;
                 }
 
                 // Send file
+                log.Info($"[DiscordRelay] Attempting to send file {fileContent.FileName} to channel {channelId}");
                 _ = channel.SendFileAsync(fileContent, player + " : " + message);
-                log.Info($"[DiscordRelay] Sent file to channel {channelId}: {fileContent.FileName}");
+                log.Info($"[DiscordRelay] Successfully sent file to channel {channelId}: {fileContent.FileName}");
             }
             catch (Exception ex)
             {
                 log.Error($"[DiscordRelay] Error sending discord file: {ex.Message}");
+                log.Error($"[DiscordRelay] Stack trace: {ex.StackTrace}");
             }
         }
 

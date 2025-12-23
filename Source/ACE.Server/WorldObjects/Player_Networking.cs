@@ -60,13 +60,13 @@ namespace ACE.Server.WorldObjects
                     Session.Network.EnqueueSend(new GameMessageSystemChat("You may not leave Olthoi Island until your account and this character have been active on this game world for 15 days.", ChatMessageType.Broadcast));
             }
 
-            if (PlayerKillerStatus == PlayerKillerStatus.PKLite && !PropertyManager.GetBool("pkl_server").Item)
+            if (PlayerKillerStatus == PlayerKillerStatus.PKLite && !PropertyManager.GetBool("pkl_server"))
             {
                 PlayerKillerStatus = PlayerKillerStatus.NPK;
 
                 var actionChain = new ActionChain();
                 actionChain.AddDelaySeconds(3.0f);
-                actionChain.AddAction(this, () =>
+                actionChain.AddAction(this, ActionType.PlayerNetworking_EnqueueSend, () =>
                 {
                     Session.Network.EnqueueSend(new GameEventWeenieError(Session, WeenieError.YouAreNonPKAgain));
                 });
@@ -85,7 +85,7 @@ namespace ACE.Server.WorldObjects
 
             //SendPropertyUpdatesAndOverrides();
 
-            if (PropertyManager.GetBool("use_turbine_chat").Item)
+            if (PropertyManager.GetBool("use_turbine_chat"))
             {
                 // Init the client with the chat channel ID's, and then notify the player that they've joined the associated channels.
                 Session.Network.EnqueueSend(new GameEventWeenieError(Session, WeenieError.TurbineChatIsEnabled));
@@ -137,7 +137,7 @@ namespace ACE.Server.WorldObjects
             {
                 var actionChain = new ActionChain();
                 actionChain.AddDelaySeconds(10.0f);
-                actionChain.AddAction(this, () =>
+                actionChain.AddAction(this, ActionType.PlayerNetworking_SendShutdownMessage, () =>
                 {
                     SendMessage(ServerManager.ShutdownNoticeText(), ChatMessageType.WorldBroadcast);
                 });
@@ -233,7 +233,7 @@ namespace ACE.Server.WorldObjects
 
         public void SendPropertyUpdatesAndOverrides()
         {
-            if (!PropertyManager.GetBool("require_spell_comps").Item)
+            if (!PropertyManager.GetBool("require_spell_comps"))
                 Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyBool(this, PropertyBool.SpellComponentsRequired, false));
         }
 
@@ -457,7 +457,7 @@ namespace ACE.Server.WorldObjects
 
         public void HandlePreOrderItems()
         {
-            var subscriptionStatus = (SubscriptionStatus)PropertyManager.GetLong("default_subscription_level").Item;
+            var subscriptionStatus = (SubscriptionStatus)PropertyManager.GetLong("default_subscription_level");
 
             string status;
             bool success;
@@ -476,7 +476,7 @@ namespace ACE.Server.WorldObjects
 
             var msg = $"Thank you for {status} the Throne of Destiny expansion! A special gift has been placed in your backpack.";
 
-            if (PropertyManager.GetBool("show_first_login_gift").Item && success)
+            if (PropertyManager.GetBool("show_first_login_gift") && success)
                 Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Magic));
 
             AccountRequirements = subscriptionStatus;

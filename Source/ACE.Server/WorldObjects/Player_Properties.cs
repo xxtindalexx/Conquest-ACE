@@ -1,10 +1,10 @@
-using System;
 using ACE.Common;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Network.GameMessages;
 using ACE.Server.Network.GameMessages.Messages;
+using System;
 
 namespace ACE.Server.WorldObjects
 {
@@ -1092,10 +1092,8 @@ namespace ACE.Server.WorldObjects
         public int Enlightenment
         {
             get => GetProperty(PropertyInt.Enlightenment) ?? 0;
-            set
-            {
-                // CONQUEST: Cap enlightenment at 100
-                var cappedValue = Math.Min(value, 100);
+            // CONQUEST: Cap enlightenment at 100
+            set { var cappedValue = Math.Min(value, 100);
                 if (cappedValue == 0)
                     RemoveProperty(PropertyInt.Enlightenment);
                 else

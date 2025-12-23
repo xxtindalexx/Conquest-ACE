@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.Threading;
-
+using System.Threading.Tasks;
 using ACE.Entity.Enum;
 using ACE.Server.Physics.Animation;
 using ACE.Server.Physics.Combat;
@@ -13,33 +15,28 @@ using log4net;
 
 namespace ACE.Server.Physics.Common
 {
-    public class ObjCell: PartCell, IEquatable<ObjCell>
+    public class ObjCell : PartCell, IEquatable<ObjCell>
     {
-        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        //private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         public uint ID;
         public LandDefs.WaterType WaterType;
         public Position Pos;
-        public int NumObjects;
-        public List<PhysicsObj> ObjectList;
-        public int NumLights;
-        public List<int> LightList;
-        public int NumShadowObjects;
+        private ConcurrentDictionary<uint, PhysicsObj> _ObjectList;
+        public List<PhysicsObj> ObjectList { get { return _ObjectList.Values.ToList(); } }
+        //public List<int> LightList;
         public List<ShadowObj> ShadowObjectList;
-        public List<uint> ShadowObjectIDs;
+        //public List<uint> ShadowObjectIDs;
         public uint RestrictionObj;
-        public List<int> ClipPlanes;
-        public int NumStabs;
-        public List<DatLoader.Entity.Stab> VisibleCells;
+        //public List<int> ClipPlanes;
+        //public int NumStabs;
+        //public List<DatLoader.Entity.Stab> VisibleCells;
         public bool SeenOutside;
         public List<uint> VoyeurTable;
+        public int? VariationId;
 
         public Landblock CurLandblock;
 
-        /// <summary>
-        /// Returns TRUE if this is a house cell that can be protected by a housing barrier
-        /// </summary>
-        public bool IsCellRestricted => RestrictionObj != 0;
 
         /// <summary>
         /// TODO: This is a temporary locking mechanism, Mag-nus 2019-10-20
@@ -53,12 +50,12 @@ namespace ACE.Server.Physics.Common
 
         public static readonly ObjCell EmptyCell = new ObjCell();
 
-        public ObjCell(): base()
+        public ObjCell() : base()
         {
             Init();
         }
 
-        public ObjCell(uint cellID): base()
+        public ObjCell(uint cellID) : base()
         {
             ID = cellID;
             Init();
@@ -66,30 +63,22 @@ namespace ACE.Server.Physics.Common
 
         public void AddObject(PhysicsObj obj)
         {
-            readerWriterLockSlim.EnterWriteLock();
-            try
-            {
-                // check for existing obj?
-                ObjectList.Add(obj);
-                NumObjects++;
-                if (obj.ID == 0 || obj.Parent != null || obj.State.HasFlag(PhysicsState.Hidden) || VoyeurTable == null)
-                    return;
 
-                foreach (var voyeur_id in VoyeurTable)
+            bool res = _ObjectList.TryAdd(obj.ID, obj);
+
+            if (obj.ID == 0 || obj.Parent != null || obj.State.HasFlag(PhysicsState.Hidden) || VoyeurTable == null || !res)
+                return;
+
+            foreach (var voyeur_id in VoyeurTable)
+            {
+                if (voyeur_id != obj.ID && voyeur_id != 0)
                 {
-                    if (voyeur_id != obj.ID && voyeur_id != 0)
-                    {
-                        var voyeur = obj.GetObjectA(voyeur_id);
-                        if (voyeur == null) continue;
+                    var voyeur = PhysicsObj.GetObjectA(voyeur_id);
+                    if (voyeur == null) continue;
 
-                        var info = new DetectionInfo(obj.ID, DetectionType.EnteredDetection);
-                        voyeur.receive_detection_update(info);
-                    }
+                    //var info = new DetectionInfo(obj.ID, DetectionType.EnteredDetection);
+                    voyeur.receive_detection_update();
                 }
-            }
-            finally
-            {
-                readerWriterLockSlim.ExitWriteLock();
             }
         }
 
@@ -99,7 +88,6 @@ namespace ACE.Server.Physics.Common
             try
             {
                 ShadowObjectList.Add(shadowObj);
-                NumShadowObjects++; // can probably replace with .Count
                 shadowObj.Cell = this;
             }
             finally
@@ -108,26 +96,6 @@ namespace ACE.Server.Physics.Common
             }
         }
 
-        public void CheckAttack(uint attackerID, Position attackerPos, float attackerScale, AttackCone attackCone, AttackInfo attackInfo)
-        {
-            readerWriterLockSlim.EnterReadLock();
-            try
-            {
-                foreach (var shadowObj in ShadowObjectList)
-                {
-                    var pObj = shadowObj.PhysicsObj;
-                    if (pObj.ID == attackerID || pObj.State.HasFlag(PhysicsState.Static)) continue;
-
-                    var hitLocation = pObj.check_attack(attackerPos, attackerScale, attackCone, attackInfo.AttackRadius);
-                    if (hitLocation != 0)
-                        attackInfo.AddObject(pObj.ID, hitLocation);
-                }
-            }
-            finally
-            {
-                readerWriterLockSlim.ExitReadLock();
-            }
-        }
 
         public bool Equals(ObjCell objCell)
         {
@@ -135,6 +103,16 @@ namespace ACE.Server.Physics.Common
                 return false;
 
             return ID.Equals(objCell.ID);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return Equals(obj as ObjCell);
+        }
+
+        public override int GetHashCode()
+        {
+            return ID.GetHashCode();
         }
 
         public virtual TransitionState FindCollisions(Transition transition)
@@ -157,7 +135,7 @@ namespace ACE.Server.Physics.Common
                 if (path.InsertType == InsertType.InitialPlacement)
                     return TransitionState.OK;
 
-                var target = transition.ObjectInfo.Object.ProjectileTarget;
+                //var target = transition.ObjectInfo.Object.ProjectileTarget;
 
                 // If we use the following: foreach (var shadowObj in ShadowObjectList), an InvalidOperationException is thrown.
                 // Very rarely though, as we iterate through it, the collection will change.
@@ -175,8 +153,8 @@ namespace ACE.Server.Physics.Common
                     // clip through dynamic non-target objects
                     // now uses ObjectInfo.TargetId in FindObjCollisions / MissileIgnore
                     //if (target != null && !obj.Equals(target) && /*!obj.State.HasFlag(PhysicsState.Static)*/
-                        //obj.WeenieObj.IsCreature())
-                        //continue;
+                    //obj.WeenieObj.IsCreature())
+                    //continue;
 
                     var state = obj.FindObjCollisions(transition);
                     if (state != TransitionState.OK)
@@ -198,37 +176,7 @@ namespace ACE.Server.Physics.Common
             }
         }
 
-        public static ObjCell Get(uint cellID)
-        {
-            if (cellID == 0) return null;
-
-            var objCell = new ObjCell(cellID);
-            if (cellID >= 0x100)
-                return DBObj.GetEnvCell(cellID);
-
-            return LandCell.Get(cellID);
-        }
-
-        public PhysicsObj GetObject(int id)
-        {
-            readerWriterLockSlim.EnterReadLock();
-            try
-            {
-                foreach (var obj in ObjectList)
-                {
-                    if (obj != null && obj.ID == id)
-                        return obj;
-                }
-
-                return null;
-            }
-            finally
-            {
-                readerWriterLockSlim.ExitReadLock();
-            }
-        }
-
-        public static ObjCell GetVisible(uint cellID)
+        public static ObjCell GetVisible(uint cellID, int? variationId)
         {
             if (cellID == 0) return null;
 
@@ -237,30 +185,24 @@ namespace ACE.Server.Physics.Common
                return EnvCell.get_visible(cellID);
             else
                 return LandCell.Get(cellID);*/
-            return LScape.get_landcell(cellID);
+            return LScape.get_landcell(cellID, variationId);
         }
 
         public void Init()
         {
             Pos = new Position();
-            ObjectList = new List<PhysicsObj>();
+            _ObjectList = new ConcurrentDictionary<uint, PhysicsObj>();
             ShadowObjectList = new List<ShadowObj>();
             VoyeurTable = new List<uint>();
         }
 
         public void RemoveObject(PhysicsObj obj)
         {
-            readerWriterLockSlim.EnterWriteLock();
-            try
-            {
-                ObjectList.Remove(obj);
-                NumObjects--;
-                update_all_voyeur(obj, DetectionType.LeftDetection);
-            }
-            finally
-            {
-                readerWriterLockSlim.ExitWriteLock();
-            }
+
+            _ObjectList.TryRemove(new KeyValuePair<uint, PhysicsObj>(obj.ID, obj));
+
+            update_all_voyeur(obj, DetectionType.LeftDetection);
+
         }
 
         public bool check_collisions(PhysicsObj obj)
@@ -332,12 +274,12 @@ namespace ACE.Server.Physics.Common
             return false;
         }
 
-        public static void find_cell_list(Position position, int numSphere, List<Sphere> sphere, CellArray cellArray, ref ObjCell currCell, SpherePath path)
+        public static void find_cell_list(Position position, int numSphere, List<Sphere> sphere, CellArray cellArray, ref ObjCell currCell, SpherePath path, int? variation)
         {
-            cellArray.NumCells = 0;
+            //cellArray.NumCells = 0;
             cellArray.AddedOutside = false;
 
-            var visibleCell = GetVisible(position.ObjCellID);
+            var visibleCell = GetVisible(position.ObjCellID, variation);
 
             if ((position.ObjCellID & 0xFFFF) >= 0x100)
             {
@@ -360,7 +302,7 @@ namespace ACE.Server.Physics.Common
                 }
                 //var checkCells = cellArray.Cells.Values.ToList();
                 //foreach (var cell in checkCells)
-                    //cell.find_transit_cells(position, numSphere, sphere, cellArray, path);
+                //cell.find_transit_cells(position, numSphere, sphere, cellArray, path);
 
                 if (currCell != null)
                 {
@@ -384,36 +326,9 @@ namespace ACE.Server.Physics.Common
                     }
                 }
             }
-            if (!cellArray.LoadCells && (position.ObjCellID & 0xFFFF) >= 0x100)
-            {
-                var cells = cellArray.Cells.Values.ToList();
-                foreach (var cell in cells)
-                {
-                    if (cell == null) continue;
-
-                    if (visibleCell.ID == cell.ID)
-                        continue;
-
-                    var found = false;
-
-                    foreach (var stab in ((EnvCell)visibleCell).VisibleCells.Values)
-                    {
-                        if (stab == null)
-                            continue;
-
-                        if (cell.ID == stab.ID)
-                        {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found)
-                        cellArray.remove_cell(cell);
-                }
-            }
         }
 
-        public static void find_cell_list(Position position, int numCylSphere, List<CylSphere> cylSphere, CellArray cellArray, SpherePath path)
+        public static void find_cell_list(Position position, int numCylSphere, List<CylSphere> cylSphere, CellArray cellArray, SpherePath path, int? variation)
         {
             if (numCylSphere > 10)
                 numCylSphere = 10;
@@ -429,27 +344,27 @@ namespace ACE.Server.Physics.Common
             }
 
             ObjCell empty = null;
-            find_cell_list(position, numCylSphere, spheres, cellArray, ref empty, path);
+            find_cell_list(position, numCylSphere, spheres, cellArray, ref empty, path, variation);
         }
 
-        public static void find_cell_list(Position position, Sphere sphere, CellArray cellArray, SpherePath path)
+        public static void find_cell_list(Position position, Sphere sphere, CellArray cellArray, SpherePath path, int? variation)
         {
             var globalSphere = new Sphere();
             globalSphere.Center = position.LocalToGlobal(sphere.Center);
             globalSphere.Radius = sphere.Radius;
 
             ObjCell empty = null;
-            find_cell_list(position, 1, globalSphere, cellArray, ref empty, path);
+            find_cell_list(position, 1, globalSphere, cellArray, ref empty, path, variation);
         }
 
-        public static void find_cell_list(CellArray cellArray, ref ObjCell checkCell, SpherePath path)
+        public static void find_cell_list(CellArray cellArray, ref ObjCell checkCell, SpherePath path, int? variation)
         {
-            find_cell_list(path.CheckPos, path.NumSphere, path.GlobalSphere, cellArray, ref checkCell, path);
+            find_cell_list(path.CheckPos, path.NumSphere, path.GlobalSphere, cellArray, ref checkCell, path, variation);
         }
 
-        public static void find_cell_list(Position position, int numSphere, Sphere sphere, CellArray cellArray, ref ObjCell currCell, SpherePath path)
+        public static void find_cell_list(Position position, int numSphere, Sphere sphere, CellArray cellArray, ref ObjCell currCell, SpherePath path, int? variation)
         {
-            find_cell_list(position, numSphere, new List<Sphere>() { sphere }, cellArray, ref currCell, path);
+            find_cell_list(position, numSphere, new List<Sphere>() { sphere }, cellArray, ref currCell, path, variation);
         }
 
         public virtual void find_transit_cells(int numParts, List<PhysicsPart> parts, CellArray cellArray)
@@ -491,17 +406,12 @@ namespace ACE.Server.Physics.Common
 
         public void init_objects()
         {
-            readerWriterLockSlim.EnterReadLock();
-            try
-            {
-                foreach (var obj in ObjectList)
-                    if (!obj.State.HasFlag(PhysicsState.Static) && !obj.is_completely_visible())
-                        obj.recalc_cross_cells();
-            }
-            finally
-            {
-                readerWriterLockSlim.ExitReadLock();
-            }
+            Parallel.ForEach(_ObjectList,
+                obj =>
+                {
+                    if (!obj.Value.State.HasFlag(PhysicsState.Static) && !obj.Value.is_completely_visible())
+                        obj.Value.recalc_cross_cells();
+                });
         }
 
         public virtual bool point_in_cell(Vector3 point)
@@ -520,7 +430,7 @@ namespace ACE.Server.Physics.Common
             readerWriterLockSlim.EnterWriteLock();
             try
             {
-                while (NumShadowObjects > 0)
+                while (ShadowObjectList.Count > 0)
                 {
                     var shadowObj = ShadowObjectList[0];
                     remove_shadow_object(shadowObj);
@@ -545,7 +455,6 @@ namespace ACE.Server.Physics.Common
                 // multiple shadows?
                 ShadowObjectList.Remove(shadowObj);
                 shadowObj.Cell = null;
-                NumShadowObjects--;
             }
             finally
             {
@@ -553,10 +462,6 @@ namespace ACE.Server.Physics.Common
             }
         }
 
-        public void unhide_object(PhysicsObj obj)
-        {
-            update_all_voyeur(obj, DetectionType.EnteredDetection, false);
-        }
 
         public void update_all_voyeur(PhysicsObj obj, DetectionType type, bool checkDetection = true)
         {
@@ -570,11 +475,11 @@ namespace ACE.Server.Physics.Common
             {
                 if (voyeur_id != obj.ID && voyeur_id != 0)
                 {
-                    var voyeur = obj.GetObjectA(voyeur_id);
+                    var voyeur = PhysicsObj.GetObjectA(voyeur_id);
                     if (voyeur == null) continue;
 
-                    var info = new DetectionInfo(obj.ID, type);
-                    voyeur.receive_detection_update(info);
+                    //var info = new DetectionInfo(obj.ID, type);
+                    voyeur.receive_detection_update();
                 }
             }
         }
@@ -585,7 +490,7 @@ namespace ACE.Server.Physics.Common
 
             if ((ID & 0xFFFF) >= 0x100)
             {
-                if (!(this is EnvCell envCell))
+                if (this is not EnvCell envCell)
                 {
                     Console.WriteLine($"{ID:X8}.IsVisible({cell.ID:X8}): {ID:X8} not detected as EnvCell");
                     return false;
@@ -594,7 +499,7 @@ namespace ACE.Server.Physics.Common
             }
             else if ((cell.ID & 0xFFFF) >= 0x100)
             {
-                if (!(cell is EnvCell envCell))
+                if (cell is not EnvCell envCell)
                 {
                     Console.WriteLine($"{ID:X8}.IsVisible({cell.ID:X8}): {cell.ID:X8} not detected as EnvCell");
                     return false;
@@ -616,15 +521,7 @@ namespace ACE.Server.Physics.Common
 
         public void AddObjectListTo(List<PhysicsObj> target)
         {
-            readerWriterLockSlim.EnterReadLock();
-            try
-            {
-                target.AddRange(ObjectList);
-            }
-            finally
-            {
-                readerWriterLockSlim.ExitReadLock();
-            }
+            target.AddRange(ObjectList);
         }
     }
 }
