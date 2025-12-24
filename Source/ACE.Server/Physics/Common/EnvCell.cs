@@ -45,7 +45,7 @@ namespace ACE.Server.Physics.Common
            // Flags = envCell.Flags;
             ID = envCell.Id;
             //ShadowObjectIDs = envCell.Surfaces;
-            Pos = new Position(ID, new AFrame(envCell.Position));
+            Pos = new Position(ID, new AFrame(envCell.Position), Variation);
             Portals = envCell.CellPortals;
             //NumPortals = Portals.Count;
             StaticObjectIDs = new List<uint>();

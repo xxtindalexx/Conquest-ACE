@@ -568,13 +568,12 @@ namespace ACE.Server.Command.Handlers.Processors
             var sqlFile = json2sql_landblock(session, json_folder, json_file);
             if (sqlFile == null) return;
 
-            // import sql to db
             var sql_folder = json_folder.Replace("json", "sql");
             ImportSQL(sql_folder + sqlFile);
             CommandHandlerHelper.WriteOutputInfo(session, $"Imported {sqlFile}");
 
             // clear any cached instances for this landblock
-            DatabaseManager.World.ClearCachedInstancesByLandblock(landblockId, null);
+            DatabaseManager.World.ClearCachedInstancesByLandblock(landblockId, null); //todo - comeback and make this variation aware
         }
 
         private static void ImportJsonQuest(Session session, string json_folder, string json_file)
@@ -1585,12 +1584,12 @@ namespace ACE.Server.Command.Handlers.Processors
                 {
                     // handle special case: deleting the last instance from landblock
                     using (var ctx = new WorldDbContext())
-                        ctx.Database.ExecuteSql($"DELETE FROM landblock_instance WHERE landblock={landblock} and variation_Id={variationId};");
+                        ctx.Database.ExecuteSqlRaw($"DELETE FROM landblock_instance WHERE landblock={landblock} and variation_Id={variationId};");
                 }
                 else
                 {
                     using (var ctx = new WorldDbContext())
-                        ctx.Database.ExecuteSql($"DELETE FROM landblock_instance WHERE landblock={landblock};");
+                        ctx.Database.ExecuteSqlRaw($"DELETE FROM landblock_instance WHERE landblock={landblock};");
                 }
 
                 // clear landblock instances for this landblock (again)
@@ -3460,6 +3459,7 @@ namespace ACE.Server.Command.Handlers.Processors
                 return;
             }
 
+            var variation = obj.Location.Variation;
             // get direction
             var dirname = parameters[curParam++].ToLower();
             var dir = GetNudgeDir(dirname);
@@ -3497,7 +3497,7 @@ namespace ACE.Server.Command.Handlers.Processors
             var landblock_id = (ushort)(obj.Guid.Full >> 12);
 
             // get instances for landblock
-            var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblock_id);
+            var instances = DatabaseManager.World.GetCachedInstancesByLandblock(landblock_id, variation);
 
             // find instance
             var instance = instances.FirstOrDefault(i => i.Guid == obj.Guid.Full);
@@ -3674,6 +3674,7 @@ namespace ACE.Server.Command.Handlers.Processors
             // get direction
             var dirname = parameters[curParam++].ToLower();
             var dir = GetNudgeDir(dirname);
+            var variation = obj.Location.Variation;
 
             bool curRotate = false;
 
@@ -3810,7 +3811,7 @@ namespace ACE.Server.Command.Handlers.Processors
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid angle: {degrees_str}", ChatMessageType.Broadcast));
                 return;
             }
-
+            var variation = obj.Location.Variation;
             var rads = degrees.ToRadians();
             var q = Quaternion.CreateFromAxisAngle(axis, rads);
 
@@ -4006,7 +4007,7 @@ namespace ACE.Server.Command.Handlers.Processors
 
                     try
                     {
-                        var pos = new Position(new Vector2(x, y));
+                        var pos = new Position(new Vector2(x, y), null);
                         pos.AdjustMapCoords();
                         pos.Translate(objCellId);
                         pos.FindZ();

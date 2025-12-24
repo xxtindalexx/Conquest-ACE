@@ -352,7 +352,7 @@ namespace ACE.Server.WorldObjects
 
                 if (!PhysicsObj.IsMovingOrAnimating)
                 {
-                    SyncLocation();
+                    SyncLocation(Location.Variation);
                     EnqueueBroadcast(new GameMessageUpdatePosition(this));
                 }
             }
@@ -410,18 +410,25 @@ namespace ACE.Server.WorldObjects
         /// <returns>TRUE if object moves to a different landblock</returns>
         public bool UpdatePlayerPosition(ACE.Entity.Position newPosition, bool forceUpdate = false)
         {
-            //Console.WriteLine($"{Name}.UpdatePlayerPhysics({newPosition}, {forceUpdate}, {Teleporting})");
+            //Console.WriteLine($"{Name}.UpdatePlayerPosition({newPosition}, {forceUpdate}, {Teleporting})");
             bool verifyContact = false;
 
             // possible bug: while teleporting, client can still send AutoPos packets from old landblock
             if (Teleporting && !forceUpdate) return false;
+            if (!Teleporting && Location.Variation != null && newPosition.Variation == null) //do not wipe out the prior Variation unless teleporting
+            {
+                newPosition.Variation = Location.Variation;
+            }
 
             // pre-validate movement
             if (!ValidateMovement(newPosition))
             {
-                log.Error($"{Name}.UpdatePlayerPosition() - movement pre-validation failed from {Location} to {newPosition}");
+                log.Error($"{Name}.UpdatePlayerPosition() - movement pre-validation failed from {Location} to {newPosition}, t: {Teleporting}");
+                //log.Error($"{new StackTrace()}");
                 return false;
             }
+
+            bool variationChange = Location.Variation != newPosition.Variation;
 
             try
             {
@@ -434,14 +441,14 @@ namespace ACE.Server.WorldObjects
                 {
                     var distSq = Location.SquaredDistanceTo(newPosition);
 
-                    if (distSq > PhysicsGlobals.EpsilonSq)
+                    if (distSq > PhysicsGlobals.EpsilonSq || variationChange)
                     {
                         /*var p = new Physics.Common.Position(newPosition);
                         var dist = PhysicsObj.Position.Distance(p);
                         Console.WriteLine($"Dist: {dist}");*/
 
-                        if (newPosition.Landblock == 0x18A && Location.Landblock != 0x18A)
-                            log.Info($"{Name} is getting swanky");
+                        //if (newPosition.Landblock == 0x18A && Location.Landblock != 0x18A)
+                        //    log.Info($"{Name} is getting swanky");
 
                         if (!Teleporting)
                         {
@@ -464,9 +471,9 @@ namespace ACE.Server.WorldObjects
                         if (curCell != null)
                         {
                             //if (PhysicsObj.CurCell == null || curCell.ID != PhysicsObj.CurCell.ID)
-                                //PhysicsObj.change_cell_server(curCell);
-
-                            PhysicsObj.set_request_pos(newPosition.Pos, newPosition.Rotation, curCell, Location.LandblockId.Raw);
+                            //PhysicsObj.change_cell_server(curCell);
+                            //Console.WriteLine($"{Name} Destination Cell {newPosition.Cell}, v: {curCell.VariationId}");
+                            PhysicsObj.set_request_pos(newPosition.Pos, newPosition.Rotation, curCell, Location.LandblockId.Raw, newPosition.Variation);
                             if (FastTick)
                                 success = PhysicsObj.update_object_server_new();
                             else
@@ -503,9 +510,9 @@ namespace ACE.Server.WorldObjects
 
                 if (!success) return false;
 
-                var landblockUpdate = Location.Cell >> 16 != newPosition.Cell >> 16;
+                var landblockUpdate = (Location.Cell >> 16 != newPosition.Cell >> 16) || variationChange;
 
-                Location = newPosition;
+                Location = new ACE.Entity.Position(newPosition);
 
                 if (RecordCast.Enabled)
                     RecordCast.Log($"CurPos: {Location.ToLOCString()}");
@@ -529,7 +536,7 @@ namespace ACE.Server.WorldObjects
                     if (elapsedSeconds >= 0.100) // Yea, that ain't good....
                         log.Warn($"[PERFORMANCE][PHYSICS] {Guid}:{Name} took {(elapsedSeconds * 1000):N1} ms to process UpdatePlayerPosition() at loc: {Location}");
                     else if (elapsedSeconds >= 0.010)
-                        log.DebugFormat("[PERFORMANCE][PHYSICS] {0}:{1} took {2:N1} ms to process UpdatePlayerPosition() at loc: {3}", Guid, Name, (elapsedSeconds * 1000), Location);
+                        log.Debug($"[PERFORMANCE][PHYSICS] {Guid}:{Name} took {(elapsedSeconds * 1000):N1} ms to process UpdatePlayerPosition() at loc: {Location}");
                 }
             }
         }
@@ -575,10 +582,11 @@ namespace ACE.Server.WorldObjects
             var blockcell = PhysicsObj.Position.ObjCellID;
             var pos = PhysicsObj.Position.Frame.Origin;
             var rotate = PhysicsObj.Position.Frame.Orientation;
+            var variation = PhysicsObj.Position.Variation;
 
             var landblockUpdate = blockcell << 16 != CurrentLandblock.Id.Landblock;
 
-            Location = new ACE.Entity.Position(blockcell, pos, rotate);
+            Location = new ACE.Entity.Position(blockcell, pos, rotate, variation);
 
             return landblockUpdate;
         }

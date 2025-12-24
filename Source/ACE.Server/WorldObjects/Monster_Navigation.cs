@@ -1,6 +1,3 @@
-using System;
-using System.Numerics;
-
 using ACE.Common;
 using ACE.Entity;
 using ACE.Entity.Enum;
@@ -10,6 +7,9 @@ using ACE.Server.Entity.Actions;
 using ACE.Server.Managers;
 using ACE.Server.Physics.Animation;
 using ACE.Server.Physics.Common;
+using System;
+using System.Diagnostics;
+using System.Numerics;
 
 namespace ACE.Server.WorldObjects
 {
@@ -254,9 +254,12 @@ namespace ACE.Server.WorldObjects
 
         public void UpdatePosition(bool netsend = true)
         {
-            //stopwatch.Restart();
+            if (PhysicsObj == null)
+                return;
+
+            stopwatch.Restart();
             PhysicsObj.update_object();
-            //ServerPerformanceMonitor.AddToCumulativeEvent(ServerPerformanceMonitor.CumulativeEventHistoryType.Monster_Navigation_UpdatePosition_PUO, stopwatch.Elapsed.TotalSeconds);
+            ServerPerformanceMonitor.AddToCumulativeEvent(ServerPerformanceMonitor.CumulativeEventHistoryType.Monster_Navigation_UpdatePosition_PUO, stopwatch.Elapsed.TotalSeconds);
             UpdatePosition_SyncLocation();
 
             if (netsend)
@@ -271,6 +274,12 @@ namespace ACE.Server.WorldObjects
 
             if (MonsterState == State.Awake && IsMoving && PhysicsObj.MovementManager.MoveToManager.PendingActions.Count == 0)
                 IsMoving = false;
+
+            if (stopwatch.Elapsed.TotalSeconds > 1)
+            {
+                log.Error($"Timing: UpdatePosition longer than 1 second {Name}, {Guid}, {this.CurrentLandblock?.Id}, {this.CurrentLandblock.VariationId}");
+                log.Error(new StackTrace());
+            }
         }
 
         /// <summary>

@@ -316,7 +316,7 @@ namespace ACE.Server.WorldObjects
                 if (isMoved || isDying)
                 {
                     if (curCell.ID != cellBefore)
-                        Location.LandblockId = new LandblockId(curCell.ID);
+                        Location.LandblockId = new LandblockId(curCell.ID, curCell.VariationId);
 
                     // skip ObjCellID check when updating from physics
                     // TODO: update to newer version of ACE.Entity.Position
@@ -325,6 +325,7 @@ namespace ACE.Server.WorldObjects
                     Location.PositionZ = newPos.Z;
 
                     Location.Rotation = PhysicsObj.Position.Frame.Orientation;
+                    Location.Variation = PhysicsObj.Position.Variation;
 
                     //if (landblockUpdate)
                     //WorldManager.UpdateLandblock.Add(this);
@@ -345,7 +346,7 @@ namespace ACE.Server.WorldObjects
                         spellProjectile.DebugVelocity++;
 
                         if (spellProjectile.DebugVelocity == 30)
-                            log.Error($"Spell projectile w/ zero velocity detected @ {spellProjectile.Location.ToLOCString()}, launched by {spellProjectile.ProjectileSource?.Name} ({spellProjectile.ProjectileSource?.Guid}), spell ID {spellProjectile.Spell?.Id} - {spellProjectile.Spell?.Name}");
+                            log.Debug($"Spell projectile w/ zero velocity detected @ {spellProjectile.Location.ToLOCString()}, launched by {spellProjectile.ProjectileSource?.Name} ({spellProjectile.ProjectileSource?.Guid}), spell ID {spellProjectile.Spell?.Id} - {spellProjectile.Spell?.Name}");
                     }
 
                     if (spellProjectile.SpellType == ProjectileSpellType.Ring)
@@ -374,7 +375,7 @@ namespace ACE.Server.WorldObjects
                 if (elapsedSeconds >= 0.100) // Yea, that ain't good....
                 {
                     slowUpdateObjectPhysicsHits++;
-                    log.Warn($"[PERFORMANCE][PHYSICS] {Guid}:{Name} took {(elapsedSeconds * 1000):N1} ms to process UpdateObjectPhysics() at loc: {Location}");
+                    log.Warn($"[PERFORMANCE][PHYSICS] {Guid}:{Name} took {(elapsedSeconds * 1000):N1} ms to process WorldObject.UpdateObjectPhysics() at loc: {Location}");
 
                     // Destroy laggy projectiles
                     if (slowUpdateObjectPhysicsHits >= 5 && this is SpellProjectile spellProjectile)
@@ -393,10 +394,10 @@ namespace ACE.Server.WorldObjects
                         PhysicsObj.set_active(false);
                         spellProjectile.ProjectileImpact();
 
-                        log.Warn($"[PERFORMANCE][PHYSICS] {Guid}:{Name} took {(elapsedSeconds * 1000):N1} ms to process UpdateObjectPhysics() at loc: {Location}. SpellProjectile destroyed.");
+                        log.Warn($"[PERFORMANCE][PHYSICS] {Guid}:{Name} took {(elapsedSeconds * 1000):N1} ms to process WorldObject.UpdateObjectPhysics() at loc: {Location}. SpellProjectile destroyed.");
                     }
                     else
-                        log.DebugFormat("[PERFORMANCE][PHYSICS] {0}:{1} took {2:N1} ms to process UpdateObjectPhysics() at loc: {3}", Guid, Name, (elapsedSeconds * 1000), Location);
+                        log.Debug($"[PERFORMANCE][PHYSICS] {Guid}:{Name} took {(elapsedSeconds * 1000):N1} ms to process WorldObject.UpdateObjectPhysics() at loc: {Location}");
                 }
             }
         }

@@ -16,6 +16,10 @@ namespace ACE.Database.SQLFormatters.World
         {
             string fileName = (input.ObjCellId >> 16).ToString("X4");
             fileName = IllegalInFileName.Replace(fileName, "_");
+            if (input.VariationId.HasValue)
+            {
+                fileName += "_" + input.VariationId.ToString();
+            }
             fileName += ".sql";
 
             return fileName;

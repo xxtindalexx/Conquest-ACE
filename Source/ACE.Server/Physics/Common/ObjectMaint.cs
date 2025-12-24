@@ -198,18 +198,25 @@ namespace ACE.Server.Physics.Common
             rwLock.EnterWriteLock();
             try
             {
+                if (this.PhysicsObj.Position.Variation != obj.Position.Variation)
+                {
+                    return false;
+                }
                 if (KnownObjects.ContainsKey(obj.ID))
                     return false;
 
-                KnownObjects.TryAdd(obj.ID, obj);
+                bool added = KnownObjects.TryAdd(obj.ID, obj);
 
-                // maintain KnownPlayers for both parties
-                if (obj.IsPlayer)
-                    AddKnownPlayer(obj);
+                if (added) // maintain KnownPlayers for both parties
+                {
+                    if (obj.IsPlayer)
+                        AddKnownPlayer(obj);
 
-                obj.ObjMaint.AddKnownPlayer(PhysicsObj);
+                    obj.ObjMaint.AddKnownPlayer(PhysicsObj);
+                }
 
-                return true;
+
+                return added;
             }
             finally
             {
@@ -447,6 +454,10 @@ namespace ACE.Server.Physics.Common
             rwLock.EnterWriteLock();
             try
             {
+                if (PhysicsObj.Position.Variation != obj.Position.Variation)
+                {
+                    return false;
+                }
                 if (VisibleObjects.ContainsKey(obj.ID))
                     return false;
 
@@ -565,13 +576,12 @@ namespace ACE.Server.Physics.Common
             try
             {
                 RemoveVisibleObject(obj);
-
+                //Console.WriteLine($"Destructing PhysObj: {obj.Name}, {obj.Position.Variation}");
                 if (DestructionQueue.ContainsKey(obj))
                     return false;
 
-                DestructionQueue.TryAdd(obj, PhysicsTimer.CurrentTime + DestructionTime);
+                return DestructionQueue.TryAdd(obj, PhysicsTimer.CurrentTime + DestructionTime);
 
-                return true;
             }
             finally
             {
@@ -768,12 +778,17 @@ namespace ACE.Server.Physics.Common
             // only tracking players who know about this object
             if (!obj.IsPlayer)
             {
-                Console.WriteLine($"{PhysicsObj.Name}.ObjectMaint.AddKnownPlayer({obj.Name}): tried to add a non-player");
+                log.Debug($"{PhysicsObj.Name}.ObjectMaint.AddKnownPlayer({obj.Name}): tried to add a non-player");
                 return false;
             }
             if (PhysicsObj.DatObject)
             {
-                Console.WriteLine($"{PhysicsObj.Name}.ObjectMaint.AddKnownPlayer({obj.Name}): tried to add player for dat object");
+                log.Debug($"{PhysicsObj.Name}.ObjectMaint.AddKnownPlayer({obj.Name}): tried to add player for dat object");
+                return false;
+            }
+            if (obj.Position.Variation != PhysicsObj.Position.Variation)
+            {
+                log.Debug($"{PhysicsObj.Name}.ObjectMaint.AddKnownPlayer({obj.Name}): tried to add player in a different Variation");
                 return false;
             }
 
@@ -910,14 +925,42 @@ namespace ACE.Server.Physics.Common
 
         public List<Creature> GetVisibleTargetsValuesOfTypeCreature()
         {
-            rwLock.EnterReadLock();
             try
             {
-                return VisibleTargets.Values.Select(v => v.WeenieObj.WorldObject).OfType<Creature>().ToList();
+                rwLock.EnterReadLock();
+                try
+                {
+                    if (VisibleTargets.Count == 0)
+                    {
+                        return new List<Creature>();
+                    }
+
+                    int? curVariation = this.PhysicsObj?.Position?.Variation;
+                    if (curVariation.HasValue)
+                    {
+                        return VisibleTargets.Values
+                            .Where(v => v.WeenieObj.WorldObject?.Location.Variation == curVariation)
+                            .Select(v => v.WeenieObj.WorldObject)
+                            .OfType<Creature>()
+                            .ToList();
+                    }
+                    else
+                    {
+                        return VisibleTargets.Values
+                            .Select(v => v.WeenieObj.WorldObject)
+                            .OfType<Creature>()
+                            .ToList();
+                    }
+                }
+                finally
+                {
+                    rwLock.ExitReadLock();
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                rwLock.ExitReadLock();
+                log.Warn($"{PhysicsObj.Name}.ObjectMaint.GetVisibleTargetsValuesOfTypeCreature(): thrown exception: {ex.Message}, {VisibleTargets?.Count}");
+                return new List<Creature>();
             }
         }
 

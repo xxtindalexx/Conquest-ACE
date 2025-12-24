@@ -112,10 +112,10 @@ namespace ACE.Entity
             if (rotate180)
             {
                 var rotate = new Quaternion(0, 0, qz, qw) * Quaternion.CreateFromYawPitchRoll(0, 0, (float)Math.PI);
-                return new Position(LandblockId.Raw, PositionX + dx, PositionY + dy, PositionZ + bumpHeight, 0f, 0f, rotate.Z, rotate.W);
+                return new Position(LandblockId.Raw, PositionX + dx, PositionY + dy, PositionZ + bumpHeight, 0f, 0f, rotate.Z, rotate.W, false, Variation);
             }
             else
-                return new Position(LandblockId.Raw, PositionX + dx, PositionY + dy, PositionZ + bumpHeight, 0f, 0f, qz, qw);
+                return new Position(LandblockId.Raw, PositionX + dx, PositionY + dy, PositionZ + bumpHeight, 0f, 0f, qz, qw, false, Variation);
         }
 
         /// <summary>
@@ -254,7 +254,7 @@ namespace ACE.Entity
                 SetPosition(Pos);
         }
 
-        public Position(BinaryReader payload, int? VariationId = null)
+        public Position(BinaryReader payload, int? VariationId)
         {
             LandblockId = new LandblockId(payload.ReadUInt32(), VariationId);
 
@@ -270,7 +270,7 @@ namespace ACE.Entity
             Variation = VariationId;
         }
 
-        public Position(float northSouth, float eastWest, int? VariationId = null)
+        public Position(float northSouth, float eastWest, int? VariationId)
         {
             northSouth = (northSouth - 0.5f) * 10.0f;
             eastWest = (eastWest - 0.5f) * 10.0f;
@@ -298,7 +298,7 @@ namespace ACE.Entity
         /// Given a Vector2 set of coordinates, create a new position object for use in converting from VLOC to LOC
         /// </summary>
         /// <param name="coordinates">A set coordinates provided in a Vector2 object with East-West being the X value and North-South being the Y value</param>
-        public Position(Vector2 coordinates)
+        public Position(Vector2 coordinates, int? VariationId)
         {
             // convert from (-101.95, 102.05) to (0, 204)
             coordinates += Vector2.One * 101.95f;
@@ -323,11 +323,12 @@ namespace ACE.Entity
 
             var objCellID = (uint)(blockX << 24 | blockY << 16 | cell);
 
-            LandblockId = new LandblockId(objCellID);
+            LandblockId = new LandblockId(objCellID, VariationId);
 
             Pos = new Vector3(originX, originY, 0);     // must use PositionExtensions.AdjustMapCoords() to get Z
 
             Rotation = Quaternion.Identity;
+            Variation = VariationId;
         }
 
         public void Serialize(BinaryWriter payload, PositionFlags positionFlags, int animationFrame, bool writeLandblock = true)
@@ -513,12 +514,12 @@ namespace ACE.Entity
 
         public override string ToString()
         {
-            return $"{LandblockId.Raw:X8} [{PositionX} {PositionY} {PositionZ}]";
+            return $"{LandblockId.Raw:X8} [{PositionX} {PositionY} {PositionZ}] [v:{Variation:N0}]";
         }
 
         public string ToLOCString()
         {
-            return $"0x{LandblockId.Raw:X8} [{PositionX:F6} {PositionY:F6} {PositionZ:F6}] {RotationW:F6} {RotationX:F6} {RotationY:F6} {RotationZ:F6}";
+            return $"0x{LandblockId.Raw:X8} [{PositionX:F6} {PositionY:F6} {PositionZ:F6}] {RotationW:F6} {RotationX:F6} {RotationY:F6} {RotationZ:F6}, v:{Variation:N0}";
         }
 
         public const int BlockLength = 192;

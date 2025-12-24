@@ -77,6 +77,16 @@ namespace ACE.Database
             _uniqueQueue.Dispose();
         }
 
+        public List<string> QueueReport()
+        {
+            return _uniqueQueue.ToArray().Select(t => t.AsyncState as string ?? $"Task#{t.Id}").ToList();
+        }
+
+        public List<string> ReadOnlyQueueReport()
+        {
+            return _readOnlyQueue.Select(t => t.AsyncState as string ?? $"Task#{t.Id}").ToList();
+        }
+
         private void DoReadOnlyWork()
         {
             while (!_readOnlyQueue.IsAddingCompleted)

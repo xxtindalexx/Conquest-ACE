@@ -319,12 +319,12 @@ namespace ACE.Server.Entity
 
         public static Position ACEPosition(this Physics.Common.Position pos)
         {
-            return new Position(pos.ObjCellID, pos.Frame.Origin, pos.Frame.Orientation);
+            return new Position(pos.ObjCellID, pos.Frame.Origin, pos.Frame.Orientation, pos.Variation);
         }
 
         public static Physics.Common.Position PhysPosition(this Position pos)
         {
-            return new Physics.Common.Position(pos.Cell, new Physics.Animation.AFrame(pos.Pos, pos.Rotation));
+            return new Physics.Common.Position(pos.Cell, new Physics.Animation.AFrame(pos.Pos, pos.Rotation), pos.Variation);
         }
 
 

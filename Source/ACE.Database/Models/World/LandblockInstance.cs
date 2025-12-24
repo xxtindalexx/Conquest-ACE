@@ -50,5 +50,5 @@ public partial class LandblockInstance
 
     public int? VariationId { get; set; }
 
-    public virtual ICollection<LandblockInstanceLink> LandblockInstanceLink { get; set; } = new List<LandblockInstanceLink>();
+    public virtual ICollection<LandblockInstanceLink> LandblockInstanceLink { get; set; }
 }

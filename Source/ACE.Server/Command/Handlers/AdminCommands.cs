@@ -2335,6 +2335,7 @@ namespace ACE.Server.Command.Handlers
                 }
                 var weenie = DatabaseManager.World.GetCachedWeenie(teleportPOI.WeenieClassId);
                 var portalDest = new Position(weenie.GetPosition(PositionType.Destination));
+                portalDest.Variation = null;
                 WorldObject.AdjustDungeon(portalDest);
                 session.Player.Teleport(portalDest);
             }
@@ -4286,7 +4287,7 @@ namespace ACE.Server.Command.Handlers
                         {
                             item.PhysicsObj.SetPositionInternal(transit);
 
-                            item.SyncLocation();
+                            item.SyncLocation(session.Player.Location.Variation);
 
                             item.SendUpdatePosition(true);
                         }

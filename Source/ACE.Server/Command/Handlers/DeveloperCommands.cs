@@ -2070,8 +2070,22 @@ namespace ACE.Server.Command.Handlers
         {
             var isBlock = true;
             var param = parameters[0];
-            if (parameters.Length > 1)
+            uint? variation = null;
+            if (parameters.Length > 2)
+            {
                 isBlock = false;
+            }
+            else if (parameters.Length == 2)
+            {
+                if (UInt32.TryParse(parameters[1], out var tempVal))
+                {
+                    variation = tempVal;
+                }
+                else
+                {
+                    isBlock = false;
+                }
+            }
 
             var landblock = 0u;
             if (isBlock)
@@ -2091,14 +2105,14 @@ namespace ACE.Server.Command.Handlers
 
             // teleport to dungeon landblock
             if (isBlock)
-                HandleTeleDungeonBlock(session, landblock);
+                HandleTeleDungeonBlock(session, landblock, variation);
 
             // teleport to dungeon by name
             else
                 HandleTeleDungeonName(session, parameters);
         }
 
-        public static void HandleTeleDungeonBlock(Session session, uint landblock)
+        public static void HandleTeleDungeonBlock(Session session, uint landblock, uint? variation)
         {
             using (var ctx = new WorldDbContext())
             {
@@ -2113,15 +2127,15 @@ namespace ACE.Server.Command.Handlers
 
                 var results = query.ToList();
 
-                var dest = results.Where(i => i.Dest.ObjCellId >> 16 == landblock).Select(i => i.Dest).FirstOrDefault();
+                var dest = results.Where(i => i.Dest.ObjCellId >> 16 == landblock && (i.Dest.VariationId == variation || variation == null)).Select(i => i.Dest).FirstOrDefault();
 
                 if (dest == null)
                 {
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"Couldn't find dungeon {landblock:X4}", ChatMessageType.Broadcast));
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Couldn't find dungeon {landblock:X4} {variation}", ChatMessageType.Broadcast));
                     return;
                 }
 
-                var pos = new Position(dest.ObjCellId, dest.OriginX, dest.OriginY, dest.OriginZ, dest.AnglesX, dest.AnglesY, dest.AnglesZ, dest.AnglesW);
+                var pos = new Position(dest.ObjCellId, dest.OriginX, dest.OriginY, dest.OriginZ, dest.AnglesX, dest.AnglesY, dest.AnglesZ, dest.AnglesW, false, dest.VariationId);
                 WorldObject.AdjustDungeon(pos);
 
                 session.Player.Teleport(pos);
@@ -2155,7 +2169,7 @@ namespace ACE.Server.Command.Handlers
                     return;
                 }
 
-                var pos = new Position(dest.ObjCellId, dest.OriginX, dest.OriginY, dest.OriginZ, dest.AnglesX, dest.AnglesY, dest.AnglesZ, dest.AnglesW);
+                var pos = new Position(dest.ObjCellId, dest.OriginX, dest.OriginY, dest.OriginZ, dest.AnglesX, dest.AnglesY, dest.AnglesZ, dest.AnglesW, false, dest.VariationId);
                 WorldObject.AdjustDungeon(pos);
 
                 session.Player.Teleport(pos);
@@ -2172,13 +2186,14 @@ namespace ACE.Server.Command.Handlers
 
             var blockStart = landblock << 16;
             var blockEnd = blockStart | 0xFFFF;
+            var variation = session.Player.Location.Variation ?? 0;
 
             using (var ctx = new WorldDbContext())
             {
                 var query = from weenie in ctx.Weenie
                             join wstr in ctx.WeeniePropertiesString on weenie.ClassId equals wstr.ObjectId
                             join wpos in ctx.WeeniePropertiesPosition on weenie.ClassId equals wpos.ObjectId
-                            where weenie.Type == (int)WeenieType.Portal && wpos.PositionType == (int)PositionType.Destination && wpos.ObjCellId >= blockStart && wpos.ObjCellId <= blockEnd
+                            where weenie.Type == (int)WeenieType.Portal && wpos.PositionType == (int)PositionType.Destination && wpos.ObjCellId >= blockStart && wpos.ObjCellId <= blockEnd && (wpos.VariationId ?? 0) == variation
                             select wstr;
 
                 var results = query.ToList();
@@ -3036,7 +3051,18 @@ namespace ACE.Server.Command.Handlers
             var wo = CommandHandlerHelper.GetLastAppraisedObject(session);
 
             if (wo != null)
-                session.Network.EnqueueSend(new GameMessageSystemChat($"GUID: {wo.Guid}\nWeenieClassId: {wo.WeenieClassId}\nWeenieClassName: {wo.WeenieClassName}", ChatMessageType.Broadcast));
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"GUID: {wo.Guid}\nWeenieClassId: {wo.WeenieClassId}\nWeenieClassName: {wo.WeenieClassName}",
+                    ChatMessageType.Broadcast));
+                if (wo.Location != null)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Variation: {wo.Location.Variation}", ChatMessageType.Broadcast));
+                }
+                if (wo.PhysicsObj != null)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Physics Position: {wo.PhysicsObj.Position}", ChatMessageType.Broadcast));
+                }
+            }
         }
 
         public static WorldObject LastTestAim;

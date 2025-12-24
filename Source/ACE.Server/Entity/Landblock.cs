@@ -130,6 +130,26 @@ namespace ACE.Server.Entity
 
         private readonly ActionQueue actionQueue = new ActionQueue();
 
+        public int WorldObjectCount
+        {
+            get
+            {
+                lock (worldObjects)
+                    return worldObjects.Count;
+            }
+        }
+
+        public int PhysicsObjectCount
+        {
+            get
+            {
+                if (PhysicsLandblock != null)
+                    return PhysicsLandblock.ServerObjects.Count;
+                else
+                    return 0;
+            }
+        }
+
         /// <summary>
         /// Landblocks heartbeat every 5 seconds
         /// </summary>
@@ -1197,7 +1217,7 @@ namespace ACE.Server.Entity
         /// <summary>
         /// This will return null if the object was not found in the current or adjacent landblocks.
         /// </summary>
-        public WorldObject GetObject(ObjectGuid guid, bool searchAdjacents = true)
+        public WorldObject GetObject(ObjectGuid guid, bool searchAdjacents = true, bool searchVariations = false)
         {
             if (pendingRemovals.Contains(guid))
                 return null;
@@ -1336,28 +1356,69 @@ namespace ACE.Server.Entity
         private void SaveDB()
         {
             var biotas = new Collection<(Biota biota, ReaderWriterLockSlim rwLock)>();
+            var savedObjects = new List<WorldObject>();
 
+            // First pass: only process objects that have changes or are containers
+            // This avoids iterating through static objects that never change
             foreach (var wo in worldObjects.Values)
             {
-                if (wo.IsStaticThatShouldPersistToShard() || wo.IsDynamicThatShouldPersistToShard())
-                    AddWorldObjectToBiotasSaveCollection(wo, biotas);
+                // Skip objects that don't need persistence entirely
+                if (!wo.IsStaticThatShouldPersistToShard() && !wo.IsDynamicThatShouldPersistToShard())
+                    continue;
+
+                // Early exit optimization: skip objects with no changes and no inventory
+                if (!wo.ChangesDetected && wo is not Container)
+                    continue;
+
+                AddWorldObjectToBiotasSaveCollection(wo, biotas, savedObjects);
             }
 
-            DatabaseManager.Shard.SaveBiotasInParallel(biotas, result => { }, "LandblockSaveDB");
+            if (biotas.Count > 0)
+            {
+                DatabaseManager.Shard.SaveBiotasInParallel(
+                    biotas,
+                    result =>
+                    {
+                        // Clear SaveInProgress flags on world thread for thread safety
+                        var clearFlagsAction = new ACE.Server.Entity.Actions.ActionChain();
+                        clearFlagsAction.AddAction(WorldManager.ActionQueue, ActionType.Landblock_ClearFlagsAfterSave, () =>
+                        {
+                            foreach (var wo in savedObjects)
+                            {
+                                if (!wo.IsDestroyed)
+                                    wo.SaveInProgress = false;
+                            }
+
+                            if (!result)
+                            {
+                                log.Warn($"[LANDBLOCK SAVE] Bulk save for landblock {Id.Raw}{(VariationId.HasValue ? $":v{VariationId.Value}" : string.Empty)} returned false; SaveInProgress flags cleared to avoid stuck state.");
+                            }
+                        });
+                        clearFlagsAction.EnqueueChain();
+                    },
+                    $"SaveDB:Landblock:{this.Id.Raw}{(this.VariationId.HasValue ? $":v{this.VariationId.Value}" : string.Empty)}"
+                );
+            }
         }
 
-        private void AddWorldObjectToBiotasSaveCollection(WorldObject wo, Collection<(Biota biota, ReaderWriterLockSlim rwLock)> biotas)
+        private static void AddWorldObjectToBiotasSaveCollection(WorldObject wo, Collection<(Biota biota, ReaderWriterLockSlim rwLock)> biotas, List<WorldObject> savedObjects)
         {
-            if (wo.ChangesDetected)
+            if (wo.ChangesDetected && !wo.SaveInProgress)
             {
                 wo.SaveBiotaToDatabase(false);
                 biotas.Add((wo.Biota, wo.BiotaDatabaseLock));
+                savedObjects.Add(wo);
             }
 
+            // Only recurse into containers - most objects don't have inventory
             if (wo is Container container)
             {
+                // Early exit if container is empty
+                if (container.Inventory.Count == 0)
+                    return;
+
                 foreach (var item in container.Inventory.Values)
-                    AddWorldObjectToBiotasSaveCollection(item, biotas);
+                    AddWorldObjectToBiotasSaveCollection(item, biotas, savedObjects);
             }
         }
 

@@ -683,6 +683,16 @@ namespace ACE.Server.WorldObjects
             if (fromPortal)
                 LastPortalTeleportTimestamp = LastTeleportStartTimestamp;
 
+            // check for changing variation - and remove anything from knownobjects that is not in the new variation
+            try
+            {
+                HandleVariationChangeVisbilityCleanup(Location.Variation, newPosition.Variation);
+            }
+            catch (Exception e)
+            {
+                log.Warn(e.Message);
+            }
+
             Session.Network.EnqueueSend(new GameMessagePlayerTeleport(this));
 
             // load quickly, but player can load into landblock before server is finished loading
@@ -705,6 +715,29 @@ namespace ACE.Server.WorldObjects
             HandlePreTeleportVisibility(newPosition);
 
             UpdatePlayerPosition(new Position(newPosition), true);
+        }
+
+        public void HandleVariationChangeVisbilityCleanup(int? sourceVariation, int? destinationVariation)
+        {
+            var knownObjs = GetKnownObjects();
+            if (knownObjs == null)
+            {
+                return;
+            }
+            for (int i = 0; i < knownObjs.Count; i++)
+            {
+                var knownObj = knownObjs[i];
+                if (knownObj.PhysicsObj != null && knownObj.Location != null && knownObj.Location.Variation != destinationVariation)
+                {
+                    knownObj.PhysicsObj.ObjMaint.RemoveObject(PhysicsObj);
+
+                    if (knownObj is Player knownPlayer)
+                        knownPlayer.RemoveTrackedObject(this, false);
+
+                    ObjMaint.RemoveObject(knownObj.PhysicsObj);
+                    RemoveTrackedObject(knownObj, false);
+                }
+            }
         }
 
         public void DoPreTeleportHide()
@@ -902,6 +935,11 @@ namespace ACE.Server.WorldObjects
             if (!biota.PropertiesPosition.TryGetValue(PositionType.Sanctuary, out var lifestone))
                 return;
 
+            if (location.VariationId.HasValue)
+            {
+                return; // Variations can't be no-log landblocks. Reserved for base landblocks only.
+            }
+
             location.ObjCellId = lifestone.ObjCellId;
             location.PositionX = lifestone.PositionX;
             location.PositionY = lifestone.PositionY;
@@ -910,6 +948,7 @@ namespace ACE.Server.WorldObjects
             location.RotationY = lifestone.RotationY;
             location.RotationZ = lifestone.RotationZ;
             location.RotationW = lifestone.RotationW;
+            location.VariationId = lifestone.VariationId;
 
             playerWasMovedFromNoLogLandblock = true;
 

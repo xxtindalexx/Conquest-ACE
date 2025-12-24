@@ -1,15 +1,58 @@
-using System;
-using System.Collections.Generic;
-
+using ACE.Database;
 using ACE.DatLoader;
 using ACE.DatLoader.FileTypes;
 using ACE.Entity.Enum;
+using ACE.Server.Managers;
 using ACE.Server.Network;
+using System;
+using System.Collections.Generic;
 
 namespace ACE.Server.Command.Handlers
 {
     public static class ConsoleCommands
     {
+
+        [CommandHandler("lbcache", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Write out all cached landblocks.", "")]
+        public static void WriteLandblockCache(Session session, params string[] parameters)
+        {
+            foreach (var LI in LandblockManager.landblocks)
+            {
+                Console.WriteLine($"LB Keys: {LI.Key.Landblock}, {LI.Key.Variant}. Values: {LI.Value.Id.Raw}, {LI.Value.VariationId}");
+            }
+        }
+
+        [CommandHandler("lbhash", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Write out all hashed loaded landblocks.", "")]
+        public static void WriteLandblockHash(Session session, params string[] parameters)
+        {
+            foreach (var LI in LandblockManager.loadedLandblocks)
+            {
+                Console.WriteLine($"LB Keys: {LI.Value.Id.Raw}, {LI.Value.VariationId}");
+            }
+        }
+
+        [CommandHandler("queuereport", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Write out all tasks in the Shard Database Queue")]
+        public static void QueueReport(Session session, params string[] parameters)
+        {
+            var tasks = DatabaseManager.Shard.QueueReport();
+            Console.WriteLine($"QueueReport, Currently {tasks.Count} Shard Database Tasks");
+            foreach (var task in tasks)
+            {
+                Console.WriteLine(task);
+            }
+            Console.WriteLine("End QueueReport");
+        }
+
+        [CommandHandler("readonlyqueuereport", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Write out all tasks in the Shard Database Queue")]
+        public static void ReadOnlyQueueReport(Session session, params string[] parameters)
+        {
+            var tasks = DatabaseManager.Shard.ReadOnlyQueueReport();
+            Console.WriteLine($"ReadOnlyQueueReport, Currently {tasks.Count} Shard Database Tasks");
+            foreach (var task in tasks)
+            {
+                Console.WriteLine(task);
+            }
+            Console.WriteLine("End ReadOnlyQueueReport");
+        }
         [CommandHandler("version", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Show server version information.", "")]
         public static void ShowVersion(Session session, params string[] parameters)
         {
