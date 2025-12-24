@@ -5,7 +5,7 @@ namespace ACE.Server.Network.GameEvent.Events
     public class GameEventItemServerSaysMoveItem : GameEventMessage
     {
         public GameEventItemServerSaysMoveItem(Session session, WorldObject worldObject)
-            : base(GameEventType.InventoryPutObjectIn3D, GameMessageGroup.UIQueue, session, 8)
+            : base(GameEventType.InventoryPutObjectIn3D, GameMessageGroup.UIQueue, session)
         {
             Writer.WriteGuid(worldObject.Guid);
         }

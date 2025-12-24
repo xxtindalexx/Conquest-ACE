@@ -9,7 +9,7 @@ namespace ACE.Server.Network.GameEvent.Events
     public class GameEventMagicRemoveMultipleEnchantments : GameEventMessage
     {
         public GameEventMagicRemoveMultipleEnchantments(Session session, List<LayeredSpell> spells)
-            : base(GameEventType.MagicRemoveMultipleEnchantments, GameMessageGroup.UIQueue, session, 56) // 56 is the max seen in retail pcaps
+            : base(GameEventType.MagicRemoveMultipleEnchantments, GameMessageGroup.UIQueue, session)
         {
             Writer.Write(spells);
         }

@@ -772,12 +772,12 @@ namespace ACE.Server.WorldObjects
 
             var dungeonID = pos.Cell >> 16;
 
-            var adjustCell = AdjustCell.Get(dungeonID);
+            var adjustCell = AdjustCell.Get(dungeonID, pos.Variation);
             var cellID = adjustCell.GetCell(pos.Pos);
 
             if (cellID != null && pos.Cell != cellID.Value)
             {
-                pos.LandblockId = new LandblockId(cellID.Value);
+                pos.LandblockId = new LandblockId(cellID.Value, pos.Variation);
                 return true;
             }
             return false;

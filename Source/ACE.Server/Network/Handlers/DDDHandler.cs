@@ -21,7 +21,7 @@ namespace ACE.Server.Network.Handlers
 
         public static bool Debug = false;
 
-        [GameMessage(GameMessageOpcode.DDD_InterrogationResponse, SessionState.AuthConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.DDD_InterrogationResponse, SessionState.AuthConnected)]
         public static void DDD_InterrogationResponse(ClientMessage message, Session session)
         {
             var clientIsMissingIterations = false;
@@ -32,7 +32,7 @@ namespace ACE.Server.Network.Handlers
             var clientCellDatIntSet = new CMostlyConsecutiveIntSet();
             var clientLanguageDatIntSet = new CMostlyConsecutiveIntSet();
 
-            var showDatWarning = PropertyManager.GetBool("show_dat_warning").Item;
+            var showDatWarning = PropertyManager.GetBool("show_dat_warning");
 
             message.Payload.ReadUInt32(); // m_ClientLanguage
 
@@ -116,12 +116,12 @@ namespace ACE.Server.Network.Handlers
 
             if (clientHasExtraIterations)
             {
-                var msg = PropertyManager.GetString("dat_newer_warning_msg").Item;
+                var msg = PropertyManager.GetString("dat_newer_warning_msg");
                 session.Terminate(SessionTerminationReason.DATsNewerThanServer, new GameMessageBootAccount($" because {msg[..^1]}"));
             }
             else if (clientIsMissingIterations && enableDATpatching)
             {
-                var totalMissingIterations = DDDManager.GetMissingIterations(clientPortalDatIntSet, clientCellDatIntSet, clientLanguageDatIntSet, out var totalFileSize, out var missingIterations);                
+                var totalMissingIterations = DDDManager.GetMissingIterations(clientPortalDatIntSet, clientCellDatIntSet, clientLanguageDatIntSet, out var totalFileSize, out var missingIterations);
                 var patchStatusMessage = new GameMessageDDDBeginDDD(totalMissingIterations, totalFileSize, missingIterations);
                 session.Network.EnqueueSend(patchStatusMessage);
                 session.BeginDDDSentTime = DateTime.UtcNow;
@@ -164,7 +164,7 @@ namespace ACE.Server.Network.Handlers
             }
             else if (clientIsMissingIterations && !enableDATpatching)
             {
-                var msg = PropertyManager.GetString("dat_older_warning_msg").Item;
+                var msg = PropertyManager.GetString("dat_older_warning_msg");
                 session.Terminate(SessionTerminationReason.DATsPatchingDisabled, new GameMessageBootAccount($" because {msg.TrimEnd('.')}"));
             }
             else // client dat files are up to date
@@ -173,7 +173,7 @@ namespace ACE.Server.Network.Handlers
             }
         }
 
-        [GameMessage(GameMessageOpcode.DDD_EndDDD, SessionState.AuthConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.DDD_EndDDD, SessionState.AuthConnected)]
         public static void DDD_EndDDD(ClientMessage message, Session session)
         {
             // We don't need to reply to this message unless GameMessageDDDBeginDDD was sent.
@@ -192,11 +192,11 @@ namespace ACE.Server.Network.Handlers
             }
         }
 
-        [GameMessage(GameMessageOpcode.DDD_RequestDataMessage, SessionState.WorldConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.DDD_RequestDataMessage, SessionState.WorldConnected)]
         public static void DDD_RequestDataMessage(ClientMessage message, Session session)
         {
             var enableDATpatching = ConfigManager.Config.DDD.EnableDATPatching;
-            var showDatWarning = PropertyManager.GetBool("show_dat_warning").Item;
+            var showDatWarning = PropertyManager.GetBool("show_dat_warning");
 
             var qdid_type = (DatFileType)message.Payload.ReadUInt32();
             var qdid_ID = message.Payload.ReadUInt32();
@@ -207,7 +207,7 @@ namespace ACE.Server.Network.Handlers
             {
                 if (showDatWarning)
                 {
-                    var msg = PropertyManager.GetString("dat_older_warning_msg").Item;
+                    var msg = PropertyManager.GetString("dat_older_warning_msg");
                     var popupMsg = new GameEventPopupString(session, msg);
                     var chatMsg = new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast);
                     var transientMsg = new GameEventCommunicationTransientString(session, msg);

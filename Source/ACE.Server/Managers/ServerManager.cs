@@ -130,7 +130,7 @@ namespace ACE.Server.Managers
             PropertyManager.ResyncVariables();
             PropertyManager.StopUpdating();
 
-            WorldManager.EnqueueAction(new ActionEventDelegate(() =>
+            WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.WorldManager_LogOffAllPlayers, () =>
             {
                 log.Debug("Logging off all players...");
 
@@ -160,7 +160,7 @@ namespace ACE.Server.Managers
                 }
             }
 
-            WorldManager.EnqueueAction(new ActionEventDelegate(() =>
+            WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.WorldManager_DisconnectAllSessions, () =>
             {
                 log.Debug("Disconnecting all sessions...");
 

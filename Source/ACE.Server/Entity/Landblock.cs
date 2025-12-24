@@ -202,11 +202,12 @@ namespace ACE.Server.Entity
         }
 
 
-        public Landblock(LandblockId id)
+        public Landblock(LandblockId id, int? variation = null)
         {
             //log.DebugFormat("Landblock({0:X8})", (id.Raw | 0xFFFF));
 
             Id = id;
+            VariationId = VariationId;
 
             CellLandblock = DatManager.CellDat.ReadFromDat<CellLandblock>(Id.Raw | 0xFFFF);
             LandblockInfo = DatManager.CellDat.ReadFromDat<LandblockInfo>((uint)Id.Landblock << 16 | 0xFFFE);
@@ -214,7 +215,7 @@ namespace ACE.Server.Entity
             lastActiveTime = DateTime.UtcNow;
 
             var cellLandblock = DBObj.GetCellLandblock(Id.Raw | 0xFFFF);
-            PhysicsLandblock = new Physics.Common.Landblock(cellLandblock);
+            PhysicsLandblock = new Physics.Common.Landblock(cellLandblock, variation);
         }
 
         public void Init(int? variationId, bool reload = false)
@@ -1283,16 +1284,16 @@ namespace ACE.Server.Entity
         /// Handles the cleanup process for a landblock
         /// This method is called by LandblockManager
         /// </summary>
-        public void Unload()
+        public void Unload(int? VariationId)
         {
             var landblockID = Id.Raw | 0xFFFF;
 
-            //log.DebugFormat("Landblock.Unload({0:X8})", landblockID);
+            //log.Debug($"Landblock.Unload({landblockID:X8})");
 
             ProcessPendingWorldObjectAdditionsAndRemovals();
 
             SaveDB();
-
+            //Console.WriteLine($"Landblock.Unload({landblockID:X8}), removing {worldObjects.Count}");
             // remove all objects
             foreach (var wo in worldObjects.ToList())
             {
@@ -1307,7 +1308,7 @@ namespace ACE.Server.Entity
             actionQueue.Clear();
 
             // remove physics landblock
-            LScape.unload_landblock(landblockID);
+            LScape.unload_landblock(landblockID, VariationId);
 
             PhysicsLandblock.release_shadow_objs();
         }
@@ -1365,7 +1366,7 @@ namespace ACE.Server.Entity
         /// This is a rarely used method to broadcast network messages to all of the players within a landblock,
         /// and possibly the adjacent landblocks.
         /// </summary>
-        public void EnqueueBroadcast(ICollection<Player> excludeList, bool adjacents, Position pos = null, float? maxRangeSq = null, params GameMessage[] msgs)
+        public void EnqueueBroadcast(ICollection<Player> excludeList, bool adjacents, Position pos = null, float? maxRangeSq = null, params OutboundGameMessage[] msgs)
         {
             var players = worldObjects.Values.OfType<Player>();
 

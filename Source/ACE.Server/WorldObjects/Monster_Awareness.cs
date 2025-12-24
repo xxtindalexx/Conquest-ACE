@@ -339,7 +339,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(0.75f);
-            actionChain.AddAction(this, CheckTargets_Inner);
+            actionChain.AddAction(this, ActionType.MonsterAwareness_CheckTargetsInner, CheckTargets_Inner);
             actionChain.EnqueueChain();
         }
 
@@ -401,7 +401,7 @@ namespace ACE.Server.WorldObjects
             {
                 if (_visualAwarenessRangeSq == null)
                 {
-                    var visualAwarenessRange = (float)((VisualAwarenessRange ?? VisualAwarenessRange_Default) * PropertyManager.GetDouble("mob_awareness_range").Item);
+                    var visualAwarenessRange = (float)((VisualAwarenessRange ?? VisualAwarenessRange_Default) * PropertyManager.GetDouble("mob_awareness_range"));
 
                     _visualAwarenessRangeSq = visualAwarenessRange * visualAwarenessRange;
                 }
@@ -418,7 +418,7 @@ namespace ACE.Server.WorldObjects
             {
                 if (_auralAwarenessRangeSq == null)
                 {
-                    var auralAwarenessRange = (float)((AuralAwarenessRange ?? VisualAwarenessRange ?? VisualAwarenessRange_Default) * PropertyManager.GetDouble("mob_awareness_range").Item);
+                    var auralAwarenessRange = (float)((AuralAwarenessRange ?? VisualAwarenessRange ?? VisualAwarenessRange_Default) * PropertyManager.GetDouble("mob_awareness_range"));
 
                     _auralAwarenessRangeSq = auralAwarenessRange * auralAwarenessRange;
                 }

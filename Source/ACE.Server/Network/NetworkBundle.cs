@@ -12,7 +12,9 @@ namespace ACE.Server.Network
 
         public bool HasMoreMessages => messages.Count > 0;
 
-        private Queue<GameMessage> messages = new Queue<GameMessage>();
+        public int MessageCount => messages.Count;
+
+        private readonly Queue<OutboundGameMessage> messages = new Queue<OutboundGameMessage>();
 
         private float clientTime = -1f;
         public float ClientTime
@@ -51,13 +53,13 @@ namespace ACE.Server.Network
 
         public int CurrentSize { get; private set; }
 
-        public void Enqueue(GameMessage message)
+        public void Enqueue(OutboundGameMessage message)
         {
             CurrentSize += (int)message.Data.Length;
             messages.Enqueue(message);
         }
 
-        public GameMessage Dequeue()
+        public OutboundGameMessage Dequeue()
         {
             return messages.Dequeue();
         }

@@ -66,7 +66,7 @@ namespace ACE.Server.WorldObjects
         {
             ObjectDescriptionFlags |= ObjectDescriptionFlag.Vendor;
 
-            if (!PropertyManager.GetBool("vendor_shop_uses_generator").Item)
+            if (!PropertyManager.GetBool("vendor_shop_uses_generator"))
             {
                 GeneratorProfiles.RemoveAll(p => p.Biota.WhereCreate.HasFlag(RegenLocationType.Shop));
             }
@@ -249,23 +249,23 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(0.001f);  // force to run after rotate.EnqueueBroadcastAction
-            actionChain.AddAction(this, LoadInventory);
+            actionChain.AddAction(this, ActionType.Vendor_LoadInventory, LoadInventory);
             actionChain.AddDelaySeconds(rotateTime);
-            actionChain.AddAction(this, () => ApproachVendor(player, VendorType.Open));
+            actionChain.AddAction(this, ActionType.Vendor_Approach, () => ApproachVendor(player, VendorType.Open));
             actionChain.EnqueueChain();
 
             if (lastPlayerInfo == null)
             {
                 var closeChain = new ActionChain();
                 closeChain.AddDelaySeconds(closeInterval);
-                closeChain.AddAction(this, CheckClose);
+                closeChain.AddAction(this, ActionType.Vendor_CheckClose, CheckClose);
                 closeChain.EnqueueChain();
             }
 
             lastPlayerInfo = new WorldObjectInfo(player);
         }
 
-        private void PrepareResetToHome()
+       /* private void PrepareResetToHome()
         {
             // Reset to Home position
             var resetInterval = ResetInterval ?? 300;
@@ -273,9 +273,9 @@ namespace ACE.Server.WorldObjects
 
             var autoResetTimer = new ActionChain();
             autoResetTimer.AddDelaySeconds(resetInterval);
-            autoResetTimer.AddAction(this, () => CheckResetToHome());
+            autoResetTimer.AddAction(this, ActionType.Vendor CheckResetToHome());
             autoResetTimer.EnqueueChain();
-        }
+        }*/
 
         /// <summary>
         /// Sends the latest vendor inventory list to player, rotates vendor towards player, and performs the appropriate emote.
@@ -293,8 +293,6 @@ namespace ACE.Server.WorldObjects
                 DoVendorEmote(action, player);
 
             player.LastOpenedContainerId = Guid;
-
-            PrepareResetToHome();
         }
 
         public void DoVendorEmote(VendorType vendorType, WorldObject player)
@@ -362,7 +360,7 @@ namespace ACE.Server.WorldObjects
 
             var closeChain = new ActionChain();
             closeChain.AddDelaySeconds(closeInterval);
-            closeChain.AddAction(this, CheckClose);
+            closeChain.AddAction(this, ActionType.Vendor_CheckClose, CheckClose);
             closeChain.EnqueueChain();
         }
 
@@ -675,7 +673,7 @@ namespace ACE.Server.WorldObjects
 
             var castChain = new ActionChain();
             castChain.AddDelaySeconds(preCastTime);
-            castChain.AddAction(this, () =>
+            castChain.AddAction(this, ActionType.Vendor_ApplyService, () =>
             {
                 TryCastSpell(spell, target, this);
                 PostCastMotion();
@@ -684,7 +682,7 @@ namespace ACE.Server.WorldObjects
             var postCastTime = GetPostCastTime(spell);
 
             castChain.AddDelaySeconds(postCastTime);
-            castChain.AddAction(this, () => IsBusy = false);
+            castChain.AddAction(this, ActionType.Vendor_SetNotBusy, () => IsBusy = false);
 
             castChain.EnqueueChain();
 
@@ -711,7 +709,7 @@ namespace ACE.Server.WorldObjects
 
                 var rotTime = Time.GetDateTimeFromTimestamp(soldTime.Value);
 
-                rotTime = rotTime.AddSeconds(PropertyManager.GetDouble("vendor_unique_rot_time", 300).Item);
+                rotTime = rotTime.AddSeconds(PropertyManager.GetDouble("vendor_unique_rot_time", 300));
 
                 if (DateTime.UtcNow >= rotTime)
                 {

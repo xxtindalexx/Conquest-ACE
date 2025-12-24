@@ -192,12 +192,12 @@ namespace ACE.Server.Managers
         // This function can be called from multi-threaded operations
         // We must add thread safety to prevent AllegianceManager corruption
         // We must also protect against cross-thread operations on vassal/patron (non-concurrent collections)
-        public static void PassXP(AllegianceNode vassalNode, ulong amount, bool direct)
+        public static void PassXP(AllegianceNode vassalNode, ulong amount, bool direct, bool luminance = false)
         {
-            WorldManager.EnqueueAction(new ActionEventDelegate(() => DoPassXP(vassalNode, amount, direct)));
+            WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.AllegianceManager_DoPassXP, () => DoPassXP(vassalNode, amount, direct, luminance)));
         }
 
-        private static void DoPassXP(AllegianceNode vassalNode, ulong amount, bool direct)
+        private static void DoPassXP(AllegianceNode vassalNode, ulong amount, bool direct, bool luminance = false)
         {
             // http://asheron.wikia.com/wiki/Allegiance_Experience
 
@@ -262,6 +262,15 @@ namespace ACE.Server.Managers
             if (!vassal.ExistedBeforeAllegianceXpChanges)
                 return;
 
+            if (patron.GetProperty(PropertyBool.IsMule).HasValue && patron.GetProperty(PropertyBool.IsMule).Value == true)
+            {
+                return;
+            }
+            if (vassal.GetProperty(PropertyBool.IsMule).HasValue && vassal.GetProperty(PropertyBool.IsMule).Value == true)
+            {
+                return;
+            }
+
             var loyalty = Math.Min(vassal.GetCurrentLoyalty(), SkillCap);
             var leadership = Math.Min(patron.GetCurrentLeadership(), SkillCap);
 
@@ -280,8 +289,17 @@ namespace ACE.Server.Managers
             var received = (factor1 + factor2 * (leadership / SkillCap) * (1.0f + vassalFactor * (timeRealAvg / RealCap) * (timeGameAvg / GameCap))) * 0.01f;
             var passup = generated * received;
 
-            var generatedAmount = (ulong)(amount * generated);
-            var passupAmount = (ulong)(amount * passup);
+            var generatedAmount = (uint)(amount * generated);
+            var passupAmount = (uint)(amount * passup);
+
+
+
+            if (luminance)
+            {
+                var lumMult = PropertyManager.GetDouble("lum_passup_mult", 0.5);
+                generatedAmount = (uint)(generatedAmount * lumMult);
+                passupAmount = (uint)(passupAmount * lumMult);
+            }
 
             /*Console.WriteLine("---");
             Console.WriteLine("AllegianceManager.PassXP(" + amount + ")");
@@ -295,7 +313,21 @@ namespace ACE.Server.Managers
             Console.WriteLine("Generated amount: " + generatedAmount);
             Console.WriteLine("Passup amount: " + passupAmount);*/
 
-            if (passupAmount > 0)
+            if (passupAmount > 0 && luminance == true)
+            {
+                vassal.AllegianceLumGenerated += generatedAmount;
+
+                patron.AllegianceLumCached += passupAmount;
+                var onlinePatron = PlayerManager.GetOnlinePlayer(patron.Guid);
+                if (onlinePatron != null)
+                {
+                    onlinePatron.AddAllegianceLum();
+                }
+                // call recursively
+                DoPassXP(patronNode, passupAmount, false, luminance);
+            }
+
+            if (passupAmount > 0 && luminance == false)
             {
                 //vassal.CPTithed += generatedAmount;
                 //patron.CPCached += passupAmount;
@@ -303,7 +335,7 @@ namespace ACE.Server.Managers
 
                 vassal.AllegianceXPGenerated += generatedAmount;
 
-                if (PropertyManager.GetBool("offline_xp_passup_limit").Item)
+                if (PropertyManager.GetBool("offline_xp_passup_limit"))
                     patron.AllegianceXPCached = Math.Min(patron.AllegianceXPCached + passupAmount, uint.MaxValue);
                 else
                     patron.AllegianceXPCached += passupAmount;
@@ -313,7 +345,7 @@ namespace ACE.Server.Managers
                     onlinePatron.AddAllegianceXP();
 
                 // call recursively
-                DoPassXP(patronNode, passupAmount, false);
+                DoPassXP(patronNode, passupAmount, false, luminance);
             }
         }
 
@@ -408,7 +440,7 @@ namespace ACE.Server.Managers
         // We must add thread safety to prevent AllegianceManager corruption
         public static void HandlePlayerDelete(uint playerGuid)
         {
-            WorldManager.EnqueueAction(new ActionEventDelegate(() => DoHandlePlayerDelete(playerGuid)));
+            WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.AllegianceManager_DoHandlePlayerDelete, () => DoHandlePlayerDelete(playerGuid)));
         }
 
         private static void DoHandlePlayerDelete(uint playerGuid)

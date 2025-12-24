@@ -71,6 +71,8 @@ namespace ACE.Entity.Enum.Properties
         PetOwner                         = 44,
         [Ephemeral]
         PetDevice                        = 45,
+        LastSplitArrowProjectile = 46,
+        LastSplitArrowShooter = 47,
 
         /* Custom Properties */
         PCAPRecordedObjectIID            = 8000,

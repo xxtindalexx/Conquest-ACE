@@ -11,13 +11,10 @@ namespace ACE.Server.Network.GameEvent.Events
         private static readonly HashComparer FellowComparer = new HashComparer(16);
 
         public GameEventFellowshipFullUpdate(Session session)
-            : base(GameEventType.FellowshipFullUpdate, GameMessageGroup.UIQueue, session, 512) // 338 is the average seen in retail pcaps, 1,264 is the max seen in retail pcaps
+            : base(GameEventType.FellowshipFullUpdate, GameMessageGroup.UIQueue, session)
         {
             var fellowship = session.Player.Fellowship;
 
-            if (fellowship == null)
-                return;
-            
             var fellows = fellowship.GetFellowshipMembers();
 
             PackableHashTable.WriteHeader(Writer, fellows.Count, FellowComparer.NumBuckets);

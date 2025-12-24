@@ -1,13 +1,16 @@
+using ACE.Common.Cryptography;
+using ACE.Entity.Enum;
 using System;
 using System.Text;
-using ACE.Entity.Enum;
+using System.Threading.Channels;
 
 namespace ACE.Server.Network.GameMessages.Messages
 {
-    public class GameMessageTurbineChat : GameMessage
+
+    public class GameMessageTurbineChat : OutboundGameMessage
     {
         public GameMessageTurbineChat(ChatNetworkBlobType chatNetworkBlobType, ChatNetworkBlobDispatchType chatNetworkBlobDispatchType, uint channel, string senderName, string message, uint senderID, ChatType chatType)
-            : base(GameMessageOpcode.TurbineChat, GameMessageGroup.LoginQueue)
+            : base(OutboundGameMessageOpcode.TurbineChat, GameMessageGroup.LoginQueue)
         {
             /*uint messageSize;       // the number of bytes that follow after this DWORD
             ChatNetworkBlobType type;   // the type of data contained in this message

@@ -299,7 +299,7 @@ namespace ACE.Server.Command.Handlers
          * Will display and optionally rename Gear Plated items that have an incorrect PropertyString.GearPlatingName value. 
          * The logic to deduce the GearPlatingName was updated in early 2025. This should only be needed to be run once, if at all.
          */
-        [CommandHandler("fix-gear-plating", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, "Corrects the name on Gear Plating.", "<execute>")]
+       /* [CommandHandler("fix-gear-plating", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, "Corrects the name on Gear Plating.", "<execute>")]
         public static void HandleFixGearPlating(Session session, params string[] parameters)
         {
             Console.WriteLine();
@@ -365,7 +365,7 @@ namespace ACE.Server.Command.Handlers
                 else
                     Console.WriteLine("Dry run completed. Use \"fix-gear-plating execute\" to actually run command");
             }
-        }
+        }*/
 
     }
 }

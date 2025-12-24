@@ -32,15 +32,15 @@ namespace ACE.Server.Physics
 
         public void AddPartsShadow(ObjCell objCell, int numShadowParts)
         {
-            List<int> clipPlaneList = null;
+            //List<int> clipPlaneList = null;
 
-            if (numShadowParts > 1)
-                clipPlaneList = objCell.ClipPlanes;
+            //if (numShadowParts > 1)
+               // clipPlaneList = objCell.ClipPlanes;
 
             for (var i = 0; i < NumParts; i++)
             {
                 if (Parts[i] != null)
-                    objCell.AddPart(Parts[i], clipPlaneList, objCell.Pos.Frame, numShadowParts);
+                    objCell.AddPart(Parts[i], null, objCell.Pos.Frame, numShadowParts);
             }
         }
 

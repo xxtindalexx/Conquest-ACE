@@ -461,10 +461,10 @@ namespace ACE.Server.Managers
         /// </summary>
         private static string GetPlayerIP(Player player)
         {
-            if (player?.Session?.EndPointC2S == null)
+            if (player?.Session?.EndPoint == null)
                 return null;
 
-            var endPointString = player.Session.EndPointC2S.ToString();
+            var endPointString = player.Session.EndPoint.ToString();
             var colonIndex = endPointString.LastIndexOf(':');
             
             if (colonIndex > 0)

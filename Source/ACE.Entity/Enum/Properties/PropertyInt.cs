@@ -653,6 +653,20 @@ namespace ACE.Entity.Enum.Properties
         VisualClothingPriority                   = 9013,
         SquelchGlobal                            = 9014,
         InventoryOrder                           = 9015,
+        BankAccountNumber = 9016,
+        LumAugmentMeleeRange = 9017,
+        LumAugmentPowerBarSpeed = 9018,
+        PortalReqType = 9019,
+        PortalReqValue = 9020,
+        PortalReqMaxValue = 9021,
+        PortalReqType2 = 9022,
+        PortalReqValue2 = 9023,
+        PortalReqMaxValue2 = 9024,
+        EnrageFogColor = 9025,
+        EnrageSound = 9026,
+        EnrageVisualEffect = 9027,
+        [AssessmentProperty]
+        SplitArrowCount = 9031,
     }
 
     public static class PropertyIntExtensions

@@ -52,6 +52,7 @@ namespace ACE.Server.Entity
                 iPos.Pos = new Vector3(pos.X, pos.Y, pos.Z);
                 iPos.Rotation = p.Rotation;
                 iPos.LandblockId = new LandblockId(GetCell(iPos));
+                iPos.Variation = p.Variation;
                 return iPos;
             }
 
@@ -69,6 +70,7 @@ namespace ACE.Server.Entity
             position.PositionY = localY;
             position.PositionZ = pos.Z;
             position.Rotation = p.Rotation;
+            position.Variation = p.Variation;
             position.LandblockId = new LandblockId(GetCell(position));
             return position;
         }
@@ -78,61 +80,50 @@ namespace ACE.Server.Entity
         /// </summary>
         public static uint GetCell(this Position p)
         {
-            try
+            var landblock = LScape.get_landblock(p.LandblockId.Raw, p.Variation);
+
+            // dungeons
+            // TODO: investigate dungeons that are below actual traversable overworld terrain
+            // ex., 010AFFFF
+            //if (landblock.IsDungeon)
+            if (p.Indoors)
+                return GetIndoorCell(p);
+
+            // outside - could be on landscape, in building, or underground cave
+            var cellID = GetOutdoorCell(p);
+            var landcell = LScape.get_landcell(cellID, p.Variation) as LandCell;
+
+            if (landcell == null)
+                return cellID;
+
+            if (landcell.has_building())
             {
-                //var landblock = LScape.get_landblock(p.LandblockId.Raw);
+                var envCells = landcell.Building.get_building_cells();
+                foreach (var envCell in envCells)
+                    if (envCell.point_in_cell(p.Pos))
+                        return envCell.ID;
+            }
 
-                // dungeons
-                // TODO: investigate dungeons that are below actual traversable overworld terrain
-                // ex., 010AFFFF
-                //if (landblock.IsDungeon)
-                if (p.Indoors)
-                    return GetIndoorCell(p);
+            // handle underground areas ie. caves
+            // get the terrain Z-height for this X/Y
+            Physics.Polygon walkable = null;
+            var terrainPoly = landcell.find_terrain_poly(p.Pos, ref walkable);
+            if (walkable != null)
+            {
+                Vector3 terrainPos = p.Pos;
+                walkable.Plane.set_height(ref terrainPos);
 
-                // outside - could be on landscape, in building, or underground cave
-                var cellID = GetOutdoorCell(p);
-                var landcell = LScape.get_landcell(cellID) as LandCell;
-
-                if (landcell == null)
-                    return cellID;
-
-                if (landcell.has_building())
+                // are we below ground? if so, search all of the indoor cells for this landblock
+                if (terrainPos.Z > p.Pos.Z)
                 {
-                    var envCells = landcell.Building.get_building_cells();
+                    var envCells = landblock.get_envcells();
                     foreach (var envCell in envCells)
                         if (envCell.point_in_cell(p.Pos))
                             return envCell.ID;
                 }
-
-                // handle underground areas ie. caves
-                // get the terrain Z-height for this X/Y
-                Physics.Polygon walkable = null;
-                var terrainPoly = landcell.find_terrain_poly(p.Pos, ref walkable);
-                if (walkable != null)
-                {
-                    Vector3 terrainPos = p.Pos;
-                    walkable.Plane.set_height(ref terrainPos);
-
-                    // are we below ground? if so, search all of the indoor cells for this landblock
-                    if (terrainPos.Z > p.Pos.Z)
-                    {
-                        var landblock = LScape.get_landblock(p.LandblockId.Raw);
-                        var envCells = landblock.get_envcells();
-                        foreach (var envCell in envCells)
-                            if (envCell.point_in_cell(p.Pos))
-                                return envCell.ID;
-                    }
-                }
-
-                return cellID;
             }
-            catch (Exception e)
-            {
-                log.ErrorFormat("GetCell() threw an exception: {0}\nposition as LOC => {1}", e.ToString(), p.ToLOCString());
-                log.Error(e);
 
-                return 0;
-            }
+            return cellID;
         }
 
         /// <summary>
@@ -154,7 +145,7 @@ namespace ACE.Server.Entity
         /// </summary>
         private static uint GetIndoorCell(this Position p)
         {
-            var adjustCell = AdjustCell.Get(p.Landblock);
+            var adjustCell = AdjustCell.Get(p.Landblock, p.Variation);
             var envCell = adjustCell.GetCell(p.Pos);
             if (envCell != null)
                 return envCell.Value;
@@ -243,7 +234,7 @@ namespace ACE.Server.Entity
             pos.PositionZ = pos.GetTerrainZ();
 
             // adjust to building height, if applicable
-            var sortCell = LScape.get_landcell(pos.Cell) as SortCell;
+            var sortCell = LScape.get_landcell(pos.Cell, pos.Variation) as SortCell;
             if (sortCell != null && sortCell.has_building())
             {
                 var building = sortCell.Building;
@@ -282,10 +273,10 @@ namespace ACE.Server.Entity
 
         public static float GetTerrainZ(this Position p)
         {
-            var landblock = LScape.get_landblock(p.LandblockId.Raw);
+            var landblock = LScape.get_landblock(p.LandblockId.Raw, p.Variation);
 
             var cellID = GetOutdoorCell(p);
-            var landcell = (LandCell)LScape.get_landcell(cellID);
+            var landcell = (LandCell)LScape.get_landcell(cellID, p.Variation);
 
             if (landcell == null)
                 return p.Pos.Z;
@@ -307,7 +298,7 @@ namespace ACE.Server.Entity
         {
             if (p.Indoors) return true;
 
-            var landcell = (LandCell)LScape.get_landcell(p.Cell);
+            var landcell = (LandCell)LScape.get_landcell(p.Cell, p.Variation);
 
             Physics.Polygon walkable = null;
             var terrainPoly = landcell.find_terrain_poly(p.Pos, ref walkable);

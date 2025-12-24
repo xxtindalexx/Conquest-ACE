@@ -270,7 +270,7 @@ namespace ACE.Server.WorldObjects
         {
             var damageResistRating = GetDamageResistRating(combatType, directDamage);
 
-            var allowBug = PropertyManager.GetBool("allow_negative_rating_curve").Item;
+            var allowBug = PropertyManager.GetBool("allow_negative_rating_curve");
 
             return GetNegativeRatingMod(damageResistRating, allowBug);
         }

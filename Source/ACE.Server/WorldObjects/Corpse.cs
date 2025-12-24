@@ -164,7 +164,7 @@ namespace ACE.Server.WorldObjects
             // players can /permit other players to loot their corpse if not killed by another player killer.
             if (player.HasLootPermission(victimGuid) && PkLevel != PKLevel.PK)
             {
-                if (!PropertyManager.GetBool("permit_corpse_all").Item)
+                if (!PropertyManager.GetBool("permit_corpse_all"))
                 {
                     // this is the retail default. see the comments for 'permitteeOpened' for an explanation of why this table is needed
                     if (permitteeOpened == null)
@@ -253,7 +253,7 @@ namespace ACE.Server.WorldObjects
             }
 
             actionChain.AddDelaySeconds(0.5f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.Corpse_DiscoverGeneratedRare, () =>
             {
                 if (Location != null && CorpseGeneratedRare)
                 {
@@ -279,8 +279,8 @@ namespace ACE.Server.WorldObjects
             var luck = 0;
             var secondChanceGranted = false;
 
-            var realTimeRares = PropertyManager.GetBool("rares_real_time").Item;
-            var realTimeRaresAlt = PropertyManager.GetBool("rares_real_time_v2").Item;
+            var realTimeRares = PropertyManager.GetBool("rares_real_time");
+            var realTimeRaresAlt = PropertyManager.GetBool("rares_real_time_v2");
             if (realTimeRares && killerPlayer != null)
             {
                 if (killerPlayer.RaresLoginTimestamp.HasValue)
@@ -297,7 +297,7 @@ namespace ACE.Server.WorldObjects
                         secondChanceGranted = true;
                 }
                 else
-                    killerPlayer.RaresLoginTimestamp = (int)Time.GetFutureUnixTime(ThreadSafeRandom.Next(1, (int)PropertyManager.GetLong("rares_max_seconds_between").Item));
+                    killerPlayer.RaresLoginTimestamp = (int)Time.GetFutureUnixTime(ThreadSafeRandom.Next(1, (int)PropertyManager.GetLong("rares_max_seconds_between")));
             }
             else if (realTimeRaresAlt && killerPlayer != null)
             {
@@ -316,7 +316,7 @@ namespace ACE.Server.WorldObjects
                     var timeBetweenRareSighting = now - playerLastRareFound;
                     var daysSinceRareSighting = timeBetweenRareSighting.TotalDays;
 
-                    var maxDaysSinceLastRareFound = (int)PropertyManager.GetLong("rares_max_days_between").Item; // 30? 45? 60?
+                    var maxDaysSinceLastRareFound = (int)PropertyManager.GetLong("rares_max_days_between"); // 30? 45? 60?
                     var chancesModifier = Math.Round(daysSinceRareSighting / maxDaysSinceLastRareFound, 2, MidpointRounding.ToZero);
                     var chancesModifierAdjusted = Math.Min(chancesModifier, 1.0f);
 
@@ -358,7 +358,7 @@ namespace ACE.Server.WorldObjects
                 if (killerPlayer != null)
                 {
                     if (realTimeRares)
-                        killerPlayer.RaresLoginTimestamp = (int)Time.GetFutureUnixTime(ThreadSafeRandom.Next(1, (int)PropertyManager.GetLong("rares_max_seconds_between").Item));
+                        killerPlayer.RaresLoginTimestamp = (int)Time.GetFutureUnixTime(ThreadSafeRandom.Next(1, (int)PropertyManager.GetLong("rares_max_seconds_between")));
                     else
                         killerPlayer.RaresLoginTimestamp = timestamp;
                     switch (tier)

@@ -5,7 +5,7 @@ namespace ACE.Server.Network.GameEvent.Events
     public class GameEventSetTurbineChatChannels : GameEventMessage
     {
         public GameEventSetTurbineChatChannels(Session session, uint allegiance = 0, uint society = 0)
-            : base(GameEventType.SetTurbineChatChannels, GameMessageGroup.UIQueue, session, 44)
+            : base(GameEventType.SetTurbineChatChannels, GameMessageGroup.UIQueue, session)
         {
             Writer.Write(allegiance);
             Writer.Write(TurbineChatChannel.General);

@@ -7,7 +7,7 @@ namespace ACE.Server.Network.GameEvent.Events
     public class GameEventHouseUpdateRentPayment : GameEventMessage
     {
         public GameEventHouseUpdateRentPayment(Session session)
-            : base(GameEventType.UpdateRentPayment, GameMessageGroup.UIQueue, session, 80) // Only 32 and 80 seen in retail pcaps
+            : base(GameEventType.UpdateRentPayment, GameMessageGroup.UIQueue, session)
         {
             //Console.WriteLine("Sending 0x228 - House - UpdateRentPayment");
 

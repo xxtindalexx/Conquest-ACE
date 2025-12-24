@@ -49,7 +49,7 @@ namespace ACE.Server.Network.Managers
                 //ServerPerformanceMonitor.RestartEvent(ServerPerformanceMonitor.MonitorType.ProcessPacket_1);
                 if (packet.Header.Flags.HasFlag(PacketHeaderFlags.ConnectResponse))
                 {
-                    packetLog.DebugFormat("{0}, {1}", packet, endPoint);
+                    packetLog.Debug($"{packet}, {endPoint}");
                     PacketInboundConnectResponse connectResponse = new PacketInboundConnectResponse(packet);
 
                     // This should be set on the second packet to the server from the client.
@@ -64,7 +64,7 @@ namespace ACE.Server.Network.Managers
                                  k != null &&
                                  k.State == SessionState.AuthConnectResponse &&
                                  k.Network.ConnectionData.ConnectionCookie == connectResponse.Check &&
-                                 k.EndPointC2S.Address.Equals(endPoint.Address)
+                                 k.EndPoint.Address.Equals(endPoint.Address)
                              select k).FirstOrDefault();
                     }
                     finally
@@ -73,7 +73,6 @@ namespace ACE.Server.Network.Managers
                     }
                     if (session != null)
                     {
-                        session.SetS2CEndpoint(endPoint);
                         session.State = SessionState.AuthConnected;
                         session.Network.sendResync = true;
                         AuthenticationHandler.HandleConnectResponse(session);
@@ -95,7 +94,7 @@ namespace ACE.Server.Network.Managers
                 //ServerPerformanceMonitor.RestartEvent(ServerPerformanceMonitor.MonitorType.ProcessPacket_0);
                 if (packet.Header.HasFlag(PacketHeaderFlags.LoginRequest))
                 {
-                    packetLog.DebugFormat("{0}, {1}", packet, endPoint);
+                    packetLog.Debug($"{packet}, {endPoint}");
                     if (GetAuthenticatedSessionCount() >= ConfigManager.Config.Server.Network.MaximumAllowedSessions)
                     {
                         log.InfoFormat("Login Request from {0} rejected. Server full.", endPoint);
@@ -116,7 +115,12 @@ namespace ACE.Server.Network.Managers
                         log.DebugFormat("Login Request from {0}", endPoint);
 
                         var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(endPoint.Address.ToString());
-                        if (ipAllowsUnlimited || ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress == -1 || GetSessionEndpointTotalByAddressCount(endPoint.Address) < ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress)
+
+
+                        // Increasing the allowed sessions per IP address by 1 allows the player to log a third account to character selection
+                        // Player event OnTeleportComplete() handles enforcement of more than 2 characters out of exempt areas
+                        var connectedSessionsAllowedPerIPAddress = ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress + 1;
+                        if (ipAllowsUnlimited || ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress == -1 || GetSessionEndpointTotalByAddressCount(endPoint.Address) < connectedSessionsAllowedPerIPAddress)
                         {
                             var session = FindOrCreateSession(connectionListener, endPoint);
                             if (session != null)
@@ -139,7 +143,7 @@ namespace ACE.Server.Network.Managers
                         }
                         else
                         {
-                            log.InfoFormat("Login Request from {0} rejected. Session would exceed MaximumAllowedSessionsPerIPAddress limit.", endPoint);
+                            //log.InfoFormat("Login Request from {0} rejected. Session would exceed MaximumAllowedSessionsPerIPAddress limit.", endPoint);
                             SendLoginRequestReject(connectionListener, endPoint, CharacterError.LogonServerFull);
                         }
                     }
@@ -149,10 +153,10 @@ namespace ACE.Server.Network.Managers
                     var session = sessionMap[packet.Header.Id];
                     if (session != null)
                     {
-                        if (session.EndPointC2S.Equals(endPoint))
+                        if (session.EndPoint.Equals(endPoint))
                             session.ProcessPacket(packet);
                         else
-                            log.DebugFormat("Session for Id {0} has IP {1} but packet has IP {2}", packet.Header.Id, session.EndPointC2S, endPoint);
+                            log.DebugFormat("Session for Id {0} has IP {1} but packet has IP {2}", packet.Header.Id, session.EndPoint, endPoint);
                     }
                     else
                     {
@@ -228,7 +232,7 @@ namespace ACE.Server.Network.Managers
                 foreach (var s in sessionMap)
                 {
                     if (s != null)
-                        ipAddresses.Add(s.EndPointC2S.Address);
+                        ipAddresses.Add(s.EndPoint.Address);
                 }
 
                 return ipAddresses.Count;
@@ -248,7 +252,7 @@ namespace ACE.Server.Network.Managers
 
                 foreach (var s in sessionMap)
                 {
-                    if (s != null && s.EndPointC2S.Address.Equals(address))
+                    if (s != null && s.EndPoint.Address.Equals(address))
                         result++;
                 }
 
@@ -267,7 +271,7 @@ namespace ACE.Server.Network.Managers
             sessionLock.EnterUpgradeableReadLock();
             try
             {
-                session = sessionMap.SingleOrDefault(s => s != null && endPoint.Equals(s.EndPointC2S));
+                session = sessionMap.SingleOrDefault(s => s != null && endPoint.Equals(s.EndPoint));
                 if (session == null)
                 {
                     sessionLock.EnterWriteLock();
@@ -332,7 +336,7 @@ namespace ACE.Server.Network.Managers
             sessionLock.EnterWriteLock();
             try
             {
-                log.DebugFormat("Removing session for {0} with id {1}", session.EndPointC2S, session.Network.ClientId);
+                log.DebugFormat("Removing session for {0} with id {1}", session.EndPoint, session.Network.ClientId);
                 if (sessionMap[session.Network.ClientId] == session)
                     sessionMap[session.Network.ClientId] = null;
             }

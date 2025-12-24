@@ -65,12 +65,12 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Perfroms additional set up of the spell projectile based on the spell id or its derived type.
         /// </summary>
-        public void Setup(Spell spell, ProjectileSpellType spellType)
+        public void Setup(Spell spell, ProjectileSpellType spellType, int? VariationId)
         {
             Spell = spell;
             SpellType = spellType;
 
-            InitPhysicsObj();
+            InitPhysicsObj(VariationId);
 
             // Runtime changes to default state
             ReportCollisions = true;
@@ -239,7 +239,7 @@ namespace ACE.Server.WorldObjects
 
             ActionChain selfDestructChain = new ActionChain();
             selfDestructChain.AddDelaySeconds(5.0);
-            selfDestructChain.AddAction(this, () => Destroy());
+            selfDestructChain.AddAction(this, ActionType.SpellProjectile_Destroy, () => Destroy());
             selfDestructChain.EnqueueChain();
         }
 
@@ -549,7 +549,7 @@ namespace ACE.Server.WorldObjects
                     // apply void_pvp_modifier *on top of* the player's natural resistance to nether
 
                     // this supposedly brings the direct damage from void spells in pvp closer to retail
-                    resistanceMod *= (float)PropertyManager.GetDouble("void_pvp_modifier").Item;
+                    resistanceMod *= (float)PropertyManager.GetDouble("void_pvp_modifier");
                 }
 
                 finalDamage = baseDamage + critDamageBonus + skillBonus;

@@ -390,7 +390,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// </summary>
         public float GetMinVitae(uint level)
         {
-            var propVitae = 1.0 - PropertyManager.GetDouble("vitae_penalty_max").Item;
+            var propVitae = 1.0 - PropertyManager.GetDouble("vitae_penalty_max");
 
             var maxPenalty = (level - 1) * 3;
             if (maxPenalty < 1)
@@ -425,7 +425,7 @@ namespace ACE.Server.WorldObjects.Managers
                 vitae = BuildEntry(spell);
                 vitae.EnchantmentCategory = (uint)EnchantmentMask.Vitae;
                 vitae.LayerId = 1; // This should be 0 but EF Core seems to be very unhappy with 0 as the layer id now that we're using layer as part of the composite key.
-                vitae.StatModValue = 1.0f - (float)PropertyManager.GetDouble("vitae_penalty").Item;
+                vitae.StatModValue = 1.0f - (float)PropertyManager.GetDouble("vitae_penalty");
                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(vitae, WorldObject.BiotaDatabaseLock);
                 WorldObject.ChangesDetected = true;
             }
@@ -433,7 +433,7 @@ namespace ACE.Server.WorldObjects.Managers
             {
                 // update existing vitae
                 vitae = GetVitae();
-                vitae.StatModValue -= (float)PropertyManager.GetDouble("vitae_penalty").Item;
+                vitae.StatModValue -= (float)PropertyManager.GetDouble("vitae_penalty");
                 WorldObject.ChangesDetected = true;
             }
 
@@ -1299,7 +1299,7 @@ namespace ACE.Server.WorldObjects.Managers
                 creature.DamageHistory.Add(creature, DamageType.Health, (uint)-healAmount);
 
             if (creature is Player player)
-                player.SendMessage($"You receive {Math.Abs(healAmount)} points of periodic {((healAmount >= 0) ? "healing" : "harm")}.", PropertyManager.GetBool("aetheria_heal_color").Item ? ChatMessageType.Broadcast : ChatMessageType.Combat);
+                player.SendMessage($"You receive {Math.Abs(healAmount)} points of periodic {((healAmount >= 0) ? "healing" : "harm")}.", PropertyManager.GetBool("aetheria_heal_color") ? ChatMessageType.Broadcast : ChatMessageType.Combat);
 
             if (creature.IsDead)
             {
@@ -1360,7 +1360,7 @@ namespace ACE.Server.WorldObjects.Managers
                     // instead of applying it on top like direct damage
 
                     if (damageType == DamageType.Nether)
-                        resistanceMod = (float)PropertyManager.GetDouble("void_pvp_modifier").Item;
+                        resistanceMod = (float)PropertyManager.GetDouble("void_pvp_modifier");
                 }
 
                 // with the halvening, this actually seems like the fairest balance currently..

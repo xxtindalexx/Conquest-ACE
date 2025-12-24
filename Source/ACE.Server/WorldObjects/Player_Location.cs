@@ -764,7 +764,7 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Marketplace character limit enforcement - boot excess characters from same IP outside exempt landblocks
             int nonexemptCount = 0;
-            var endpoint = this.Session.EndPointC2S;
+            var endpoint = this.Session.EndPoint;
             var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(endpoint.Address.ToString());
             var maxAllowed = ConfigManager.Config.Server.Network.MaximumCharactersOutsideMarketplace;
 
@@ -772,7 +772,7 @@ namespace ACE.Server.WorldObjects
             if (!ipAllowsUnlimited && maxAllowed != -1)
             {
                 var players = PlayerManager.GetAllOnline();
-                foreach (var p in players.Where(x => x.Session.EndPointC2S.Address.Equals(endpoint.Address)))
+                foreach (var p in players.Where(x => x.Session.EndPoint.Address.Equals(endpoint.Address)))
                 {
                     // Skip players in exempt landblocks (marketplace + apartments)
                     if (p.CurrentLandblock != null && Landblock.connectionExemptLandblocks.Contains(p.CurrentLandblock.Id.Landblock))

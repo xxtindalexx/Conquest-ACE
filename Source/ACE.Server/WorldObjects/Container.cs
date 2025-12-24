@@ -91,7 +91,7 @@ namespace ACE.Server.WorldObjects
             {
                 DatabaseManager.Shard.GetInventoryInParallel(biota.Id, false, biotas =>
                 {
-                    EnqueueAction(new ActionEventDelegate(() => SortBiotasIntoInventory(biotas)));
+                    EnqueueAction(new ActionEventDelegate(ActionType.Container_SortBiotasIntoInventory, () => SortBiotasIntoInventory(biotas)));
                 });
             }
         }
@@ -731,7 +731,7 @@ namespace ACE.Server.WorldObjects
                 // verified this message was sent for corpses, instead of WeenieErrorWithString.The_IsCurrentlyInUse
                 var currentViewer = "someone else";
 
-                if (PropertyManager.GetBool("container_opener_name").Item)
+                if (PropertyManager.GetBool("container_opener_name"))
                 {
                     var name = CurrentLandblock?.GetObject(Viewer)?.Name;
                     if (name != null)
@@ -766,7 +766,7 @@ namespace ACE.Server.WorldObjects
                     actionChain.AddDelaySeconds(15);
                 else
                     actionChain.AddDelaySeconds(ResetInterval.Value);
-                actionChain.AddAction(this, Reset);
+                actionChain.AddAction(this, ActionType.Container_Reset, Reset);
                 //actionChain.AddAction(this, () =>
                 //{
                 //    Close(player);
@@ -785,8 +785,10 @@ namespace ACE.Server.WorldObjects
         private void SendInventory(Player player)
         {
             // send createobject for all objects in this container's inventory to player
-            var itemsToSend = new List<GameMessage>();
+            var itemsToSend = new List<OutboundGameMessage>();
+            var containerViews = new List<OutboundGameMessage>();
 
+            // Optimized: Single loop instead of two separate scans
             foreach (var item in Inventory.Values)
             {
                 // FIXME: only send messages for unknown objects
@@ -796,22 +798,25 @@ namespace ACE.Server.WorldObjects
                 {
                     foreach (var containerItem in container.Inventory.Values)
                         itemsToSend.Add(new GameMessageCreateObject(containerItem));
+
+                    // Send sub-container view (previously done in second loop)
+                    containerViews.Add(new GameEventViewContents(player.Session, container));
                 }
             }
 
             player.Session.Network.EnqueueSend(new GameEventViewContents(player.Session, this));
 
-            // send sub-containers
-            foreach (var container in Inventory.Values.Where(i => i is Container))
-                player.Session.Network.EnqueueSend(new GameEventViewContents(player.Session, (Container)container));
+            // Send all container views
+            if (containerViews.Count > 0)
+                player.Session.Network.EnqueueSend(containerViews.ToArray());
 
-            player.Session.Network.EnqueueSend(itemsToSend);
+            player.Session.Network.EnqueueSend(itemsToSend.ToArray());
         }
 
         private void SendDeletesForMyInventory(Player player)
         {
             // send deleteobjects for all objects in this container's inventory to player
-            var itemsToSend = new List<GameMessage>();
+            var itemsToSend = new List<OutboundGameMessage>();
 
             foreach (var item in Inventory.Values)
             {
@@ -825,7 +830,7 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
-            player.Session.Network.EnqueueSend(itemsToSend);
+            player.Session.Network.EnqueueSend(itemsToSend.ToArray());
         }
 
         public virtual void Close(Player player)
@@ -840,7 +845,7 @@ namespace ACE.Server.WorldObjects
             {
                 var actionChain = new ActionChain();
                 actionChain.AddDelaySeconds(animTime / 2.0f);
-                actionChain.AddAction(this, () => FinishClose(player));
+                actionChain.AddAction(this, ActionType.Container_FinishClose, () => FinishClose(player));
                 actionChain.EnqueueChain();
             }
         }

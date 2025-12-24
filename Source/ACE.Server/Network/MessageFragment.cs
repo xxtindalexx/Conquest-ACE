@@ -9,10 +9,9 @@ namespace ACE.Server.Network
 {
     internal class MessageFragment
     {
-        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private static readonly ILog packetLog = LogManager.GetLogger(System.Reflection.Assembly.GetEntryAssembly(), "Packets");
 
-        public GameMessage Message { get; private set; }
+        public OutboundGameMessage Message { get; private set; }
 
         public uint Sequence { get; set; }
 
@@ -39,7 +38,7 @@ namespace ACE.Server.Network
 
         public bool TailSent { get; private set; }
 
-        public MessageFragment(GameMessage message, uint sequence)
+        public MessageFragment(OutboundGameMessage message, uint sequence)
         {
             Message = message;
             DataRemaining = DataLength;
@@ -48,7 +47,7 @@ namespace ACE.Server.Network
             Index = 0;
             if (Count == 1)
                 TailSent = true;
-            packetLog.DebugFormat("Sequence {0}, count {1}, DataRemaining {2}", sequence, Count, DataRemaining);
+            packetLog.DebugFormat($"Sequence {sequence}, count {Count}, DataRemaining {DataRemaining}");
         }
 
         public ServerPacketFragment GetTailFragment()
@@ -65,23 +64,36 @@ namespace ACE.Server.Network
 
         private ServerPacketFragment CreateServerFragment(ushort index)
         {
-            packetLog.DebugFormat("Creating ServerFragment for index {0}", index);
+            packetLog.DebugFormat($"Creating ServerFragment for index {index}");
             if (index >= Count)
-                throw new ArgumentOutOfRangeException("index", index, "Passed index is greater then computed count");
+            {
+                packetLog.Error($"Passed index {index} is greater then computed count {Count}");
+                return null;
+            }
+
 
             var position = index * PacketFragment.MaxFragmentDataSize;
             if (position > DataLength)
-                throw new ArgumentOutOfRangeException("index", index, "Passed index computes to invalid position size");
+            {
+                packetLog.Error($"Passed index {index} computes to invalid position size, datalength: {DataLength}");
+                return null;
+            }
 
             if (DataRemaining <= 0)
-                throw new InvalidOperationException("There is no data remaining");
+            {
+                packetLog.Error("There is no data remaining");
+                return null;
+            }
 
             var dataToSend = DataLength - position;
             if (dataToSend > PacketFragment.MaxFragmentDataSize)
                 dataToSend = PacketFragment.MaxFragmentDataSize;
 
             if (DataRemaining < dataToSend)
-                throw new InvalidOperationException("More data to send then data remaining!");
+            {
+                packetLog.Error("More data to send then data remaining!");
+                return null;
+            }
 
             // Read data starting at position reading dataToSend bytes
             Message.Data.Seek(position, SeekOrigin.Begin);
@@ -97,7 +109,7 @@ namespace ACE.Server.Network
             fragment.Header.Queue = (ushort)Message.Group;
 
             DataRemaining -= dataToSend;
-            packetLog.DebugFormat("Done creating ServerFragment for index {0}. After reading {1} DataRemaining {2}", index, dataToSend, DataRemaining);
+            packetLog.DebugFormat($"Done creating ServerFragment for index {index}. After reading {dataToSend} DataRemaining {DataRemaining}");
             return fragment;
         }
     }

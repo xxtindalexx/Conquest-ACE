@@ -42,7 +42,7 @@ namespace ACE.Server.Physics.Common
                 Building.find_building_transit_cells(numParts, parts, cellArray);
         }
 
-        public PhysicsObj get_object(int objectID)
+        /*public PhysicsObj get_object(int objectID)
         {
             var obj = GetObject(objectID);
 
@@ -50,7 +50,7 @@ namespace ACE.Server.Physics.Common
                 obj = Building.get_object(objectID);
 
             return obj;
-        }
+        }*/
 
         public bool has_building()
         {

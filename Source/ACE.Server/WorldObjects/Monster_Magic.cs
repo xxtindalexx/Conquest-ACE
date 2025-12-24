@@ -161,7 +161,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(preCastTime);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.MonsterMagic_CastSpell, () =>
             {
                 if (IsDead || AttackTarget == null || target.IsDead)
                     return;

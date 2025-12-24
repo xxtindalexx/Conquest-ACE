@@ -1,22 +1,22 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
-using log4net;
-
 using ACE.Common;
 using ACE.DatLoader.Entity.AnimationHooks;
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
+using log4net;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ACE.Server.Entity
 {
     public class DamageEvent
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        private const float DefaultSplitArrowDamageMultiplier = 0.6f;
 
         // factors:
         // - lifestone protection
@@ -363,6 +363,14 @@ namespace ACE.Server.Entity
 
             // calculate final output damage
             Damage = DamageBeforeMitigation * ArmorMod * ShieldMod * ResistanceMod * DamageResistanceRatingMod;
+
+            // Apply split arrow damage multiplier if this is a split arrow
+            if (DamageSource.GetProperty(PropertyBool.IsSplitArrow) == true)
+            {
+                var splitMultiplier = (float)(DamageSource.ProjectileLauncher?.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ??
+                                             DefaultSplitArrowDamageMultiplier);
+                Damage *= splitMultiplier;
+            }
 
             DamageMitigated = DamageBeforeMitigation - Damage;
 

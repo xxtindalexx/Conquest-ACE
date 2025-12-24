@@ -334,7 +334,7 @@ namespace ACE.Server.Managers
         public static void Initialize()
         {
             playerAlloc = new PlayerGuidAllocator(ObjectGuid.PlayerMin, ObjectGuid.PlayerMax, "player");
-            dynamicAlloc = new DynamicGuidAllocator(ObjectGuid.DynamicMin, ObjectGuid.DynamicMax, "dynamic", PropertyManager.GetBool("unlimited_sequence_gaps").Item);
+            dynamicAlloc = new DynamicGuidAllocator(ObjectGuid.DynamicMin, ObjectGuid.DynamicMax, "dynamic", PropertyManager.GetBool("unlimited_sequence_gaps"));
         }
 
         /// <summary>

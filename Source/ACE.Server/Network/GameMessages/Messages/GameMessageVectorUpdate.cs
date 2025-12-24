@@ -6,10 +6,10 @@ using ACE.Server.WorldObjects;
 
 namespace ACE.Server.Network.GameMessages.Messages
 {
-    public class GameMessageVectorUpdate : GameMessage
+    public class GameMessageVectorUpdate : OutboundGameMessage
     {
         public GameMessageVectorUpdate(WorldObject worldObject)
-            : base(GameMessageOpcode.VectorUpdate, GameMessageGroup.SmartboxQueue, 36)
+            : base(OutboundGameMessageOpcode.VectorUpdate, GameMessageGroup.SmartboxQueue)
         {
             // object guid
             // velocity - Vector3

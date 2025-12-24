@@ -59,7 +59,7 @@ namespace ACE.Server.WorldObjects
                 Session.Network.EnqueueSend(sound, msg);
 
                 // retail was missing the 'raise skill' runrate hook here
-                if (skill == Skill.Run && PropertyManager.GetBool("runrate_add_hooks").Item)
+                if (skill == Skill.Run && PropertyManager.GetBool("runrate_add_hooks"))
                     HandleRunRateUpdate();
             }
 
@@ -361,7 +361,7 @@ namespace ACE.Server.WorldObjects
             GrantXP(amount, XpType.Emote, ShareType.None);
             var raiseChain = new ActionChain();
             raiseChain.AddDelayForOneTick();
-            raiseChain.AddAction(this, () =>
+            raiseChain.AddAction(this, ActionType.PlayerSkills_HandleActionRaiseSkill, () =>
             {
                 HandleActionRaiseSkill(skill, amount);
             });
@@ -520,7 +520,7 @@ namespace ACE.Server.WorldObjects
                     {
                         var actionChain = new ActionChain();
                         actionChain.AddDelaySeconds(3.0f);
-                        actionChain.AddAction(this, () =>
+                        actionChain.AddAction(this, ActionType.PlayerSkills_SendInstallDirtyFightingPatchesMessage, () =>
                         {
                             Session.Network.EnqueueSend(new GameMessageSystemChat("To install Dirty Fighting, please apply the latest patches from https://github.com/ACEmulator/ACE-World-16PY-Patches", ChatMessageType.Broadcast));
                         });
@@ -541,7 +541,7 @@ namespace ACE.Server.WorldObjects
                     {
                         var actionChain = new ActionChain();
                         actionChain.AddDelaySeconds(3.0f);
-                        actionChain.AddAction(this, () =>
+                        actionChain.AddAction(this, ActionType.PlayerSkills_SendInstallVoidMagicPatchesMessage, () =>
                         {
                             Session.Network.EnqueueSend(new GameMessageSystemChat("To install Void Magic, please apply the latest patches from https://github.com/ACEmulator/ACE-World-16PY-Patches", ChatMessageType.Broadcast));
                         });
@@ -561,7 +561,7 @@ namespace ACE.Server.WorldObjects
                 {
                     var actionChain = new ActionChain();
                     actionChain.AddDelaySeconds(3.0f);
-                    actionChain.AddAction(this, () =>
+                    actionChain.AddAction(this, ActionType.PlayerSkills_SendInstallSummoningPatchesMessage, () =>
                     {
                         Session.Network.EnqueueSend(new GameMessageSystemChat("To install Summoning, please apply the latest patches from https://github.com/ACEmulator/ACE-World-16PY-Patches", ChatMessageType.Broadcast));
                     });
@@ -667,7 +667,7 @@ namespace ACE.Server.WorldObjects
             if (weapon == null || !weapon.IsMasterable)
                 return false;
 
-            if (PropertyManager.GetBool("universal_masteries").Item)
+            if (PropertyManager.GetBool("universal_masteries"))
             {
                 // https://asheron.fandom.com/wiki/Spring_2014_Update
                 // end of retail - universal masteries
@@ -777,7 +777,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(5.0f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerSkills_SendTrainedSkillResetMessage, () =>
             {
                 Session.Network.EnqueueSend(new GameMessageSystemChat("Your trained skills have been reset due to an error with skill credits.\nYou have received a refund for these skill credits and experience.", ChatMessageType.Broadcast));
 
@@ -792,7 +792,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(5.0f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerSkills_SendSpecializedSkillResetMessage, () =>
             {
                 Session.Network.EnqueueSend(new GameMessageSystemChat("Your specialized skills have been unspecialized due to an error with skill credits.\nYou have received a refund for these skill credits and experience.", ChatMessageType.Broadcast));
 
@@ -807,7 +807,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(5.0f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerSkills_SendFreeResetRenewedMessage, () =>
             {
                 Session.Network.EnqueueSend(new GameMessageSystemChat("Your opportunity to change your skills is renewed! Visit Fianhe to reset your skills.", ChatMessageType.Magic));
 
@@ -824,7 +824,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(5.0f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerSkills_SendFreeAttributeResetRenewedMessage, () =>
             {
                 // Your opportunity to change your attributes is renewed! Visit Chafulumisa to reset your skills [sic attributes].
                 Session.Network.EnqueueSend(new GameMessageSystemChat("Your opportunity to change your attributes is renewed! Visit Chafulumisa to reset your attributes.", ChatMessageType.Magic));
@@ -842,7 +842,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(5.0f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerSkills_SendSkillTemplesResetMessage, () =>
             {
                 Session.Network.EnqueueSend(new GameMessageSystemChat("The Temples of Forgetfulness and Enlightenment have had the timer for their use reset due to skill changes.", ChatMessageType.Magic));
 
@@ -865,7 +865,7 @@ namespace ACE.Server.WorldObjects
 
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(5.0f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerSkills_SendMasteriesResetRenewedMessage, () =>
             {
                 Session.Network.EnqueueSend(new GameMessageSystemChat("Your opportunity to change your Masteries is renewed!", ChatMessageType.Magic));
 

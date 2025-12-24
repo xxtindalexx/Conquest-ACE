@@ -5,7 +5,7 @@ namespace ACE.Server.Network.GameEvent.Events
     public class GameEventItemServerSaysContainId : GameEventMessage
     {
         public GameEventItemServerSaysContainId(Session session, WorldObject itemToBeContained, WorldObject container)
-            : base(GameEventType.InventoryPutObjInContainer, GameMessageGroup.UIQueue, session, 20)
+            : base(GameEventType.InventoryPutObjInContainer, GameMessageGroup.UIQueue, session)
         {
             Writer.WriteGuid(itemToBeContained.Guid);
             Writer.WriteGuid(container.Guid);

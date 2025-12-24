@@ -1,18 +1,25 @@
 using ACE.Common;
 using ACE.Database;
+using ACE.Database.Models.Auth;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Factories.Tables;
 using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
+using Lifestoned.DataModel.DerethForever;
 using log4net;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
+using System.Xml.Linq;
+using static System.Net.Mime.MediaTypeNames;
 
 
 namespace ACE.Server.Command.Handlers
@@ -30,10 +37,28 @@ namespace ACE.Server.Command.Handlers
             CommandHandlerHelper.WriteOutputInfo(session, $"Current world population: {PlayerManager.GetOnlineCount():N0}", ChatMessageType.Broadcast);
         }
 
+        /// <summary>
+        /// Rate limiter for /passwd command
+        /// </summary>
+        private static readonly TimeSpan MyQuests = TimeSpan.FromSeconds(60);
+
         // quest info (uses GDLe formatting to match plugin expectations)
         [CommandHandler("myquests", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows your quest log")]
         public static void HandleQuests(Session session, params string[] parameters)
         {
+            if (PropertyManager.GetBool("myquest_throttle_enabled"))
+            {
+                var currentTime = DateTime.UtcNow;
+
+                if (currentTime - session.LastMyQuestsCommandTime < MyQuests)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"[MyQuests] This command may only be run once every {MyQuests.TotalSeconds} seconds.", ChatMessageType.Broadcast);
+                    return;
+                }
+            }
+
+            session.LastMyQuestsCommandTime = DateTime.UtcNow;
+
             if (!PropertyManager.GetBool("quest_info_enabled"))
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("The command \"myquests\" is not currently enabled on this server.", ChatMessageType.Broadcast));
@@ -48,14 +73,13 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
+            var questMessages = new List<string>();
             foreach (var playerQuest in quests)
             {
-                var text = "";
                 var questName = QuestManager.GetQuestName(playerQuest.QuestName);
                 var quest = DatabaseManager.World.GetCachedQuest(questName);
                 if (quest == null)
                 {
-                    //Console.WriteLine($"Couldn't find quest {playerQuest.QuestName}");
                     continue;
                 }
 
@@ -63,10 +87,13 @@ namespace ACE.Server.Command.Handlers
                 if (QuestManager.CanScaleQuestMinDelta(quest))
                     minDelta = (uint)(quest.MinDelta * PropertyManager.GetDouble("quest_mindelta_rate"));
 
-                text += $"{playerQuest.QuestName.ToLower()} - {playerQuest.NumTimesCompleted} solves ({playerQuest.LastTimeCompleted})";
-                text += $"\"{quest.Message}\" {quest.MaxSolves} {minDelta}";
+                var text = $"{playerQuest.QuestName.ToLower()} - {playerQuest.NumTimesCompleted} solves ({playerQuest.LastTimeCompleted}) \"{quest.Message}\" {quest.MaxSolves} {minDelta}";
+                questMessages.Add(text);
+            }
 
-                session.Network.EnqueueSend(new GameMessageSystemChat(text, ChatMessageType.Broadcast));
+            foreach (var message in questMessages)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
             }
         }
 
@@ -77,11 +104,11 @@ namespace ACE.Server.Command.Handlers
 
             session.Network.EnqueueSend(new GameMessageSystemChat($"---------------------------", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Advanced Augmentation Levels:", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Creature:{session.Player.LuminanceAugmentCreatureCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Item:{session.Player.LuminanceAugmentItemCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Life:{session.Player.LuminanceAugmentLifeCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"War:{session.Player.LuminanceAugmentWarCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Void:{session.Player.LuminanceAugmentVoidCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Creature: {session.Player.LuminanceAugmentCreatureCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Item: {session.Player.LuminanceAugmentItemCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Life: {session.Player.LuminanceAugmentLifeCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"War: {session.Player.LuminanceAugmentWarCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Void: {session.Player.LuminanceAugmentVoidCount:N0}", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Duration: {session.Player.LuminanceAugmentSpellDurationCount:N0}", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Specialization: {session.Player.LuminanceAugmentSpecializeCount:N0}", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Melee: {session.Player.LuminanceAugmentMeleeCount:N0}", ChatMessageType.Broadcast));
@@ -612,24 +639,28 @@ namespace ACE.Server.Command.Handlers
                     }
                 }
 
-                // Confirmation dialog
-                if (parameters.Length == 1)
+                // Check if player is busy
+                if (session.Player.Teleporting || session.Player.TooBusyToRecall || session.Player.IsBusy || session.Player.IsInDeathProcess)
                 {
-                    session.Network.EnqueueSend(new GameMessageSystemChat("=== WARNING ===", ChatMessageType.Broadcast));
-                    session.Network.EnqueueSend(new GameMessageSystemChat("Enabling PK status will allow other PK players to attack you anywhere in the world!", ChatMessageType.Broadcast));
-                    session.Network.EnqueueSend(new GameMessageSystemChat("Type '/pk on confirm' to proceed.", ChatMessageType.Broadcast));
+                    session.Network.EnqueueSend(new GameMessageSystemChat("Cannot change PK status while teleporting or busy. Complete your movement and try again.", ChatMessageType.System));
                     return;
                 }
 
-                if (parameters.Length >= 2 && parameters[1].ToLower() == "confirm")
-                {
-                    session.Player.PlayerKillerStatus = PlayerKillerStatus.PK;
-                    session.Player.SetProperty(PropertyInt64.LastPKFlagTime, (long)Time.GetUnixTime());
-                    session.Player.EnqueueBroadcast(new GameMessagePublicUpdatePropertyInt(session.Player, PropertyInt.PlayerKillerStatus, (int)session.Player.PlayerKillerStatus));
+                // Show popup confirmation dialog
+                var message = "Enabling PK status will allow other PK players to attack you anywhere in the world! Are you certain you want to become a Player Killer?";
 
-                    session.Network.EnqueueSend(new GameMessageSystemChat("You are now a Player Killer! Other PK players can attack you anywhere.", ChatMessageType.Broadcast));
-                    PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{session.Player.Name} is now a Player Killer!", ChatMessageType.Broadcast));
-                }
+                var confirm = session.Player.ConfirmationManager.EnqueueSend(
+                    new Confirmation_Custom(session.Player.Guid, () => {
+                        // This callback executes when player clicks "Yes"
+                        session.Player.PlayerKillerStatus = PlayerKillerStatus.PK;
+                        session.Player.SetProperty(PropertyInt64.LastPKFlagTime, (long)Time.GetUnixTime());
+                        session.Player.EnqueueBroadcast(new GameMessagePublicUpdatePropertyInt(session.Player, PropertyInt.PlayerKillerStatus, (int)session.Player.PlayerKillerStatus));
+
+                        session.Network.EnqueueSend(new GameMessageSystemChat("You are now a Player Killer! Other PK players can attack you anywhere.", ChatMessageType.Broadcast));
+                        PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{session.Player.Name} is now a Player Killer!", ChatMessageType.Broadcast));
+                    }),
+                    message
+                );
             }
             // /pk off
             else if (param == "off" || param == "disable" || param == "0")
@@ -659,13 +690,13 @@ namespace ACE.Server.Command.Handlers
                 if (lastPKFlagTime > 0)
                 {
                     var timeSinceFlagged = Time.GetUnixTime() - lastPKFlagTime;
-                    var minimumDuration = 300; // 5 minutes in seconds
+                    var minimumDuration = 7200; // 2 hours in seconds
 
                     if (timeSinceFlagged < minimumDuration)
                     {
                         var remainingSeconds = minimumDuration - timeSinceFlagged;
                         var remainingMinutes = (int)Math.Ceiling(remainingSeconds / 60.0);
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must remain PK for at least 5 minutes after flagging. {remainingMinutes} minute{(remainingMinutes == 1 ? "" : "s")} remaining.", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must remain PK for at least 2 hours after flagging. {remainingMinutes} minute{(remainingMinutes == 1 ? "" : "s")} remaining.", ChatMessageType.Broadcast));
                         return;
                     }
                 }

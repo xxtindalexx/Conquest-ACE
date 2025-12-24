@@ -16,6 +16,7 @@ using ACE.Server.Managers;
 using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameMessages;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Database.Models.Shard;
 
 namespace ACE.Server.Network.Handlers
 {
@@ -23,7 +24,7 @@ namespace ACE.Server.Network.Handlers
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
-        [GameMessage(GameMessageOpcode.CharacterCreate, SessionState.AuthConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.CharacterCreate, SessionState.AuthConnected)]
         public static void CharacterCreate(ClientMessage message, Session session)
         {
             string clientString = message.Payload.ReadString16L();
@@ -47,14 +48,14 @@ namespace ACE.Server.Network.Handlers
         {
             var characterCreateInfo = new CharacterCreateInfo();
             characterCreateInfo.Unpack(message.Payload);
-            
-            if (PropertyManager.GetBool("taboo_table").Item && DatManager.PortalDat.TabooTable.ContainsBadWord(characterCreateInfo.Name.ToLowerInvariant()))
+
+            if (PropertyManager.GetBool("taboo_table") && DatManager.PortalDat.TabooTable.ContainsBadWord(characterCreateInfo.Name.ToLowerInvariant()))
             {
                 SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.NameBanned);
                 return;
             }
 
-            if (PropertyManager.GetBool("creature_name_check").Item && DatabaseManager.World.IsCreatureNameInWorldDatabase(characterCreateInfo.Name))
+            if (PropertyManager.GetBool("creature_name_check") && DatabaseManager.World.IsCreatureNameInWorldDatabase(characterCreateInfo.Name))
             {
                 SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.NameBanned);
                 return;
@@ -69,7 +70,7 @@ namespace ACE.Server.Network.Handlers
                 }
             });
 
-            if ((characterCreateInfo.Heritage == HeritageGroup.Olthoi || characterCreateInfo.Heritage == HeritageGroup.OlthoiAcid) && PropertyManager.GetBool("olthoi_play_disabled").Item)
+            if ((characterCreateInfo.Heritage == HeritageGroup.Olthoi || characterCreateInfo.Heritage == HeritageGroup.OlthoiAcid) && PropertyManager.GetBool("olthoi_play_disabled"))
             {
                 SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.Pending);
                 return;
@@ -153,7 +154,7 @@ namespace ACE.Server.Network.Handlers
                 }
 
                 var possessions = player.GetAllPossessions();
-                var possessedBiotas = new Collection<(Biota biota, ReaderWriterLockSlim rwLock)>();
+                var possessedBiotas = new Collection<(ACE.Entity.Models.Biota biota, ReaderWriterLockSlim rwLock)>();
                 foreach (var possession in possessions)
                     possessedBiotas.Add((possession.Biota, possession.BiotaDatabaseLock));
 
@@ -167,7 +168,7 @@ namespace ACE.Server.Network.Handlers
                     }
 
                     PlayerManager.AddOfflinePlayer(player);
-                    session.Characters.Add(player.Character);
+                    session.Characters.Add(new LoginCharacter { Id = player.Character.Id, IsPlussed = player.IsPlussed, AccountId = player.Account.AccountId, Name = player.Name });
 
                     SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.Ok, player.Guid, characterCreateInfo.Name);
                 });
@@ -180,7 +181,7 @@ namespace ACE.Server.Network.Handlers
         }
 
 
-        [GameMessage(GameMessageOpcode.CharacterEnterWorldRequest, SessionState.AuthConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.CharacterEnterWorldRequest, SessionState.AuthConnected)]
         public static void CharacterEnterWorldRequest(ClientMessage message, Session session)
         {
             if (ServerManager.ShutdownInProgress)
@@ -195,7 +196,7 @@ namespace ACE.Server.Network.Handlers
                 session.SendCharacterError(CharacterError.LogonServerFull);
         }
 
-        [GameMessage(GameMessageOpcode.CharacterEnterWorld, SessionState.AuthConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.CharacterEnterWorld, SessionState.AuthConnected)]
         public static void CharacterEnterWorld(ClientMessage message, Session session)
         {
             var guid = message.Payload.ReadUInt32();
@@ -215,13 +216,13 @@ namespace ACE.Server.Network.Handlers
             }
 
             var character = session.Characters.SingleOrDefault(c => c.Id == guid);
-            if (character == null)
+            if (character.Id == 0)
             {
                 session.SendCharacterError(CharacterError.EnterGameCharacterNotOwned);
                 return;
             }
 
-            if (character.IsDeleted || character.DeleteTime > 0)
+            if (character.IsDeleted)
             {
                 session.SendCharacterError(CharacterError.EnterGameCharacterNotOwned);
                 return;
@@ -249,7 +250,7 @@ namespace ACE.Server.Network.Handlers
                 return;
             }
 
-            if ((offlinePlayer.Heritage == (int)HeritageGroup.Olthoi || offlinePlayer.Heritage == (int)HeritageGroup.OlthoiAcid) && PropertyManager.GetBool("olthoi_play_disabled").Item)
+            if ((offlinePlayer.Heritage == (int)HeritageGroup.Olthoi || offlinePlayer.Heritage == (int)HeritageGroup.OlthoiAcid) && PropertyManager.GetBool("olthoi_play_disabled"))
             {
                 session.SendCharacterError(CharacterError.EnterGameCouldntPlaceCharacter);
                 return;
@@ -263,14 +264,14 @@ namespace ACE.Server.Network.Handlers
         }
 
 
-        [GameMessage(GameMessageOpcode.CharacterLogOff, SessionState.WorldConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.CharacterLogOff, SessionState.WorldConnected)]
         public static void CharacterLogOff(ClientMessage message, Session session)
         {
             session.LogOffPlayer();
         }
 
 
-        [GameMessage(GameMessageOpcode.CharacterDelete, SessionState.AuthConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.CharacterDelete, SessionState.AuthConnected)]
         public static void CharacterDelete(ClientMessage message, Session session)
         {
             string clientString = message.Payload.ReadString16L();
@@ -294,41 +295,51 @@ namespace ACE.Server.Network.Handlers
                 return;
             }
 
-            var character = session.Characters[(int)characterSlot];
-            if (character == null)
+            var Logcharacter = session.Characters[(int)characterSlot];
+
+            DatabaseManager.Shard.GetCharacter(Logcharacter.Id, character =>
             {
-                session.SendCharacterError(CharacterError.Delete);
-                return;
-            }
-
-            var offlinePlayer = PlayerManager.GetOfflinePlayer(session.Characters[(int)characterSlot].Id);
-
-            if (offlinePlayer == null || offlinePlayer.IsDeleted || offlinePlayer.IsPendingDeletion)
-            {
-                session.SendCharacterError(CharacterError.Delete);
-                return;
-            }
-
-            session.Network.EnqueueSend(new GameMessageCharacterDelete());
-
-            var charRestoreTime = PropertyManager.GetLong("char_delete_time", 3600).Item;
-            character.DeleteTime = (ulong)(Time.GetUnixTime() + charRestoreTime);
-            character.IsDeleted = false;
-
-            DatabaseManager.Shard.SaveCharacter(character, new ReaderWriterLockSlim(), result =>
-            {
-                if (result)
+                if (character == null)
                 {
-                    session.Network.EnqueueSend(new GameMessageCharacterList(session.Characters, session));
-
-                    PlayerManager.HandlePlayerDelete(character.Id);
-                }
-                else
                     session.SendCharacterError(CharacterError.Delete);
+                    return;
+                }
+                var offlinePlayer = PlayerManager.GetOfflinePlayer(session.Characters[(int)characterSlot].Id);
+
+                if (offlinePlayer == null || offlinePlayer.IsDeleted || offlinePlayer.IsPendingDeletion)
+                {
+                    session.SendCharacterError(CharacterError.Delete);
+                    return;
+                }
+
+                session.Network.EnqueueSend(new GameMessageCharacterDelete());
+
+                var charRestoreTime = PropertyManager.GetLong("char_delete_time", 3600);
+                character.DeleteTime = (ulong)(Time.GetUnixTime() + charRestoreTime);
+                character.IsDeleted = false;
+
+                DatabaseManager.Shard.SaveCharacter(character, new ReaderWriterLockSlim(), result =>
+                {
+                    if (result)
+                    {
+                        DatabaseManager.Shard.GetLoginCharacters(session.AccountId, false, result =>
+                        {
+                            var cs = result.OrderByDescending(o => o.LastLoginTimestamp).ToList();
+                            session.UpdateCharacters(cs);
+                            session.Network.EnqueueSend(new GameMessageCharacterList(session.Characters, session));
+
+                            PlayerManager.HandlePlayerDelete(character.Id);
+                        });
+                    }
+                    else
+                        session.SendCharacterError(CharacterError.Delete);
+                });
             });
+
+
         }
 
-        [GameMessage(GameMessageOpcode.CharacterRestore, SessionState.AuthConnected)]
+        [InboundGameMessage(InboundGameMessageOpcode.CharacterRestore, SessionState.AuthConnected)]
         public static void CharacterRestore(ClientMessage message, Session session)
         {
             var guid = message.Payload.ReadUInt32();
@@ -346,8 +357,12 @@ namespace ACE.Server.Network.Handlers
             }
 
             var character = session.Characters.SingleOrDefault(c => c.Id == guid);
-            if (character == null)
+            if (character.Id == 0)
+            {
+                session.SendCharacterError(CharacterError.EnterGameCouldntPlaceCharacter);
                 return;
+            }
+
 
             if (Time.GetUnixTime() > character.DeleteTime || character.IsDeleted)
             {
@@ -355,32 +370,35 @@ namespace ACE.Server.Network.Handlers
                 return;
             }
 
-            DatabaseManager.Shard.IsCharacterNameAvailable(character.Name, isAvailable =>
+            DatabaseManager.Shard.GetCharacter(character.Id, character =>
             {
-                if (!isAvailable)
+                DatabaseManager.Shard.IsCharacterNameAvailable(character.Name, isAvailable =>
                 {
-                    SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.NameInUse);
-                }
-                else
-                {
-                    character.DeleteTime = 0;
-                    character.IsDeleted = false;
-
-                    DatabaseManager.Shard.SaveCharacter(character, new ReaderWriterLockSlim(), result =>
+                    if (!isAvailable)
                     {
-                        var name = character.Name;
+                        SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.NameInUse);
+                    }
+                    else
+                    {
+                        character.DeleteTime = 0;
+                        character.IsDeleted = false;
 
-                        if (ConfigManager.Config.Server.Accounts.OverrideCharacterPermissions && session.AccessLevel > AccessLevel.Advocate)
-                            name = "+" + name;
-                        else if (!ConfigManager.Config.Server.Accounts.OverrideCharacterPermissions && character.IsPlussed)
-                            name = "+" + name;
+                        DatabaseManager.Shard.SaveCharacter(character, new ReaderWriterLockSlim(), result =>
+                        {
+                            var name = character.Name;
 
-                        if (result)
-                            session.Network.EnqueueSend(new GameMessageCharacterRestore(guid, name, 0u));
-                        else
-                            SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.Corrupt);
-                    });
-                }
+                            if (ConfigManager.Config.Server.Accounts.OverrideCharacterPermissions && session.AccessLevel > AccessLevel.Advocate)
+                                name = "+" + name;
+                            else if (!ConfigManager.Config.Server.Accounts.OverrideCharacterPermissions && character.IsPlussed)
+                                name = "+" + name;
+
+                            if (result)
+                                session.Network.EnqueueSend(new GameMessageCharacterRestore(guid, name, 0u));
+                            else
+                                SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.Corrupt);
+                        });
+                    }
+                });
             });
         }
     }

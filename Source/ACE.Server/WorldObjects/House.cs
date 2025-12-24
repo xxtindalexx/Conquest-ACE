@@ -521,7 +521,7 @@ namespace ACE.Server.WorldObjects
                     return Load(RootGuid.Full);
                 }
                    
-                var loaded = LandblockManager.GetLandblock(landblockId, false);
+                var loaded = LandblockManager.GetLandblock(landblockId, false, null);
                 return loaded.GetObject(RootGuid) as House;
             }
         }
@@ -567,7 +567,7 @@ namespace ACE.Server.WorldObjects
             if (!isLoaded)
                 return House.Load(houseGuid);
 
-            var loaded = LandblockManager.GetLandblock(landblockId, false);
+            var loaded = LandblockManager.GetLandblock(landblockId, false, null);
             return loaded.GetObject(new ObjectGuid(houseGuid)) as House;
         }
 
@@ -579,7 +579,7 @@ namespace ACE.Server.WorldObjects
             if (!isLoaded)
                 return House.Load(DungeonHouseGuid, true);
 
-            var loaded = LandblockManager.GetLandblock(landblockId, false);
+            var loaded = LandblockManager.GetLandblock(landblockId, false, null);
             var wos = loaded.GetWorldObjectsForPhysicsHandling();
             return wos.FirstOrDefault(wo => wo.WeenieClassId == WeenieClassId) as House;
         }

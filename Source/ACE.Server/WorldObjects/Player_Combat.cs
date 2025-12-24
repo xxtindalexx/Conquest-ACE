@@ -749,7 +749,7 @@ namespace ACE.Server.WorldObjects
 
                 var actionChain = new ActionChain();
                 actionChain.AddDelaySeconds(animTime);
-                actionChain.AddAction(this, () =>
+                actionChain.AddAction(this, ActionType.PlayerCombat_SetActionType, () =>
                 {
                     SetCombatMode(CombatMode.NonCombat);
                 });
@@ -767,7 +767,7 @@ namespace ACE.Server.WorldObjects
             {
                 var actionChain = new ActionChain();
                 actionChain.AddDelaySeconds((NextUseTime - DateTime.UtcNow).TotalSeconds + UseTimeEpsilon);
-                actionChain.AddAction(this, () => HandleActionChangeCombatMode_Inner(newCombatMode, forceHandCombat, callback));
+                actionChain.AddAction(this, ActionType.PlayerCombat_ChangeCombatMode, () => HandleActionChangeCombatMode_Inner(newCombatMode, forceHandCombat, callback));
                 actionChain.EnqueueChain();
             }
 
@@ -847,7 +847,7 @@ namespace ACE.Server.WorldObjects
 
                                         var actionChain = new ActionChain();
                                         actionChain.AddDelaySeconds(animTime);
-                                        actionChain.AddAction(this, () =>
+                                        actionChain.AddAction(this, ActionType.PlayerCombat_SetCombatMode, () =>
                                         {
                                             Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "You are out of ammunition!"));
                                             SetCombatMode(CombatMode.NonCombat);
@@ -896,7 +896,7 @@ namespace ACE.Server.WorldObjects
             {
                 var callbackChain = new ActionChain();
                 callbackChain.AddDelaySeconds(animTime);
-                callbackChain.AddAction(this, callback);
+                callbackChain.AddAction(this, ActionType.PlayerCombat_ChangeCombatModeCallback, callback);
                 callbackChain.EnqueueChain();
             }
         }
@@ -1016,7 +1016,7 @@ namespace ACE.Server.WorldObjects
             defender.UpdatePKTimer();
         }
 
-        public bool PKTimerActive => IsPKType && Time.GetUnixTime() - LastPkAttackTimestamp < PropertyManager.GetLong("pk_timer").Item;
+        public bool PKTimerActive => IsPKType && Time.GetUnixTime() - LastPkAttackTimestamp < PropertyManager.GetLong("pk_timer");
 
         public bool PKLogoutActive => IsPKType && Time.GetUnixTime() - LastPkAttackTimestamp < PKLogoffTimer.TotalSeconds;
 

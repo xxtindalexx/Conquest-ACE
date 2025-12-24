@@ -345,7 +345,7 @@ namespace ACE.Server
             ModManager.RegisterCommands();
             ModManager.ListMods();
 
-            if (!PropertyManager.GetBool("world_closed", false).Item)
+            if (!PropertyManager.GetBool("world_closed", false))
             {
                 WorldManager.Open(null);
             }

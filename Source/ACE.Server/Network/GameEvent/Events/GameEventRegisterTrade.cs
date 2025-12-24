@@ -5,7 +5,7 @@ namespace ACE.Server.Network.GameEvent.Events
     public class GameEventRegisterTrade : GameEventMessage
     {
         public GameEventRegisterTrade(Session session, ObjectGuid initiator, ObjectGuid partner)
-            : base(GameEventType.RegisterTrade, GameMessageGroup.UIQueue, session, 20)
+            : base(GameEventType.RegisterTrade, GameMessageGroup.UIQueue, session)
         {
             Writer.WriteGuid(initiator);
             Writer.WriteGuid(partner);

@@ -18,8 +18,8 @@ namespace ACE.Server.WorldObjects
                 return;
 
             // following the same model as Player_Xp
-            var questModifier = PropertyManager.GetDouble("quest_lum_modifier").Item;
-            var modifier = PropertyManager.GetDouble("luminance_modifier").Item;
+            var questModifier = PropertyManager.GetDouble("quest_lum_modifier");
+            var modifier = PropertyManager.GetDouble("luminance_modifier");
             if (xpType == XpType.Quest)
                 modifier *= questModifier;
 
@@ -46,29 +46,24 @@ namespace ACE.Server.WorldObjects
                 Fellowship.SplitLuminance((ulong)amount, xpType, shareType, this);
             }
             else
-                AddLuminance(amount, xpType);
+                AddLuminance(amount, xpType, shareType);
         }
 
-        private void AddLuminance(long amount, XpType xpType)
+        private void AddLuminance(long amount, XpType xpType, ShareType shareType)
         {
-            var available = AvailableLuminance ?? 0;
-            var maximum = MaximumLuminance ?? 0;
+            if (!BankedLuminance.HasValue)
+            {
+                BankedLuminance = 0;
+            }
+            BankedLuminance += amount;
+            if (xpType == XpType.Quest || xpType == XpType.Kill)
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"You've banked {amount:N0} Luminance.", ChatMessageType.Broadcast));
 
-            if (available == maximum)
-                return;
+            if (shareType.HasFlag(ShareType.Allegiance))
+                UpdateLumAllegiance(amount);
 
-            // this is similar to Player_Xp.UpdateXpAndLevel()
-
-            var remaining = maximum - available;
-
-            var addAmount = Math.Min(amount, remaining);
-
-            AvailableLuminance = available + addAmount;
-
-            if (xpType == XpType.Quest)
-                Session.Network.EnqueueSend(new GameMessageSystemChat($"You've earned {amount:N0} Luminance.", ChatMessageType.Broadcast));
-
-            UpdateLuminance();
+            // 20250203 - Don't spam the client with properties it doesn't use
+            //UpdateLuminance();
         }
 
         /// <summary>
@@ -76,24 +71,43 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public bool SpendLuminance(long amount)
         {
-            var available = AvailableLuminance ?? 0;
 
-            if (amount > available)
-                return false;
+            if (!BankedLuminance.HasValue) { BankedLuminance = 0; }
+            if (!AvailableLuminance.HasValue) { AvailableLuminance = 0; }
 
-            AvailableLuminance = available - amount;
+            if (AvailableLuminance > 0 && AvailableLuminance >= amount)
+            {
+                AvailableLuminance = AvailableLuminance - amount;
+                UpdateLuminance();
+                return true;
+            }
 
-            UpdateLuminance();
+            if (BankedLuminance > 0 && BankedLuminance >= amount)
+            {
+                BankedLuminance = BankedLuminance - amount;
+                UpdateLuminance();
+                return true;
+            }
 
-            return true;
+            return false;
         }
 
-        /// <summary>
-        /// Sends network message to update luminance
-        /// </summary>
+        private void UpdateLumAllegiance(long amount)
+        {
+            if (!HasAllegiance)
+            {
+                return;
+            }
+            if (amount <= 0)
+            {
+                return;
+            }
+        }
+
         private void UpdateLuminance()
         {
             Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(this, PropertyInt64.AvailableLuminance, AvailableLuminance ?? 0));
+            //Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(this, PropertyInt64.BankedLuminance, BankedLuminance ?? 0));
         }
     }
 }

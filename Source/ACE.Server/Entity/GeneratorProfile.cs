@@ -326,7 +326,7 @@ namespace ACE.Server.Entity
             // offset from generator location
             else
             {
-                if (PropertyManager.GetBool("use_generator_rotation_offset").Item)
+                if (PropertyManager.GetBool("use_generator_rotation_offset"))
                 {
                     var offset = Vector3.Transform(new Vector3(Biota.OriginX ?? 0, Biota.OriginY ?? 0, Biota.OriginZ ?? 0), Generator.Location.Rotation);
 

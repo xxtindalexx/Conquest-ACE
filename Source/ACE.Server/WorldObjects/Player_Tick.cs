@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
-
 using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -16,7 +11,12 @@ using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Sequence;
 using ACE.Server.Network.Structure;
 using ACE.Server.Physics;
+using ACE.Server.Physics.Animation;
 using ACE.Server.Physics.Common;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
 
 namespace ACE.Server.WorldObjects
 {
@@ -87,7 +87,7 @@ namespace ACE.Server.WorldObjects
                 FellowVitalUpdate = false;
             }
 
-            if (House != null && PropertyManager.GetBool("house_rent_enabled").Item)
+            if (House != null && PropertyManager.GetBool("house_rent_enabled"))
             {
                 if (houseRentWarnTimestamp > 0 && currentUnixTime > houseRentWarnTimestamp)
                 {
@@ -187,7 +187,7 @@ namespace ACE.Server.WorldObjects
             if (!PhysicsObj.IsMovingOrAnimating)
                 PhysicsObj.UpdateTime = PhysicsTimer.CurrentTime;
 
-            if (!PropertyManager.GetBool("client_movement_formula").Item || moveToState.StandingLongJump)
+            if (!PropertyManager.GetBool("client_movement_formula") || moveToState.StandingLongJump)
                 OnMoveToState_ServerMethod(moveToState);
             else
                 OnMoveToState_ClientMethod(moveToState);
@@ -199,7 +199,7 @@ namespace ACE.Server.WorldObjects
         public void OnMoveToState_ClientMethod(MoveToState moveToState)
         {
             var rawState = moveToState.RawMotionState;
-            var prevState = LastMoveToState?.RawMotionState ?? RawMotionState.None;
+            var prevState = LastMoveToState?.RawMotionState ?? Network.Structure.RawMotionState.None;
 
             var mvp = new Physics.Animation.MovementParameters();
             mvp.HoldKeyToApply = rawState.CurrentHoldKey;
@@ -280,7 +280,7 @@ namespace ACE.Server.WorldObjects
                 minterp.RawState.SideStepCommand = 0;
             }
 
-            var allowJump = minterp.motion_allows_jump(minterp.InterpretedState.ForwardCommand) == WeenieError.None;
+            var allowJump = MotionInterp.motion_allows_jump(minterp.InterpretedState.ForwardCommand) == WeenieError.None;
 
             //PhysicsObj.cancel_moveto();
 
@@ -460,7 +460,7 @@ namespace ACE.Server.WorldObjects
                                 verifyContact = true;
                         }
 
-                        var curCell = LScape.get_landcell(newPosition.Cell);
+                        var curCell = LScape.get_landcell(newPosition.Cell, newPosition.Variation);
                         if (curCell != null)
                         {
                             //if (PhysicsObj.CurCell == null || curCell.ID != PhysicsObj.CurCell.ID)
@@ -555,7 +555,7 @@ namespace ACE.Server.WorldObjects
 
                 if (CurrentLandblock.IsDungeon)
                 {
-                    var destBlock = LScape.get_landblock(newPosition.Cell);
+                    var destBlock = LScape.get_landblock(newPosition.Cell, newPosition.Variation);
                     if (destBlock != null && destBlock.IsDungeon)
                         return false;
                 }
@@ -689,7 +689,7 @@ namespace ACE.Server.WorldObjects
             // doing a delay here to prevent 'SpellExpired' sounds from overlapping with 'ItemManaDepleted'
             var actionChain = new ActionChain();
             actionChain.AddDelaySeconds(2.0f);
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.PlayerTick_RemoveSpellsOnItemManaDepleted, () =>
             {
                 foreach (var spellId in item.Biota.GetKnownSpellsIds(item.BiotaDatabaseLock))
                     RemoveItemSpell(item, (uint)spellId);

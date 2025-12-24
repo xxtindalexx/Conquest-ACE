@@ -1,9 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Numerics;
-
 using ACE.DatLoader;
 using ACE.DatLoader.Entity;
 using ACE.DatLoader.FileTypes;
@@ -20,10 +14,16 @@ using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Sequence;
 using ACE.Server.Network.Structure;
 using ACE.Server.Physics;
+using ACE.Server.Physics.Animation;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Numerics;
 
 namespace ACE.Server.WorldObjects
 {
-    partial class WorldObject 
+    partial class WorldObject
     {
         public virtual void SerializeUpdateObject(BinaryWriter writer, bool adminvision = false, bool changenodraw = false)
         {
@@ -63,7 +63,7 @@ namespace ACE.Server.WorldObjects
                 SerializePhysicsData(writer, adminvision, changenodraw);
             }
 
-            var weenieFlags =  CalculateWeenieHeaderFlag();
+            var weenieFlags = CalculateWeenieHeaderFlag();
             var weenieFlags2 = CalculateWeenieHeaderFlag2();
 
             UpdateObjectDescriptionFlags();
@@ -173,21 +173,28 @@ namespace ACE.Server.WorldObjects
             if ((weenieFlags & WeenieHeaderFlag.HouseRestrictions) != 0)
             {
                 var house = this as House;
-
-                // if house object is in dungeon,
-                // send the permissions from the outdoor house
-                if (house.HouseType != HouseType.Apartment && house.CurrentLandblock.IsDungeon)
+                if (house != null)
                 {
-                    house = house.RootHouse;
+                    // if house object is in dungeon,
+                    // send the permissions from the outdoor house
+                    if (house.HouseType != HouseType.Apartment && house.CurrentLandblock.IsDungeon)
+                    {
+                        house = house.RootHouse;
+                    }
+                    else
+                    {
+                        // if mansion or villa, send permissions from master copy
+                        if (house.HouseType == HouseType.Villa || house.HouseType == HouseType.Mansion)
+                            house = house.RootHouse;
+                    }
+
+                    writer.Write(new RestrictionDB(house));
                 }
                 else
                 {
-                    // if mansion or villa, send permissions from master copy
-                    if (house.HouseType == HouseType.Villa || house.HouseType == HouseType.Mansion)
-                        house = house.RootHouse;
+                    log.Warn($"SerializeCreateObject(): World Object with Guid {Guid} based on Weenie {WeenieClassId} has HouseRestrictions flag but is not a house");
                 }
 
-                writer.Write(new RestrictionDB(house));
             }
 
             if ((weenieFlags & WeenieHeaderFlag.HookItemTypes) != 0)
@@ -298,14 +305,13 @@ namespace ACE.Server.WorldObjects
                 physicsState &= ~PhysicsState.Cloaked;
             }
 
-            if (this is SpellProjectile && PropertyManager.GetBool("spell_projectile_ethereal").Item)
+            if (this is SpellProjectile && PropertyManager.GetBool("spell_projectile_ethereal"))
                 physicsState |= PhysicsState.Ethereal;
 
             writer.Write((uint)physicsState);
 
             if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Movement) != 0)
             {
-                /* OLD METHOD
                 var movementData = new MovementData(this, CurrentMotionState).Serialize();
 
                 writer.Write((uint)movementData.Length);
@@ -313,27 +319,6 @@ namespace ACE.Server.WorldObjects
                 if (movementData.Length > 0)
                 {
                     writer.Write(movementData);
-                    writer.Write(Convert.ToUInt32(CurrentMotionState.IsAutonomous));
-                }
-                */
-
-                var movementData = new MovementData(this, CurrentMotionState);
-
-                // We'll come back to here to write the length
-                var preWritePosition = writer.BaseStream.Position;
-                writer.Write((uint)0);
-
-                writer.Write(movementData, false);
-
-                var postWritePosition = writer.BaseStream.Position;
-
-                if (preWritePosition + 4 != postWritePosition)
-                {
-                    // Go back and write the length
-                    writer.BaseStream.Position = preWritePosition;
-                    writer.Write((uint)(postWritePosition - preWritePosition - 4));
-
-                    writer.BaseStream.Position = postWritePosition;
                     writer.Write(Convert.ToUInt32(CurrentMotionState.IsAutonomous));
                 }
             }
@@ -448,7 +433,7 @@ namespace ACE.Server.WorldObjects
                             targetSession.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(targetSession.Player, (PropertyInt)property.PropertyId, value.Value));
                         break;
                     default:
-                        log.DebugFormat("Unsupported property in SendPartialUpdates: id {0}, type {1}.", property.PropertyId, property.PropertyType);
+                        log.Debug($"Unsupported property in SendPartialUpdates: id {property.PropertyId}, type {property.PropertyType}.");
                         break;
                 }
             }
@@ -673,15 +658,10 @@ namespace ACE.Server.WorldObjects
             else
                 physicsState &= ~PhysicsState.Inelastic;
             ////HasDefaultAnim              = 0x00040000,
-            if (PhysicsObj != null && PhysicsObj.HasDefaultAnimation && CSetup.DefaultAnimation > 0)
-                physicsState |= PhysicsState.HasDefaultAnim;
-            else
-                physicsState &= ~PhysicsState.HasDefaultAnim;
+
+            physicsState &= ~PhysicsState.HasDefaultAnim;
             ////HasDefaultScript            = 0x00080000,
-            if (PhysicsObj != null && PhysicsObj.HasDefaultScript && CSetup.DefaultScript > 0)
-                physicsState |= PhysicsState.HasDefaultScript;
-            else
-                physicsState &= ~PhysicsState.HasDefaultScript;
+            physicsState &= ~PhysicsState.HasDefaultScript;
             ////Cloaked                     = 0x00100000,
             if (Cloaked ?? false)
                 physicsState |= PhysicsState.Cloaked;
@@ -849,7 +829,7 @@ namespace ACE.Server.WorldObjects
             {
                 var openable = !IsLocked;
 
-                if (WeenieType == WeenieType.Chest && !openable && PropertyManager.GetBool("fix_chest_missing_inventory_window").Item)
+                if (WeenieType == WeenieType.Chest && !openable && PropertyManager.GetBool("fix_chest_missing_inventory_window"))
                     openable = true;
 
                 UpdateObjectDescriptionFlag(ObjectDescriptionFlag.Openable, openable);
@@ -920,11 +900,10 @@ namespace ACE.Server.WorldObjects
                 return objDesc;
             }
 
-            if (item.ClothingBaseEffects.ContainsKey(SetupTableId))
+            if (item.ClothingBaseEffects.TryGetValue(SetupTableId, out ClothingBaseEffect clothingBaseEffect))
             // Check if the ClothingBase is applicable for this Setup. (Gear Knights, this is usually you.)
             {
                 // Add the model and texture(s)
-                ClothingBaseEffect clothingBaseEffect = item.ClothingBaseEffects[SetupTableId];
                 foreach (CloObjectEffect t in clothingBaseEffect.CloObjectEffects)
                 {
                     byte partNum = (byte)t.Index;
@@ -938,7 +917,7 @@ namespace ACE.Server.WorldObjects
 
                 // If there are no ClothingSubPalEffects, or this item has no Shade and no PaletteTemplate set, we will not apply any Palette changes
                 if (item.ClothingSubPalEffects.Count > 0 && (Shade.HasValue || PaletteTemplate.HasValue))
-                { 
+                {
                     CloSubPalEffect itemSubPal;
                     int palOption = 0;
                     if (PaletteTemplate.HasValue)
@@ -1044,7 +1023,7 @@ namespace ACE.Server.WorldObjects
             if (PhysicsObj == null) return;
 
             if (!excludeSelf && this is Player self)
-                self.EnqueueAction(new ActionEventDelegate(() => delegateAction(self)));
+                self.EnqueueAction(new ActionEventDelegate(ActionType.WorldObjectNetworking_BroadcastSelf, () => delegateAction(self)));
 
             foreach (var player in PhysicsObj.ObjMaint.GetKnownPlayersValuesAsPlayer())
             {
@@ -1054,7 +1033,7 @@ namespace ACE.Server.WorldObjects
                 if (excludeSelf && this == player)
                     continue;
 
-                player.EnqueueAction(new ActionEventDelegate(() => delegateAction(player)));
+                player.EnqueueAction(new ActionEventDelegate(ActionType.WorldObjectNetworking_BroadcastOther, () => delegateAction(player)));
             }
         }
 
@@ -1082,7 +1061,7 @@ namespace ACE.Server.WorldObjects
 
             var animLength = Physics.Animation.MotionTable.GetAnimationLength(MotionTableId, MotionStance.Magic, motionCommand, speed);
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.WorldObjectNetworking_EnqueueMotionMagic, () =>
             {
                 if (this is Player player && player.MagicState.IsCasting)
                     EnqueueBroadcastMotion(motion);
@@ -1110,7 +1089,7 @@ namespace ACE.Server.WorldObjects
             else
                 animLength = Physics.Animation.MotionTable.GetAnimationLength(MotionTableId, stance, motionCommand, speed);
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.WorldObjectNetworking_EnqueueMotion, () =>
             {
                 if (castGesture && this is Player player && !player.MagicState.IsCasting)
                     return;
@@ -1136,7 +1115,7 @@ namespace ACE.Server.WorldObjects
 
             var animLength = Physics.Animation.MotionTable.GetAnimationLength(MotionTableId, stance, motionCommand, speed);
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.WorldObjectNetworking_EnqueueMotionMissile, () =>
             {
                 // if no longer in missile combat, don't bother
                 if (this is Player player && player.CombatMode != CombatMode.Missile) return;
@@ -1155,7 +1134,7 @@ namespace ACE.Server.WorldObjects
 
         public float EnqueueMotionPersist(ActionChain actionChain, MotionStance stance, MotionCommand motionCommand, float speed = 1.0f)
         {
-            if (!PropertyManager.GetBool("persist_movement").Item)
+            if (!PropertyManager.GetBool("persist_movement"))
             {
                 return EnqueueMotion(actionChain, stance, motionCommand, speed);
             }
@@ -1167,7 +1146,7 @@ namespace ACE.Server.WorldObjects
 
             var animLength = Physics.Animation.MotionTable.GetAnimationLength(MotionTableId, stance, motionCommand, speed);
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.WorldObjectNetworking_EnqueueMotionMissilePersist, () =>
             {
                 // if no longer in missile combat, don't bother
                 if (this is Player player && player.CombatMode != CombatMode.Missile) return;
@@ -1188,7 +1167,7 @@ namespace ACE.Server.WorldObjects
 
         public float EnqueueMotionPersist(ActionChain actionChain, MotionCommand motionCommand, float speed = 1.0f, bool useStance = true, MotionCommand? prevCommand = null, bool castGesture = false, bool half = false)
         {
-            if (!PropertyManager.GetBool("persist_movement").Item)
+            if (!PropertyManager.GetBool("persist_movement"))
             {
                 return EnqueueMotion(actionChain, motionCommand, speed, useStance, prevCommand, castGesture, half);
             }
@@ -1206,7 +1185,7 @@ namespace ACE.Server.WorldObjects
             else
                 animLength = Physics.Animation.MotionTable.GetAnimationLength(MotionTableId, stance, motionCommand, speed);
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.WorldObjectNetworking_EnqueueMotionMagicPersist, () =>
             {
                 if (castGesture && this is Player player && !player.MagicState.IsCasting)
                     return;
@@ -1253,7 +1232,7 @@ namespace ACE.Server.WorldObjects
                     animLength += Physics.Animation.MotionTable.GetAnimationLength(MotionTableId, stance, motionCommand, speed);
             }
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.WorldObjectNetworking_EnqueueMotionMagicAction, () =>
             {
                 if (checkCasting && this is Player player && player.MagicState != null && !player.MagicState.IsCasting)
                     return;
@@ -1290,7 +1269,7 @@ namespace ACE.Server.WorldObjects
                     animLength = Physics.Animation.MotionTable.GetAnimationLength(MotionTableId, stance, prevCommand.Value, motionCommand, speed);
             }
 
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.WorldObjectNetworking_EnqueueMotionForce, () =>
             {
                 CurrentMotionState = motion;
 
@@ -1301,7 +1280,7 @@ namespace ACE.Server.WorldObjects
             return animLength;
         }
 
-        public static bool EnqueueBroadcastMotion_Physics = true;
+        private static readonly bool EnqueueBroadcastMotion_Physics = true;
 
         public void EnqueueBroadcastMotion(Motion motion, float? maxRange = null, bool? applyPhysics = null)
         {
@@ -1329,7 +1308,7 @@ namespace ACE.Server.WorldObjects
             var minterp = PhysicsObj.get_minterp();
             var rawState = minterp.RawState;
 
-            var allowJump = minterp.motion_allows_jump(minterp.InterpretedState.ForwardCommand) == WeenieError.None;
+            var allowJump = MotionInterp.motion_allows_jump(minterp.InterpretedState.ForwardCommand) == WeenieError.None;
 
             rawState.CurrentStyle = (uint)motion.Stance;
             rawState.ForwardCommand = (uint)motion.MotionState.ForwardCommand;
@@ -1373,7 +1352,7 @@ namespace ACE.Server.WorldObjects
         /// Sends network messages to all Players who currently know about this object
         /// within a maximum range
         /// </summary>
-        public void EnqueueBroadcast(GameMessage msg, float range, ChatMessageType? squelchType = null)
+        public void EnqueueBroadcast(OutboundGameMessage msg, float range, ChatMessageType? squelchType = null)
         {
             if (PhysicsObj == null || CurrentLandblock == null) return;
 
@@ -1410,12 +1389,12 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Sends network messages to all Players who currently know about this object
         /// </summary>
-        public List<Player> EnqueueBroadcast(params GameMessage[] msgs)
+        public List<Player> EnqueueBroadcast(params OutboundGameMessage[] msgs)
         {
             return EnqueueBroadcast(true, msgs);
         }
 
-        public List<Player> EnqueueBroadcast(bool sendSelf = true, params GameMessage[] msgs)
+        public List<Player> EnqueueBroadcast(bool sendSelf = true, params OutboundGameMessage[] msgs)
         {
             if (PhysicsObj == null)
             {
@@ -1425,10 +1404,9 @@ namespace ACE.Server.WorldObjects
                 return null;
             }
 
-            if (sendSelf)
+            if (sendSelf && this is Player self)
             {
-                if (this is Player self)
-                    self.Session.Network.EnqueueSend(msgs);
+                self.Session.Network.EnqueueSend(msgs);
             }
 
             var nearbyPlayers = PhysicsObj.ObjMaint.GetKnownPlayersValuesAsPlayer();
@@ -1442,7 +1420,8 @@ namespace ACE.Server.WorldObjects
             return nearbyPlayers;
         }
 
-        public List<Player> EnqueueBroadcast(List<Player> excludePlayers, bool sendSelf = true, params GameMessage[] msgs)
+
+        public List<Player> EnqueueBroadcast(List<Player> excludePlayers, bool sendSelf = true, params OutboundGameMessage[] msgs)
         {
             if (PhysicsObj == null) return null;
 

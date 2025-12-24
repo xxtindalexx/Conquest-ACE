@@ -54,26 +54,7 @@ namespace ACE.Server.WorldObjects
                 EnqueueMotion(actionChain, useAnimation, 1, false);
             }
 
-            if (Time.GetUnixTime() < ResetTimestamp)
-            {
-                var activationFailure = GetProperty(PropertyString.ActivationFailure);
-                if (activationFailure != null && activator is Player player)
-                {
-                    actionChain.AddAction(this, () => player.Session.Network.EnqueueSend(new GameMessageSystemChat(activationFailure, ChatMessageType.Broadcast)));
-                }
-            }
-            else
-            {
-                actionChain.AddAction(this, () => base.OnActivate(activator));
-
-                actionChain.AddAction(this, () =>
-                {
-                    if (ResetInterval > 0)
-                    {
-                        ResetTimestamp = Time.GetFutureUnixTime(ResetInterval ?? 0);
-                    }
-                });
-            }
+            actionChain.AddAction(this, ActionType.Switch_BaseOnActivate, () => base.OnActivate(activator));
 
             actionChain.EnqueueChain();
         }

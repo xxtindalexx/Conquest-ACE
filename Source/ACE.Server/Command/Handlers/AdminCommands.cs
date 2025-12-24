@@ -3580,13 +3580,13 @@ namespace ACE.Server.Command.Handlers
                                 PlayerManager.AddOfflinePlayer(newPlayer);
 
                                 if (newAccountId == 0)
-                                    session.Characters.Add(newPlayer.Character);
+                                    session.Characters.Add(new Database.Models.Shard.LoginCharacter { Id = newPlayer.Character.Id, IsPlussed = newPlayer.IsPlussed, AccountId = newPlayer.Account.AccountId, Name = newPlayer.Name });
                                 else
                                 {
                                     var foundActiveSession = Network.Managers.NetworkManager.Find(newAccountId);
 
                                     if (foundActiveSession != null)
-                                        foundActiveSession.Characters.Add(newPlayer.Character);
+                                        foundActiveSession.Characters.Add(new Database.Models.Shard.LoginCharacter { Id = newPlayer.Character.Id, IsPlussed = newPlayer.IsPlussed, AccountId = newPlayer.Account.AccountId, Name = newPlayer.Name });
                                 }
 
                                 var msg = $"Successfully {(isDeletedChar ? "restored" : "copied")} the character \"{(existingCharacter.IsPlussed ? "+" : "")}{existingCharacter.Name}\" to a new character \"{newPlayer.Name}\" for the account \"{newPlayer.Account.AccountName}\".";
@@ -4861,9 +4861,6 @@ namespace ACE.Server.Command.Handlers
         }
 
         // morph
-        [CommandHandler("morph", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1,
-            "Morphs your bodily form into that of the specified creature. Be careful with this one!",
-            "<wcid or weenie class name> [character name]")]
         public static void HandleMorph(Session session, params string[] parameters)
         {
             // @morph - Morphs your bodily form into that of the specified creature. Be careful with this one!
@@ -4979,25 +4976,12 @@ namespace ACE.Server.Command.Handlers
                 foreach (var possession in possessions)
                     possessedBiotas.Add((possession.Biota, possession.BiotaDatabaseLock));
 
-                // We must await here -- 
-                DatabaseManager.Shard.AddCharacterInParallel(player.Biota, player.BiotaDatabaseLock, possessedBiotas, player.Character, player.CharacterDatabaseLock, saveSuccess =>
-                {
-                    if (!saveSuccess)
-                    {
-                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to create a morph based on {weenie.ClassName} to a new character \"{player.Name}\" for the account \"{player.Account.AccountName}\"!", ChatMessageType.Broadcast);
-                        return;
-                    }
+                DatabaseManager.Shard.AddCharacterInParallel(player.Biota, player.BiotaDatabaseLock, possessedBiotas, player.Character, player.CharacterDatabaseLock, null);
 
-                    PlayerManager.AddOfflinePlayer(player);
+                PlayerManager.AddOfflinePlayer(player);
+                session.Characters.Add(new Database.Models.Shard.LoginCharacter { Id = player.Character.Id, IsPlussed = player.IsPlussed, AccountId = player.Account.AccountId, Name = player.Name });
 
-                    session.Characters.Add(player.Character);
-
-                    var msg = $"Successfully created a morph based on {weenie.ClassName} to a new character \"{player.Name}\" for the account \"{player.Account.AccountName}\".";
-                    CommandHandlerHelper.WriteOutputInfo(session, msg, ChatMessageType.Broadcast);
-                    PlayerManager.BroadcastToAuditChannel(session.Player, msg);
-
-                    session.LogOffPlayer();
-                });
+                session.LogOffPlayer();
             });
         }
 

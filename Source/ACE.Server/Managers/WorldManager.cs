@@ -82,6 +82,11 @@ namespace ACE.Server.Managers
         {
             WorldStatus = WorldStatusState.Open;
             PlayerManager.BroadcastToAuditChannel(player, "World is now open");
+            // DISCORD RELAY: Send to Events channel
+            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.EventsChannelId > 0)
+            {
+                DiscordChatManager.SendDiscordMessage("Server", "🌍 **World is now OPEN** - Players can now enter the world!", ConfigManager.Config.Chat.EventsChannelId);
+            }
         }
 
         internal static void Close(Player player, bool bootPlayers = false)
@@ -92,6 +97,12 @@ namespace ACE.Server.Managers
                 msg += ", and booting all online players.";
 
             PlayerManager.BroadcastToAuditChannel(player, msg);
+            // DISCORD RELAY: Send to Events channel
+            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.EventsChannelId > 0)
+            {
+                var discordMsg = bootPlayers ? "🔒 **World is now CLOSED** - All players have been booted." : "🔒 **World is now CLOSED** - No new players can enter.";
+                DiscordChatManager.SendDiscordMessage("Server", discordMsg, ConfigManager.Config.Chat.EventsChannelId);
+            }
 
             if (bootPlayers)
                 PlayerManager.BootAllPlayers();

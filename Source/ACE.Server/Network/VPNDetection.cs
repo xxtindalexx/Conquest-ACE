@@ -35,7 +35,7 @@ namespace ACE.Server.Network
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
-        public static string ApiKey { get; set; } = PropertyManager.GetString("proxycheck_api_key").Item;
+        public static string ApiKey { get; set; } = PropertyManager.GetString("proxycheck_api_key");
 
         public static async Task<ISPInfo> CheckVPN(string ip)
         {

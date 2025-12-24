@@ -169,7 +169,7 @@ namespace ACE.Server.WorldObjects
                     return new ActivationResult(new GameEventWeenieError(player.Session, WeenieError.YouAreNotPowerfulEnoughToUsePortal));
                 }
 
-                if (player.Level > MaxLevel && MaxLevel != 0 && PropertyManager.GetBool("use_portal_max_level_requirement").Item)
+                if (player.Level > MaxLevel && MaxLevel != 0 && PropertyManager.GetBool("use_portal_max_level_requirement"))
                 {
                     // You are too powerful to interact with that portal!
                     return new ActivationResult(new GameEventWeenieError(player.Session, WeenieError.YouAreTooPowerfulToUsePortal));
@@ -271,13 +271,20 @@ namespace ACE.Server.WorldObjects
             var player = activator as Player;
             if (player == null) return;
 
-#if DEBUG
-            // player.Session.Network.EnqueueSend(new GameMessageSystemChat("Portal sending player to destination", ChatMessageType.System));
-#endif
             var portalDest = new Position(Destination);
+#if DEBUG
+            //player.Session.Network.EnqueueSend(new GameMessageSystemChat("Portal sending player to destination", ChatMessageType.System));
+            //Console.WriteLine($"Player sending to v: {portalDest.Variation}");
+#endif
             AdjustDungeon(portalDest);
 
-            WorldManager.ThreadSafeTeleport(player, portalDest, new ActionEventDelegate(() =>
+
+            if (player.Location.Variation != portalDest.Variation) //immediately switch variation
+            {
+                player.Location.Variation = portalDest.Variation;
+            }
+
+            WorldManager.ThreadSafeTeleport(player, portalDest, new ActionEventDelegate(ActionType.Portal_Teleport, () =>
             {
                 // If the portal just used is able to be recalled to,
                 // save the destination coordinates to the LastPortal character position save table

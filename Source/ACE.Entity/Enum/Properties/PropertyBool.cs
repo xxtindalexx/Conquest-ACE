@@ -184,5 +184,22 @@ namespace ACE.Entity.Enum.Properties
         SkillTemplesTimerReset           = 9009,
         FreeMasteryResetRenewed          = 9010,
         ExcludeFromLeaderboards          = 9011,
+        DisableCreate = 9013,
+        CanEnrage = 9014,
+        CanGrapple = 9015,
+        CanAOE = 9016,
+        EnragedHotspot = 9017,
+        [AssessmentProperty]
+        SplitArrows = 9030,
+        IsSplitArrow = 9031,
+        IsSplitArrowKill = 9032,
+        /// <summary>
+        /// If TRUE on a weapon, allows multi-strike hits to each roll a proc with decay
+        /// </summary>
+        WeaponAllowMultiStrikeProcs = 9035,
+        /// <summary>
+        /// If TRUE on a weapon, its cast-on-strike can proc on cleaved targets
+        /// </summary>
+        WeaponProcOnCleaveTargets = 9036,
     }
 }

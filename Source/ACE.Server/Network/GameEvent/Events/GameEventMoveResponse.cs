@@ -9,7 +9,7 @@ namespace ACE.Server.Network.GameEvent.Events
     public class GameEventMoveResponse : GameEventMessage
     {
         public GameEventMoveResponse(Session session, ObjectGuid boardGuid, ChessMoveResult result)
-            : base(GameEventType.MoveResponse, GameMessageGroup.UIQueue, session, 12)
+            : base(GameEventType.MoveResponse, GameMessageGroup.UIQueue, session)
         {
             Writer.Write(boardGuid.Full);
             Writer.Write((int)result);

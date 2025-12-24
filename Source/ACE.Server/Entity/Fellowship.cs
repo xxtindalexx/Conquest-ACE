@@ -111,7 +111,7 @@ namespace ACE.Server.Entity
             }
             else
             {
-                if (PropertyManager.GetBool("fellow_busy_no_recruit").Item && newMember.IsBusy)
+                if (PropertyManager.GetBool("fellow_busy_no_recruit") && newMember.IsBusy)
                 {
                     inviter.Session.Network.EnqueueSend(new GameMessageSystemChat($"{newMember.Name} is busy.", ChatMessageType.Broadcast));
                     return;
@@ -460,7 +460,7 @@ namespace ACE.Server.Entity
 
             var fellows = GetFellowshipMembers();
 
-            var allEvenShareLevel = PropertyManager.GetLong("fellowship_even_share_level").Item;
+            var allEvenShareLevel = PropertyManager.GetLong("fellowship_even_share_level");
             var allOverEvenShareLevel = !fellows.Values.Any(f => (f.Level ?? 1) < allEvenShareLevel);
 
             if (allOverEvenShareLevel)
@@ -508,7 +508,7 @@ namespace ACE.Server.Entity
             shareType &= ~ShareType.Fellowship;
 
             // quest turn-ins: flat share (retail default)
-            if (xpType == XpType.Quest && !PropertyManager.GetBool("fellow_quest_bonus").Item)
+            if (xpType == XpType.Quest && !PropertyManager.GetBool("fellow_quest_bonus"))
             {
                 var perAmount = (long)amount / fellowshipMembers.Count;
 
@@ -674,7 +674,7 @@ namespace ACE.Server.Entity
         {
             var fellows = GetFellowshipMembers();
 
-            var landblockRange = PropertyManager.GetBool("fellow_kt_landblock").Item;
+            var landblockRange = PropertyManager.GetBool("fellow_kt_landblock");
 
             var results = new List<Player>();
 
