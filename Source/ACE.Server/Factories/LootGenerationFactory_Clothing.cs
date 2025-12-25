@@ -134,6 +134,12 @@ namespace ACE.Server.Factories
 
             var mutationFilter = MutationCache.GetMutation(scriptName);
 
+            if (mutationFilter == null)
+            {
+                log.Error($"AssignArmorLevel({wo.WeenieClassId} - {wo.Name}) - Failed to load mutation script: {scriptName}");
+                return false;
+            }
+
             var success = mutationFilter.TryMutate(wo, profile.Tier);
 
             if (roll.ArmorType.IsSocietyArmor())

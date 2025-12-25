@@ -6244,5 +6244,268 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"You must specify a quest name.", ChatMessageType.Broadcast));
             }
         }
+
+        // CONQUEST: PK Dungeon Management Command
+        [CommandHandler("pkdungeon", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Manage PK-only dungeon landblock configurations.",
+            "add <landblock> <variation> [description] - Add a PK dungeon\n" +
+            "remove <landblock> <variation> - Remove a PK dungeon\n" +
+            "list - List all configured PK dungeons\n" +
+            "reload - Reload PK dungeons from database")]
+        public static void HandlePKDungeon(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /pkdungeon <add|remove|list|reload>", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> <variation> [description] - Add a PK dungeon", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> <variation> - Remove a PK dungeon", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all configured PK dungeons", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  reload - Reload PK dungeons from database", ChatMessageType.Help));
+                return;
+            }
+
+            var subcommand = parameters[0].ToLower();
+
+            switch (subcommand)
+            {
+                case "add":
+                    HandlePKDungeonAdd(session, parameters);
+                    break;
+                case "remove":
+                    HandlePKDungeonRemove(session, parameters);
+                    break;
+                case "list":
+                    HandlePKDungeonList(session);
+                    break;
+                case "reload":
+                    HandlePKDungeonReload(session);
+                    break;
+                default:
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown subcommand: {subcommand}", ChatMessageType.Broadcast));
+                    session.Network.EnqueueSend(new GameMessageSystemChat("Valid subcommands: add, remove, list, reload", ChatMessageType.Help));
+                    break;
+            }
+        }
+
+        private static void HandlePKDungeonAdd(Session session, string[] parameters)
+        {
+            if (parameters.Length < 3)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /pkdungeon add <landblock> <variation> [description]", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /pkdungeon add 0x002B 2 Egg Orchard Variant 2", ChatMessageType.Help));
+                return;
+            }
+
+            // Parse landblock (accept hex with 0x prefix or decimal)
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Use hex format (0x002B) or decimal (43)", ChatMessageType.Help));
+                return;
+            }
+
+            // Parse variation
+            if (!int.TryParse(parameters[2], out int variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Optional description (join remaining parameters)
+            string description = parameters.Length > 3 ? string.Join(" ", parameters.Skip(3)) : null;
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    // Check if already exists
+                    var existing = context.PkDungeonLandblocks.Find(landblock, variation);
+                    if (existing != null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"PK dungeon already exists: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    // Add to database
+                    var config = new ACE.Database.Models.World.PkDungeonLandblock
+                    {
+                        Landblock = landblock,
+                        Variation = variation,
+                        Description = description
+                    };
+
+                    context.PkDungeonLandblocks.Add(config);
+                    context.SaveChanges();
+
+                    // Add to runtime HashSet
+                    Landblock.pkDungeonLandblocks.Add((landblock, variation));
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Added PK dungeon: 0x{landblock:X4} Variant {variation}" +
+                        (string.IsNullOrWhiteSpace(description) ? "" : $" ({description})"), ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} added PK dungeon: 0x{landblock:X4} Variant {variation}");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error adding PK dungeon: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error adding PK dungeon: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandlePKDungeonRemove(Session session, string[] parameters)
+        {
+            if (parameters.Length < 3)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /pkdungeon remove <landblock> <variation>", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /pkdungeon remove 0x002B 2", ChatMessageType.Help));
+                return;
+            }
+
+            // Parse landblock
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Parse variation
+            if (!int.TryParse(parameters[2], out int variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    // Check if exists
+                    var existing = context.PkDungeonLandblocks.Find(landblock, variation);
+                    if (existing == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"PK dungeon not found: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    // Remove from database
+                    context.PkDungeonLandblocks.Remove(existing);
+                    context.SaveChanges();
+
+                    // Remove from runtime HashSet
+                    Landblock.pkDungeonLandblocks.Remove((landblock, variation));
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Removed PK dungeon: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} removed PK dungeon: 0x{landblock:X4} Variant {variation}");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error removing PK dungeon: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error removing PK dungeon: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandlePKDungeonList(Session session)
+        {
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var configs = context.PkDungeonLandblocks.OrderBy(c => c.Landblock).ThenBy(c => c.Variation).ToList();
+
+                    if (configs.Count == 0)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("No PK dungeons configured.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"=== PK Dungeons ({configs.Count}) ===", ChatMessageType.Broadcast));
+                    foreach (var config in configs)
+                    {
+                        var desc = string.IsNullOrWhiteSpace(config.Description) ? "" : $" - {config.Description}";
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{config.Landblock:X4} Variant {config.Variation}{desc}", ChatMessageType.Broadcast));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error listing PK dungeons: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error listing PK dungeons: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandlePKDungeonReload(Session session)
+        {
+            try
+            {
+                Landblock.LoadPKDungeonsFromDatabase();
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Reloaded {Landblock.pkDungeonLandblocks.Count} PK dungeon configuration(s) from database.", ChatMessageType.Broadcast));
+                log.Info($"[ADMIN] {session.Player.Name} reloaded PK dungeon configurations from database");
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error reloading PK dungeons: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error reloading PK dungeons: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        [CommandHandler("testsoul", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Test Soul Fragment drop system",
+            "Shows your current Soul Fragment drop status")]
+        public static void HandleTestSoul(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            // Check location
+            var currentLandblock = player.CurrentLandblock != null ? (ushort)player.CurrentLandblock.Id.Landblock : (ushort)0;
+            var currentVariation = player.Location?.Variation ?? 0;
+            var inPKDungeon = Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation));
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"=== Soul Fragment Drop Test ===", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Location: 0x{currentLandblock:X4} Variant {currentVariation}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"In PK Dungeon: {(inPKDungeon ? "YES" : "NO")}", ChatMessageType.Broadcast));
+
+            // Check daily count
+            var dailyCount = player.GetProperty(PropertyInt64.DailySoulFragmentCount) ?? 0;
+            var lastResetTime = player.GetProperty(PropertyInt64.LastSoulFragmentResetTime) ?? 0;
+            var currentTime = Time.GetUnixTime();
+            var timeSinceReset = currentTime - lastResetTime;
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Daily Count: {dailyCount}/20", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Time Since Reset: {timeSinceReset / 3600.0:F1} hours", ChatMessageType.Broadcast));
+
+            // Test if weenie exists
+            var testWeenie = WorldObjectFactory.CreateNewWorldObject(13370003);
+            if (testWeenie != null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Soul Fragment Weenie: EXISTS (13370003)", ChatMessageType.Broadcast));
+                testWeenie.Destroy();
+            }
+            else
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Soul Fragment Weenie: NOT FOUND (13370003) - THIS IS THE PROBLEM!", ChatMessageType.Broadcast));
+            }
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Drop Rate: 0.75% (1 in 133 kills average)", ChatMessageType.Broadcast));
+        }
+
+        private static bool TryParseLandblock(string input, out ushort landblock)
+        {
+            landblock = 0;
+
+            // Try hex with 0x prefix
+            if (input.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                if (ushort.TryParse(input.Substring(2), NumberStyles.HexNumber, null, out landblock))
+                    return true;
+            }
+            // Try decimal
+            else if (ushort.TryParse(input, out landblock))
+            {
+                return true;
+            }
+
+            return false;
+        }
     }
 }

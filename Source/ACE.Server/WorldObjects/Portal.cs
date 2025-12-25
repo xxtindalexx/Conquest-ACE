@@ -278,6 +278,26 @@ namespace ACE.Server.WorldObjects
 #endif
             AdjustDungeon(portalDest);
 
+            // CONQUEST: Check if destination is a PK-only dungeon
+            var destLandblock = (ushort)portalDest.GetCell();
+            if (destLandblock != 0)
+            {
+                destLandblock = (ushort)(destLandblock >> 16);
+                var destVariation = portalDest.Variation ?? 0;
+
+                if (Landblock.pkDungeonLandblocks.Contains((destLandblock, destVariation)))
+                {
+                    // Destination is a PK-only dungeon - check if player is PK
+                    if (player.PlayerKillerStatus != PlayerKillerStatus.PK)
+                    {
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            "This dungeon is PK-only. You must be a PK player to enter.",
+                            ChatMessageType.Broadcast));
+                        return;
+                    }
+                }
+            }
+
 
             if (player.Location.Variation != portalDest.Variation) //immediately switch variation
             {

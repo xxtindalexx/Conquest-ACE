@@ -121,6 +121,9 @@ namespace ACE.Server.WorldObjects
 
             PK_DeathTick();
 
+            // CONQUEST: Check PK-only dungeon enforcement
+            PKDungeonEnforcementTick();
+
             GagsTick();
 
             PhysicsObj.ObjMaint.DestroyObjects();
@@ -589,6 +592,78 @@ namespace ACE.Server.WorldObjects
             Location = new ACE.Entity.Position(blockcell, pos, rotate, variation);
 
             return landblockUpdate;
+        }
+
+        /// <summary>
+        /// CONQUEST: Enforces PK-only dungeon restrictions
+        /// Boots NPK players out of PK-only dungeons every heartbeat (~5 seconds)
+        /// /// Also enforces 20-minute per-dungeon lockout after death
+        /// </summary>
+        private void PKDungeonEnforcementTick()
+        {
+            // Check if player is in a landblock
+            if (CurrentLandblock == null || Location == null)
+                return;
+
+            var currentLandblock = (ushort)CurrentLandblock.Id.Landblock;
+            var currentVariation = Location.Variation ?? 0;
+
+            // Check if current location is a PK-only dungeon
+            if (ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+            {
+                string bootReason = null;
+
+                // Check 1: NPK players not allowed
+                if (PlayerKillerStatus != PlayerKillerStatus.PK)
+                {
+                    bootReason = "You have been removed from this PK-only dungeon. You must be PK to remain here.";
+                }
+                // Check 2: 20-minute dungeon lockout after death
+                else
+                {
+                    var lastDeathLocation = LastPKDungeonDeathLocation ?? 0;
+                    var lastDeathTime = LastPKDungeonDeathTime ?? 0;
+
+                    if (lastDeathLocation > 0 && lastDeathTime > 0)
+                    {
+                        // Unpack the landblock and variation from stored location
+                        var deathLandblock = (ushort)(lastDeathLocation >> 16);
+                        var deathVariation = (int)(lastDeathLocation & 0xFFFF);
+
+                        // Check if they died in THIS dungeon
+                        if (deathLandblock == currentLandblock && deathVariation == currentVariation)
+                        {
+                            var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
+                            var lockoutDuration = 1200; // 20 minutes in seconds
+
+                            if (timeSinceDeath < lockoutDuration)
+                            {
+                                var remainingSeconds = (int)(lockoutDuration - timeSinceDeath);
+                                var remainingMinutes = (int)Math.Ceiling(remainingSeconds / 60.0);
+                                bootReason = $"You died in this dungeon recently. You cannot return for {remainingMinutes} more minute{(remainingMinutes == 1 ? "" : "s")}.";
+                            }
+                        }
+                    }
+                }
+
+                // Boot the player if there's a reason
+                if (bootReason != null)
+                {
+                    Session.Network.EnqueueSend(new GameMessageSystemChat(bootReason, ChatMessageType.Broadcast));
+
+                    // Teleport to lifestone or last portal
+                    if (Sanctuary != null)
+                        Teleport(Sanctuary);
+                    else if (LastPortal != null)
+                        Teleport(LastPortal);
+                    else
+                    {
+                        // Fallback to starter town (Holtburg)
+                        var holtburg = new ACE.Entity.Position(0xA9B40019, 84.0f, 7.1f, 94.0f, 0f, 0f, -0.0784591f, 0.996917f);
+                        Teleport(holtburg);
+                    }
+                }
+            }
         }
 
         private bool gagNoticeSent = false;

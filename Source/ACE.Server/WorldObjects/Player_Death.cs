@@ -1138,8 +1138,8 @@ namespace ACE.Server.WorldObjects
             var packedLocation = ((long)currentLandblock << 16) | (long)currentVariation;
 
             // Store the location and timestamp
-            SetProperty(PropertyInt64.LastPKDungeonDeathLocation, packedLocation);
-            SetProperty(PropertyInt64.LastPKDungeonDeathTime, (long)Time.GetUnixTime());
+            LastPKDungeonDeathLocation = packedLocation;
+            LastPKDungeonDeathTime = (long)Time.GetUnixTime();
         }
     }
 }

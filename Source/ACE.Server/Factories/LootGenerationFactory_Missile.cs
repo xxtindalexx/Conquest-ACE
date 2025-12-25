@@ -35,11 +35,21 @@ namespace ACE.Server.Factories
 
             // mutate DamageMod / ElementalDamageBonus / WieldRequirements
             var mutationFilter = MutationCache.GetMutation(scriptName);
+            if (mutationFilter == null)
+            {
+                log.Error($"MutateMissileWeapon({wo.WeenieClassId} - {wo.Name}) - Failed to load mutation script: {scriptName}");
+                return;
+            }
 
             mutationFilter.TryMutate(wo, profile.Tier);
 
             // mutate WeaponDefense
             mutationFilter = MutationCache.GetMutation("MissileWeapons.weapon_defense.txt");
+            if (mutationFilter == null)
+            {
+                log.Error($"MutateMissileWeapon({wo.WeenieClassId} - {wo.Name}) - Failed to load mutation script: MissileWeapons.weapon_defense.txt");
+                return;
+            }
 
             mutationFilter.TryMutate(wo, profile.Tier);
 

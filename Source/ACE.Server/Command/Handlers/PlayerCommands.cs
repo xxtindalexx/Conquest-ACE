@@ -28,6 +28,114 @@ namespace ACE.Server.Command.Handlers
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
+
+        [CommandHandler("fship", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Commands to handle fellowships aside from the UI", "")]
+        public static void HandleFellowCommand(Session session, params string[] parameters)
+        {
+            if (parameters == null || parameters.Count() == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship add <name or targetted player>", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship landblock to invite all players in your landblock", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship remove <name or targetted player>", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship create <name> to create a fellowship", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship leave", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship disband", ChatMessageType.Broadcast));
+            }
+
+            if (parameters.Count() == 1)
+            {
+                if (parameters[0] == "landblock")
+                {
+                    if (session.Player.CurrentLandblock == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Your current landblock is not found, for some reason (logged)", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    if (session.Player.CurrentLandblock.Id.Landblock == 0x016C)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Your current landblock is in the Marketplace, and cannot be used to form landblock fellowships", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    bool currentPlayerOver50 = session.Player.Level >= 50;
+                    foreach (var player in session.Player.CurrentLandblock.players)
+                    {
+                        if (player.Guid != session.Player.Guid && !player.IsMule && (player.CloakStatus == CloakStatus.Player || player.CloakStatus == CloakStatus.Off || player.CloakStatus == CloakStatus.Undef))
+                        {
+                            if (!currentPlayerOver50 || player.Level >= 50) // Don't add lowbies to a fellowship of players over 50
+                            {
+                                if (!session.Player.SquelchManager.Squelches.Contains(player, ChatMessageType.Tell))
+                                {
+                                    session.Player.FellowshipRecruit(player);
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                if (parameters[0] == "leave")
+                {
+                    session.Player.Fellowship.QuitFellowship(session.Player, false);
+                    return;
+                }
+                if (parameters[0] == "disband")
+                {
+                    session.Player.Fellowship.QuitFellowship(session.Player, true);
+                    return;
+                }
+                if (parameters[0] == "add")
+                {
+                    var tPGuid = session.Player.CurrentAppraisalTarget;
+                    if (tPGuid != null)
+                    {
+                        var tplayer = PlayerManager.FindByGuid(tPGuid.Value) as Player;
+                        if (tplayer != null)
+                        {
+                            session.Player.FellowshipRecruit(tplayer);
+                        }
+                    }
+                    return;
+
+                }
+                if (parameters[0] == "remove")
+                {
+                    var tPGuid = session.Player.CurrentAppraisalTarget;
+                    if (tPGuid != null)
+                    {
+                        session.Player.FellowshipDismissPlayer(tPGuid.Value);
+                    }
+                    return;
+                }
+            }
+
+            if (parameters.Count() == 2)
+            {
+                if (parameters[0] == "create")
+                {
+                    session.Player.FellowshipCreate(parameters[1], true);
+                    return;
+                }
+                if (parameters[0] == "add")
+                {
+                    var tplayer = PlayerManager.FindByName(parameters[1]) as Player;
+                    if (tplayer != null)
+                    {
+                        session.Player.FellowshipRecruit(tplayer);
+                        return;
+                    }
+                }
+                if (parameters[0] == "remove")
+                {
+                    var tplayer = PlayerManager.FindByName(parameters[1]) as Player;
+                    if (tplayer != null)
+                    {
+                        session.Player.FellowshipDismissPlayer(tplayer.Guid.Full);
+                        return;
+                    }
+                }
+            }
+        }
+
         // pop
         [CommandHandler("pop", AccessLevel.Player, CommandHandlerFlag.None, 0,
             "Show current world population",
@@ -633,8 +741,9 @@ namespace ACE.Server.Command.Handlers
 
                     if (timeSinceDeath < cooldown)
                     {
-                        var remainingMinutes = (int)Math.Ceiling((cooldown - timeSinceDeath) / 60.0);
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {remainingMinutes} more minute{(remainingMinutes == 1 ? "" : "s")} before you can flag PK again after dying in PvP combat.", ChatMessageType.Broadcast));
+                        var remainingSeconds = (long)(cooldown - timeSinceDeath);
+                        var timeDisplay = FormatTimeRemaining(remainingSeconds);
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {timeDisplay} before you can flag PK again after dying in PvP combat.", ChatMessageType.Broadcast));
                         return;
                     }
                 }
@@ -653,6 +762,7 @@ namespace ACE.Server.Command.Handlers
                     new Confirmation_Custom(session.Player.Guid, () => {
                         // This callback executes when player clicks "Yes"
                         session.Player.PlayerKillerStatus = PlayerKillerStatus.PK;
+                        session.Player.PkLevel = PKLevel.PK; // Set PkLevel so respite timer restores them to PK
                         session.Player.SetProperty(PropertyInt64.LastPKFlagTime, (long)Time.GetUnixTime());
                         session.Player.EnqueueBroadcast(new GameMessagePublicUpdatePropertyInt(session.Player, PropertyInt.PlayerKillerStatus, (int)session.Player.PlayerKillerStatus));
 
@@ -665,6 +775,21 @@ namespace ACE.Server.Command.Handlers
             // /pk off
             else if (param == "off" || param == "disable" || param == "0")
             {
+                // Check 2-hour minimum PK duration first (before checking current status, to handle respite NPK correctly)
+                var lastPKFlagTime = session.Player.GetProperty(PropertyInt64.LastPKFlagTime) ?? 0;
+                if (lastPKFlagTime > 0 && session.Player.PkLevel == PKLevel.PK) // Only check if they're a "real" PK (not just temporarily NPK from respite)
+                {
+                    var timeSinceFlagged = Time.GetUnixTime() - lastPKFlagTime;
+                    var minimumDuration = 7200; // 2 hours in seconds
+
+                    if (timeSinceFlagged < minimumDuration)
+                    {
+                        var remainingSeconds = (long)(minimumDuration - timeSinceFlagged);
+                        var timeDisplay = FormatTimeRemaining(remainingSeconds);
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must remain PK for at least 2 hours after flagging. {timeDisplay} remaining.", ChatMessageType.Broadcast));
+                        return;
+                    }
+                }
                 // Not PK?
                 if (session.Player.PlayerKillerStatus != PlayerKillerStatus.PK)
                 {
@@ -685,22 +810,6 @@ namespace ACE.Server.Command.Handlers
                     }
                 }
 
-                // Check 5-minute minimum PK duration
-                var lastPKFlagTime = session.Player.GetProperty(PropertyInt64.LastPKFlagTime) ?? 0;
-                if (lastPKFlagTime > 0)
-                {
-                    var timeSinceFlagged = Time.GetUnixTime() - lastPKFlagTime;
-                    var minimumDuration = 7200; // 2 hours in seconds
-
-                    if (timeSinceFlagged < minimumDuration)
-                    {
-                        var remainingSeconds = minimumDuration - timeSinceFlagged;
-                        var remainingMinutes = (int)Math.Ceiling(remainingSeconds / 60.0);
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must remain PK for at least 2 hours after flagging. {remainingMinutes} minute{(remainingMinutes == 1 ? "" : "s")} remaining.", ChatMessageType.Broadcast));
-                        return;
-                    }
-                }
-
                 // Check PK timer (cannot turn off during/after recent PK combat)
                 if (session.Player.PKTimerActive)
                 {
@@ -711,6 +820,7 @@ namespace ACE.Server.Command.Handlers
 
                 // Turn off PK
                 session.Player.PlayerKillerStatus = PlayerKillerStatus.NPK;
+                session.Player.PkLevel = PKLevel.NPK; // Set PkLevel so respite timer won't restore them to PK
                 session.Player.EnqueueBroadcast(new GameMessagePublicUpdatePropertyInt(session.Player, PropertyInt.PlayerKillerStatus, (int)session.Player.PlayerKillerStatus));
 
                 session.Network.EnqueueSend(new GameMessageSystemChat("You are no longer a Player Killer. You are now safe from PvP attacks.", ChatMessageType.Broadcast));
@@ -719,6 +829,26 @@ namespace ACE.Server.Command.Handlers
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("Invalid parameter. Use '/pk on' or '/pk off'.", ChatMessageType.Broadcast));
             }
+        }
+
+        /// <summary>
+        /// Helper function to format remaining time in h/m/s format
+        /// </summary>
+        private static string FormatTimeRemaining(long totalSeconds)
+        {
+            var hours = totalSeconds / 3600;
+            var minutes = (totalSeconds % 3600) / 60;
+            var seconds = totalSeconds % 60;
+
+            var parts = new List<string>();
+            if (hours > 0)
+                parts.Add($"{hours}h");
+            if (minutes > 0)
+                parts.Add($"{minutes}m");
+            if (seconds > 0 || parts.Count == 0) // Always show seconds if nothing else, or if there are remaining seconds
+                parts.Add($"{seconds}s");
+
+            return string.Join(" ", parts);
         }
 
         /// <summary>

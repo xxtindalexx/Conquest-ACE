@@ -61,14 +61,44 @@ namespace ACE.Server.Entity
         // CONQUEST: PK-only dungeon variants where players gain +10% XP/Lum bonus
         // Stores (landblock, variation) tuples to identify specific dungeon variants
         // This allows normal PVE dungeons (variation 0) to coexist with PK-only variants (variation 1+)
-        // TODO: Add actual PK dungeon landblock+variant combinations
-        public static readonly HashSet<(ushort landblock, int variation)> pkDungeonLandblocks = new()
+        // Loaded from database on server startup via LoadPKDungeonsFromDatabase()
+        public static readonly HashSet<(ushort landblock, int variation)> pkDungeonLandblocks = new();
+
+        /// <summary>
+        /// CONQUEST: Loads PK dungeon landblock configurations from database into pkDungeonLandblocks HashSet
+        /// Called during server startup
+        /// </summary>
+        public static void LoadPKDungeonsFromDatabase()
         {
-            // Example: Add PK dungeon landblock+variant combinations here
-            // (0x0001, 1), // Landblock 0x0001, Variant 1 = PK-only
-            // (0x0002, 1), // Landblock 0x0002, Variant 1 = PK-only
-            // etc.
-        };
+            log.Info("Loading PK dungeon landblock configurations from database...");
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var configs = context.PkDungeonLandblocks.ToList();
+
+                    pkDungeonLandblocks.Clear();
+
+                    foreach (var config in configs)
+                    {
+                        pkDungeonLandblocks.Add((config.Landblock, config.Variation));
+                        log.Info($"  Loaded PK dungeon: 0x{config.Landblock:X4} Variant {config.Variation}" +
+                                (string.IsNullOrWhiteSpace(config.Description) ? "" : $" ({config.Description})"));
+                    }
+
+                    if (configs.Count == 0)
+                        log.Info("  No PK dungeon landblocks configured.");
+                    else
+                        log.Info($"Successfully loaded {configs.Count} PK dungeon landblock configuration(s).");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error loading PK dungeon landblocks from database: {ex.Message}");
+                log.Error($"Stack trace: {ex.StackTrace}");
+            }
+        }
 
         public LandblockId Id { get; }
 
@@ -111,7 +141,7 @@ namespace ACE.Server.Entity
         private readonly List<ObjectGuid> pendingRemovals = new List<ObjectGuid>();
 
         // Cache used for Tick efficiency
-        private readonly List<Player> players = new List<Player>();
+        public readonly List<Player> players = new List<Player>();
         private readonly LinkedList<Creature> sortedCreaturesByNextTick = new LinkedList<Creature>();
         private readonly LinkedList<WorldObject> sortedWorldObjectsByNextHeartbeat = new LinkedList<WorldObject>();
         private readonly LinkedList<WorldObject> sortedGeneratorsByNextGeneratorUpdate = new LinkedList<WorldObject>();

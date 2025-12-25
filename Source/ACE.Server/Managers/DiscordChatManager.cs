@@ -119,8 +119,35 @@ namespace ACE.Server.Managers
 
                 // Send file
                 log.Info($"[DiscordRelay] Attempting to send file {fileContent.FileName} to channel {channelId}");
-                _ = channel.SendFileAsync(fileContent, player + " : " + message);
-                log.Info($"[DiscordRelay] Successfully sent file to channel {channelId}: {fileContent.FileName}");
+                // Copy stream data to memory BEFORE async upload
+                // This prevents "Cannot access a closed Stream" errors when calling code disposes the stream
+                byte[] fileData;
+                using (var ms = new MemoryStream())
+                {
+                    fileContent.Stream.CopyTo(ms);
+                    fileData = ms.ToArray();
+                }
+
+                var fileName = fileContent.FileName;
+
+                // Start async upload with copied data
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        using (var uploadStream = new MemoryStream(fileData))
+                        {
+                            var attachment = new FileAttachment(uploadStream, fileName);
+                            await channel.SendFileAsync(attachment, player + " : " + message);
+                        }
+                        log.Info($"[DiscordRelay] Successfully sent file to channel {channelId}: {fileName}");
+                    }
+                    catch (Exception uploadEx)
+                    {
+                        log.Error($"[DiscordRelay] File upload failed for {fileName}: {uploadEx.Message}");
+                        log.Error($"[DiscordRelay] Inner exception: {uploadEx.InnerException.Message}");
+                    }
+                });
             }
             catch (Exception ex)
             {

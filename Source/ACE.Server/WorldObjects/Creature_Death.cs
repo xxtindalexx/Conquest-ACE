@@ -571,11 +571,12 @@ namespace ACE.Server.WorldObjects
                         corpse.PkLevel = PKLevel.PK;
 
                         // CONQUEST: Drop 1-3 Soul Fragments on PK death
+                        // Victim must be level > 50 to drop soul fragments
                         // Check if killer can loot Soul Fragments (6-8 hour cooldown)
                         var killerPlayer = killer?.TryGetAttacker() as Player;
-                        if (killerPlayer != null)
+                        if (killerPlayer != null && (player.Level ?? 1) > 50)
                         {
-                            var lastSoulFragmentLoot = killerPlayer.GetProperty(PropertyInt64.LastSoulFragmentLootTime) ?? 0;
+                            var lastSoulFragmentLoot = killerPlayer.LastSoulFragmentLootTime ?? 0;
                             var currentTime = Time.GetUnixTime();
                             var cooldownHours = ThreadSafeRandom.Next(6, 8);  // Random 6-8 hour cooldown
                             var cooldownSeconds = cooldownHours * 3600;
@@ -597,7 +598,7 @@ namespace ACE.Server.WorldObjects
                                 }
 
                                 // Update the loot timestamp when Soul Fragments are created
-                                killerPlayer.SetProperty(PropertyInt64.LastSoulFragmentLootTime, (long)currentTime);
+                                killerPlayer.LastSoulFragmentLootTime = (long)currentTime;
                             }
                             else
                             {
@@ -791,37 +792,74 @@ namespace ACE.Server.WorldObjects
             var currentVariation = killerPlayer.Location.Variation ?? 0;
 
             if (!Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+            {
+                //Console.WriteLine($"[SOUL_FRAGMENT] Player {killerPlayer.Name} not in PK dungeon (LB: 0x{currentLandblock:X4}, Var: {currentVariation})");
                 return;
+            }
+            //Console.WriteLine($"[SOUL_FRAGMENT] Player {killerPlayer.Name} in PK dungeon 0x{currentLandblock:X4} Var {currentVariation}");
 
             // Check and reset daily Soul Fragment count if needed
             var currentTime = Time.GetUnixTime();
-            var lastResetTime = killerPlayer.GetProperty(PropertyInt64.LastSoulFragmentResetTime) ?? 0;
-            var dailyCount = killerPlayer.GetProperty(PropertyInt64.DailySoulFragmentCount) ?? 0;
+            var lastResetTime = killerPlayer.LastSoulFragmentResetTime ?? 0;
+            var dailyCount = killerPlayer.DailySoulFragmentCount ?? 0;
 
             // Reset if more than 24 hours have passed
             if (currentTime - lastResetTime > 86400) // 86400 seconds = 24 hours
             {
                 dailyCount = 0;
-                killerPlayer.SetProperty(PropertyInt64.LastSoulFragmentResetTime, (long)currentTime);
+                killerPlayer.LastSoulFragmentResetTime = (long)currentTime;
             }
-
-            // Check daily cap (20 fragments per day)
-            if (dailyCount >= 20)
-                return;
 
             // Roll for Soul Fragment drop (0.75% chance for ~1-2 per hour at 100-200 kills/hour)
             var dropChance = ThreadSafeRandom.Next(0.0f, 1.0f);
+            //Console.WriteLine($"[SOUL_FRAGMENT] Roll: {dropChance:F6} (need <= 0.0075), Daily: {dailyCount}/20");
             if (dropChance > 0.0075f)  // 0.75% drop rate
                 return;
 
+            // Check daily cap (20 fragments per day) AFTER the roll succeeds
+            // This way we only notify when they would have gotten a fragment
+            if (dailyCount >= 20)
+            {
+                log.Debug($"[SOUL_FRAGMENT] Player {killerPlayer.Name} at daily cap ({dailyCount}/20)");
+
+                // Notify player about cap (with throttling to avoid spam)
+                var lastCapNotify = killerPlayer.GetProperty(PropertyInt64.LastSoulFragmentCapNotifyTime) ?? 0;
+                var timeSinceLastNotify = currentTime - lastCapNotify;
+
+                if (timeSinceLastNotify > 300)  // Only notify once every 5 minutes
+                {
+                    var timeUntilReset = 86400 - (currentTime - lastResetTime);
+                    var hours = (int)(timeUntilReset / 3600);
+                    var minutes = (int)((timeUntilReset % 3600) / 60);
+                    var seconds = (int)(timeUntilReset % 60);
+
+                    var resetTimeMsg = hours > 0
+                        ? $"{hours}h {minutes}m {seconds}s"
+                        : minutes > 0
+                            ? $"{minutes}m {seconds}s"
+                            : $"{seconds}s";
+
+                    killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"You have reached your daily Soul Fragment limit (20/20). Your limit will reset in {resetTimeMsg}.",
+                        ChatMessageType.Broadcast));
+
+                    killerPlayer.SetProperty(PropertyInt64.LastSoulFragmentCapNotifyTime, (long)currentTime);
+                }
+
+                return;
+            }
+
             // Create Soul Fragment
             // TODO: Replace 999999998 with actual Soul Fragment weenie ID
-            var soulFragment = WorldObjectFactory.CreateNewWorldObject(999999998);
+            var soulFragment = WorldObjectFactory.CreateNewWorldObject(13370003);
             if (soulFragment == null)
+            {
+                //Console.WriteLine($"[SOUL_FRAGMENT] Failed to create Soul Fragment weenie 13370003!");
                 return;
+            }
 
-            // Add to corpse
-            if (corpse.TryAddToInventory(soulFragment))
+            // Try to add directly to player inventory
+            if (killerPlayer.TryCreateInInventoryWithNetworking(soulFragment))
             {
                 // Increment daily count
                 killerPlayer.SetProperty(PropertyInt64.DailySoulFragmentCount, dailyCount + 1);
@@ -830,6 +868,14 @@ namespace ACE.Server.WorldObjects
                 var remaining = 20 - (dailyCount + 1);
                 killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
                     $"You found a Soul Fragment! ({remaining} remaining today)",
+                    ChatMessageType.Broadcast));
+            }
+            else
+            {
+                // Inventory full - destroy the fragment and notify
+                soulFragment.Destroy();
+                killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "A Soul Fragment appeared but your inventory is full!",
                     ChatMessageType.Broadcast));
             }
         }

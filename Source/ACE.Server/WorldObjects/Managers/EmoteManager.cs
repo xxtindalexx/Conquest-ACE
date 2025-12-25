@@ -417,6 +417,41 @@ namespace ACE.Server.WorldObjects.Managers
                     }
                     break;
 
+                /* increments a PropertyInt64 stat by some amount */
+                case EmoteType.IncrementInt64Stat:
+
+                    if (targetObject != null && emote.Stat != null)
+                    {
+                        var int64Property = (PropertyInt64)emote.Stat;
+                        var current = targetObject.GetProperty(int64Property) ?? 0;
+                        current += emote.Amount64 ?? 1;
+                        targetObject.SetProperty(int64Property, current);
+
+                        if (player != null)
+                            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(player, int64Property, current));
+                    }
+                    break;
+
+                /* inq questbonus amount */
+                case EmoteType.QuestCompletionCount:
+
+                    if (targetObject != null)
+                    {
+                        var QB = targetObject.GetProperty((PropertyInt64)emote.Stat);
+
+                        if (QB == null && HasValidTestNoQuality(emote.Message))
+                        {
+                            ExecuteEmoteSet(EmoteCategory.TestNoQuality, emote.Message, targetObject, true);
+                        }
+                        else
+                        {
+                            QB ??= 0;
+                            success = QB != null && QB >= (emote.Min64 ?? long.MinValue) && QB <= (emote.Max64 ?? long.MaxValue);
+                            ExecuteEmoteSet(success ? EmoteCategory.TestSuccess : EmoteCategory.TestFailure, emote.Message, targetObject, true);
+                        }
+                    }
+                    break;
+
                 case EmoteType.IncrementMyQuest:
                 case EmoteType.IncrementQuest:
 
@@ -1508,8 +1543,196 @@ namespace ACE.Server.WorldObjects.Managers
                     }
                     break;
 
+                case EmoteType.SetAttributeStat:
+                    if (player != null && emote.Amount != null)
+                    {
+                        switch (emote.Stat)
+                        {
+                            case 1:
+                                player.Strength.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Strength));
+                                break;
+                            case 2:
+                                player.Endurance.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Endurance));
+                                break;
+                            case 3:
+                                player.Quickness.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Quickness));
+                                break;
+                            case 4:
+                                player.Coordination.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Coordination));
+                                break;
+                            case 5:
+                                player.Focus.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Focus));
+                                break;
+                            case 6:
+                                player.Self.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Self));
+                                break;
+                            default:
+                                break;
+                        }
+
+
+                    }
+                    break;
+                case EmoteType.SetSecondaryAttributeStat:
+                    if (player != null)
+                    {
+
+                    }
+                    break;
+                case EmoteType.GrantAttributeStat:
+                    if (player != null && emote.Stat != null)
+                    {
+                        var amount = emote.Amount.HasValue && emote.Amount.Value > 0 ? (uint)emote.Amount.Value : 1u;
+                        if (!Enum.IsDefined(typeof(PropertyAttribute), (ushort)emote.Stat.Value))
+                        {
+                            log.Warn($"GrantAttributeStat: Unknown attribute id {emote.Stat.Value} for {WorldObject?.Name ?? "unknown"}.");
+                            break;
+                        }
+
+                        var attribute = (PropertyAttribute)emote.Stat.Value;
+                        var grantSucceeded = player.GrantFreeAttributeRanks(attribute, amount);
+                        var targetName = attribute.GetDescription();
+
+                        if (grantSucceeded)
+                            player.Session?.Network?.EnqueueSend(new GameMessageSystemChat($"Your base {targetName} has been increased by {amount}.", ChatMessageType.Advancement));
+                        else
+                            player.Session?.Network?.EnqueueSend(new GameMessageSystemChat($"Unable to increase {targetName}.", ChatMessageType.System));
+                    }
+                    break;
+                case EmoteType.GrantVitalStat:
+                    if (player != null && emote.Stat != null)
+                    {
+                        var amount = emote.Amount.HasValue && emote.Amount.Value > 0 ? (uint)emote.Amount.Value : 1u;
+                        if (!Enum.IsDefined(typeof(PropertyAttribute2nd), (ushort)emote.Stat.Value))
+                        {
+                            log.Warn($"GrantVitalStat: Unknown vital id {emote.Stat.Value} for {WorldObject?.Name ?? "unknown"}.");
+                            break;
+                        }
+
+                        var vital = (PropertyAttribute2nd)emote.Stat.Value;
+                        if (vital != PropertyAttribute2nd.MaxHealth && vital != PropertyAttribute2nd.MaxStamina && vital != PropertyAttribute2nd.MaxMana)
+                        {
+                            log.Warn($"GrantVitalStat: Vital {vital} is not supported for innate grants.");
+                            break;
+                        }
+
+                        var grantSucceeded = player.GrantFreeVitalRanks(vital, amount);
+                        var targetName = vital.GetDescription();
+
+                        if (grantSucceeded)
+                            player.Session?.Network?.EnqueueSend(new GameMessageSystemChat($"Your base {targetName} has been increased by {amount}.", ChatMessageType.Advancement));
+                        else
+                            player.Session?.Network?.EnqueueSend(new GameMessageSystemChat($"Unable to increase {targetName}.", ChatMessageType.System));
+                    }
+                    break;
+                case EmoteType.SetEnvironment:
+                    if (WorldObject == null || WorldObject.CurrentLandblock == null)
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        EnvironChangeType changeType = EnvironChangeType.Clear;
+                        switch (emote.Amount)
+                        {
+                            case 0:
+                                changeType = EnvironChangeType.Clear;
+                                break;
+                            case 1:
+                                changeType = EnvironChangeType.RedFog;
+                                break;
+                            case 2:
+                                changeType = EnvironChangeType.BlueFog;
+                                break;
+                            case 3:
+                                changeType = EnvironChangeType.WhiteFog;
+                                break;
+                            case 4:
+                                changeType = EnvironChangeType.GreenFog;
+                                break;
+                            case 5:
+                                changeType = EnvironChangeType.BlackFog;
+                                break;
+                            case 6:
+                                changeType = EnvironChangeType.BlackFog2;
+                                break;
+                            case 101:
+                                changeType = EnvironChangeType.RoarSound;
+                                break;
+                            case 102:
+                                changeType = EnvironChangeType.BellSound;
+                                break;
+                            case 103:
+                                changeType = EnvironChangeType.Chant1Sound;
+                                break;
+                            case 104:
+                                changeType = EnvironChangeType.Chant2Sound;
+                                break;
+                            case 105:
+                                changeType = EnvironChangeType.DarkWhispers1Sound;
+                                break;
+                            case 106:
+                                changeType = EnvironChangeType.DarkWhispers2Sound;
+                                break;
+                            case 107:
+                                changeType = EnvironChangeType.DarkLaughSound;
+                                break;
+                            case 108:
+                                changeType = EnvironChangeType.DarkWindSound;
+                                break;
+                            case 109:
+                                changeType = EnvironChangeType.DarkSpeechSound;
+                                break;
+                            case 110:
+                                changeType = EnvironChangeType.DrumsSound;
+                                break;
+                            case 111:
+                                changeType = EnvironChangeType.GhostSpeakSound;
+                                break;
+                            case 112:
+                                changeType = EnvironChangeType.BreathingSound;
+                                break;
+                            case 113:
+                                changeType = EnvironChangeType.HowlSound;
+                                break;
+                            case 114:
+                                changeType = EnvironChangeType.LostSoulsSound;
+                                break;
+                            case 117:
+                                changeType = EnvironChangeType.SquealSound;
+                                break;
+                            case 118:
+                                changeType = EnvironChangeType.Thunder1Sound;
+                                break;
+                            case 119:
+                                changeType = EnvironChangeType.Thunder2Sound;
+                                break;
+                            case 120:
+                                changeType = EnvironChangeType.Thunder3Sound;
+                                break;
+                            case 121:
+                                changeType = EnvironChangeType.Thunder4Sound;
+                                break;
+                            case 122:
+                                changeType = EnvironChangeType.Thunder5Sound;
+                                break;
+                            case 123:
+                                changeType = EnvironChangeType.Thunder6Sound;
+                                break;
+
+
+                        }
+                        WorldObject.CurrentLandblock.SendEnvironChange(changeType);
+                    }
+                    break;
                 default:
-                    log.DebugFormat("EmoteManager.Execute - Encountered Unhandled EmoteType {0} for {1} ({2})", (EmoteType)emote.Type, WorldObject.Name, WorldObject.WeenieClassId);
+                    log.Debug($"EmoteManager.Execute - Encountered Unhandled EmoteType {(EmoteType)emote.Type} for {WorldObject.Name} ({WorldObject.WeenieClassId})");
                     break;
             }
 

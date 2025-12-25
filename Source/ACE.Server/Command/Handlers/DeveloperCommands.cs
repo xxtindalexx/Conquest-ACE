@@ -899,7 +899,7 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        [CommandHandler("spendallxp", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 0, "Spend all available XP on Attributes, Vitals and Skills.")]
+        [CommandHandler("spendallxp", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0, "Spend all available XP on Attributes, Vitals and Skills.")]
         public static void HandleSpendAllXp(Session session, params string[] parameters)
         {
             session.Player.SpendAllXp();
@@ -3961,6 +3961,48 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
+        /// <summary>
+        /// Debug command to check database queue status
+        /// </summary>
+        [CommandHandler("dbqueue", AccessLevel.Developer, CommandHandlerFlag.None, 0,
+            "Shows database save queue status and pending operations",
+            "")]
+        public static void HandleDbQueue(Session session, params string[] parameters)
+        {
+            try
+            {
+                var queueCount = DatabaseManager.Shard.QueueCount;
+                var queueReport = DatabaseManager.Shard.QueueReport();
+                var readOnlyReport = DatabaseManager.Shard.ReadOnlyQueueReport();
 
+                session.Network.EnqueueSend(new GameMessageSystemChat($"=== Database Queue Status ===", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Save Queue: {queueCount} pending operations", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Read-Only Queue: {readOnlyReport.Count} pending operations", ChatMessageType.Broadcast));
+
+                if (queueCount > 0)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"\nTop 10 pending saves:", ChatMessageType.Broadcast));
+                    var top10 = queueReport.Take(10);
+                    foreach (var item in top10)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  - {item}", ChatMessageType.Broadcast));
+                    }
+
+                    if (queueCount > 10)
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  ... and {queueCount - 10} more", ChatMessageType.Broadcast));
+                }
+
+                // Get queue wait time
+                DatabaseManager.Shard.GetCurrentQueueWaitTime(waitTime =>
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Estimated queue wait time: {waitTime.TotalSeconds:F1}s", ChatMessageType.Broadcast));
+                });
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error checking database queue: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error in /dbqueue command: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
     }
 }

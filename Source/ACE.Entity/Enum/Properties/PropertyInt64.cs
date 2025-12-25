@@ -49,6 +49,7 @@ namespace ACE.Entity.Enum.Properties
         LastSoulFragmentResetTime = 9035,  // Unix timestamp of last daily Soul Fragment reset
         LastPKDungeonDeathLocation = 9036,  // Packed landblock+variant where player died (landblock << 16 | variant)
         LastPKDungeonDeathTime   = 9037,  // Unix timestamp when player died in PK dungeon (for 20-min re-entry cooldown)
+        LastSoulFragmentCapNotifyTime = 9038, //Unix timestamp of last "daily cap reached" notification (throttle spam)
 
         // Conquest: Quest & Progression
         QuestCount            = 9006,

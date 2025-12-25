@@ -2914,6 +2914,7 @@ namespace ACE.Server.Command.Handlers.Processors
                 WeenieSQLWriter.PacketOpCodes = PacketOpCodeNames.Values;
             }
 
+            byte[] sqlData;
             using (MemoryStream mem = new MemoryStream())
             {
                 using (StreamWriter sw = new StreamWriter(mem))
@@ -2934,14 +2935,18 @@ namespace ACE.Server.Command.Handlers.Processors
                         return;
                     }
 
-                    mem.Position = 0;
-                    var fileName = wcid.ToString() + ".sql";
-                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported weenie {wcid}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
-
-                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported {weenie.ClassName} to Discord");
-                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported weenie {wcid} ({weenie.ClassName}) to Discord");
+                    sw.Flush();
+                    sqlData = mem.ToArray();
                 }
             }
+            var fileName = wcid.ToString() + ".sql";
+            using (var uploadStream = new MemoryStream(sqlData))
+            {
+                DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported weenie {wcid}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(uploadStream, fileName));
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Exported {weenie.ClassName} to Discord");
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported weenie {wcid} ({weenie.ClassName}) to Discord");
         }
 
         public static void ExportDiscordRecipe(Session session, string param)
@@ -2964,6 +2969,7 @@ namespace ACE.Server.Command.Handlers.Processors
             if (RecipeSQLWriter == null)
                 RecipeSQLWriter = new RecipeSQLWriter();
 
+            byte[] sqlData;
             using (MemoryStream mem = new MemoryStream())
             {
                 using (StreamWriter sw = new StreamWriter(mem))
@@ -2984,14 +2990,19 @@ namespace ACE.Server.Command.Handlers.Processors
                         return;
                     }
 
-                    mem.Position = 0;
-                    var fileName = recipeId.ToString() + ".sql";
-                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported recipe {recipeId}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
-
-                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported recipe {recipeId} to Discord");
-                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported recipe {recipeId} to Discord");
+                    sw.Flush();
+                    sqlData = mem.ToArray();
                 }
             }
+
+            var fileName = recipeId.ToString() + ".sql";
+            using (var uploadStream = new MemoryStream(sqlData))
+            {
+                DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported recipe {recipeId}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(uploadStream, fileName));
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Exported recipe {recipeId} to Discord");
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported recipe {recipeId} to Discord");
         }
 
         public static void ExportDiscordQuest(Session session, string questName)
@@ -3006,6 +3017,7 @@ namespace ACE.Server.Command.Handlers.Processors
             if (QuestSQLWriter == null)
                 QuestSQLWriter = new QuestSQLWriter();
 
+            byte[] sqlData;
             using (MemoryStream mem = new MemoryStream())
             {
                 using (StreamWriter sw = new StreamWriter(mem))
@@ -3026,14 +3038,19 @@ namespace ACE.Server.Command.Handlers.Processors
                         return;
                     }
 
-                    mem.Position = 0;
-                    var fileName = questName + ".sql";
-                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported quest {questName}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
-
-                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported quest {questName} to Discord");
-                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported quest {questName} to Discord");
+                    sw.Flush();
+                    sqlData = mem.ToArray();
                 }
             }
+
+            var fileName = questName + ".sql";
+            using (var uploadStream = new MemoryStream(sqlData))
+            {
+                DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported quest {questName}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(uploadStream, fileName));
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Exported quest {questName} to Discord");
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported quest {questName} to Discord");
         }
 
         public static void ExportDiscordSpell(Session session, string param)
@@ -3054,6 +3071,7 @@ namespace ACE.Server.Command.Handlers.Processors
             if (SpellSQLWriter == null)
                 SpellSQLWriter = new SpellSQLWriter();
 
+            byte[] sqlData;
             using (MemoryStream mem = new MemoryStream())
             {
                 using (StreamWriter sw = new StreamWriter(mem))
@@ -3074,14 +3092,19 @@ namespace ACE.Server.Command.Handlers.Processors
                         return;
                     }
 
-                    mem.Position = 0;
-                    var fileName = spellId.ToString() + ".sql";
-                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported spell {spellId}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, fileName));
-
-                    CommandHandlerHelper.WriteOutputInfo(session, $"Exported spell {spellId} to Discord");
-                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported spell {spellId} to Discord");
+                    sw.Flush();
+                    sqlData = mem.ToArray();
                 }
             }
+
+            var fileName = spellId.ToString() + ".sql";
+            using (var uploadStream = new MemoryStream(sqlData))
+            {
+                DiscordChatManager.SendDiscordFile(session.Player.Name, $"Exported spell {spellId}", ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(uploadStream, fileName));
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Exported spell {spellId} to Discord");
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported spell {spellId} to Discord");
         }
 
         public static void ExportDiscordLandblock(Session session, string param)
@@ -3126,6 +3149,7 @@ namespace ACE.Server.Command.Handlers.Processors
 
             try
             {
+                byte[] sqlData;
                 using (MemoryStream mem = new MemoryStream())
                 {
                     using (StreamWriter sw = new StreamWriter(mem))
@@ -3143,14 +3167,18 @@ namespace ACE.Server.Command.Handlers.Processors
 
                         LandblockInstanceWriter.CreateSQLINSERTStatement(instances, sw);
 
-                        String result = System.Text.Encoding.UTF8.GetString(mem.ToArray(), 0, (int)mem.Length);
-
-                        //DiscordChatManager.SendDiscordMessage(session.Player.Name,"```" + result + "```", ConfigManager.Config.Chat.ExportsChannelId);
-                        DiscordChatManager.SendDiscordFile(session.Player.Name, sql_filename, ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(mem, sql_filename));
-                        sw.Close();
-                        CommandHandlerHelper.WriteOutputInfo(session, $"Exported {sql_filename} to Discord");
+                        sw.Flush(); // Ensure all data is written
+                        sqlData = mem.ToArray(); // Copy stream data to byte array
                     }
                 }
+                // Create a NEW MemoryStream from the byte array for Discord upload
+                // This prevents "Cannot access a closed Stream" errors
+                using (var uploadStream = new MemoryStream(sqlData))
+                {
+                    DiscordChatManager.SendDiscordFile(session.Player.Name, sql_filename, ConfigManager.Config.Chat.ExportsChannelId, new Discord.FileAttachment(uploadStream, sql_filename));
+                }
+
+                CommandHandlerHelper.WriteOutputInfo(session, $"Exported {sql_filename} to Discord");
             }
             catch (Exception e)
             {
@@ -3202,6 +3230,7 @@ namespace ACE.Server.Command.Handlers.Processors
                 var cbToExport = DatManager.PortalDat.ReadFromDat<ClothingTable>(clothingBaseId);
                 var json = JsonSerializer.Serialize(cbToExport, new JsonSerializerOptions { WriteIndented = true });
 
+                byte[] jsonData;
                 using (MemoryStream mem = new MemoryStream())
                 {
                     using (StreamWriter sw = new StreamWriter(mem))
@@ -3209,14 +3238,19 @@ namespace ACE.Server.Command.Handlers.Processors
                         sw.AutoFlush = true;
                         sw.WriteLine(json);
 
-                        mem.Position = 0;
-                        var fileName = $"{clothingBaseId:X8}.json";
-                        DiscordChatManager.SendDiscordFile(session.Player.Name, $"ClothingBase {clothingBaseId:X8}.json", ConfigManager.Config.Chat.ClothingModExportChannelId, new Discord.FileAttachment(mem, fileName));
-
-                        CommandHandlerHelper.WriteOutputInfo(session, $"Exported ClothingBase {clothingBaseId:X8} to Discord.");
-                        PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported ClothingBase {clothingBaseId:X8} to Discord");
+                        sw.Flush();
+                        jsonData = mem.ToArray();
                     }
                 }
+
+                var fileName = $"{clothingBaseId:X8}.json";
+                using (var uploadStream = new MemoryStream(jsonData))
+                {
+                    DiscordChatManager.SendDiscordFile(session.Player.Name, $"ClothingBase {clothingBaseId:X8}.json", ConfigManager.Config.Chat.ClothingModExportChannelId, new Discord.FileAttachment(uploadStream, fileName));
+                }
+
+                CommandHandlerHelper.WriteOutputInfo(session, $"Exported ClothingBase {clothingBaseId:X8} to Discord.");
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"Exported ClothingBase {clothingBaseId:X8} to Discord");
             }
             catch (Exception ex)
             {

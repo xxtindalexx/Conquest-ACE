@@ -29,6 +29,11 @@ namespace ACE.Server.Factories
         {
             // mutate ManaConversionMod
             var mutationFilter = MutationCache.GetMutation("Casters.caster.txt");
+            if (mutationFilter == null)
+            {
+                log.Error($"MutateCaster({wo.WeenieClassId} - {wo.Name}) - Failed to load mutation script: Casters.caster.txt");
+                return;
+            }
             mutationFilter.TryMutate(wo, profile.Tier);
 
             // mutate ElementalDamageMod / WieldRequirements
@@ -36,6 +41,11 @@ namespace ACE.Server.Factories
             var scriptName = GetCasterScript(isElemental);
 
             mutationFilter = MutationCache.GetMutation(scriptName);
+            if (mutationFilter == null)
+            {
+                log.Error($"MutateCaster({wo.WeenieClassId} - {wo.Name}) - Failed to load mutation script: {scriptName}");
+                return;
+            }
             mutationFilter.TryMutate(wo, profile.Tier);
 
             // this part was not handled by mutation filter
@@ -49,6 +59,11 @@ namespace ACE.Server.Factories
 
             // mutate WeaponDefense
             mutationFilter = MutationCache.GetMutation("Casters.weapon_defense.txt");
+            if (mutationFilter == null)
+            {
+                log.Error($"MutateCaster({wo.WeenieClassId} - {wo.Name}) - Failed to load mutation script: Casters.weapon_defense.txt");
+                return;
+            }
             mutationFilter.TryMutate(wo, profile.Tier);
 
             // material type

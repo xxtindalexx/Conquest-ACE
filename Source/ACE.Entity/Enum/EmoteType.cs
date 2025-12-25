@@ -133,6 +133,16 @@ namespace ACE.Entity.Enum
         Enlightenment                 = 9001,
 
         // CONQUEST: Luminance Augmentation Gems
-        PromptAddAugment              = 9002
+        PromptAddAugment              = 122, //Custom
+        SetEnvironment                = 123, //Custom
+        DecrementInt64Stat            = 124, //Custom
+        IncrementInt64Stat            = 125, //Custom
+        SetAttributeStat              = 126, //Custom
+        SetSecondaryAttributeStat     = 127, //Custom
+        QuestCompletionCount          = 186, //Custom
+        DropFellow                    = 129, //Custom
+        GrantAttributeStat            = 130, //Custom
+        GrantVitalStat                = 131, //Custom
+        InqServerQuestSolves          = 132, //Custom - Check if quest has been completed by anyone on server
     }
 }

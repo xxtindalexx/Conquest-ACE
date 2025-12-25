@@ -259,6 +259,9 @@ namespace ACE.Server
             log.Info("Starting DatabaseManager...");
             DatabaseManager.Start();
 
+            log.Info("Loading PK dungeon configurations...");
+            ACE.Server.Entity.Landblock.LoadPKDungeonsFromDatabase();
+
             log.Info("Starting PropertyManager...");
             PropertyManager.Initialize();
 

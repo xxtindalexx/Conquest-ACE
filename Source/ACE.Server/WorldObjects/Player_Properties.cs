@@ -1386,6 +1386,61 @@ namespace ACE.Server.WorldObjects
             set { if (value == 0) RemoveProperty(PropertyInt.ImbueSuccesses); else SetProperty(PropertyInt.ImbueSuccesses, value); }
         }
 
+        public double? SpentExperienceStrength
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceStrength) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceStrength); else SetProperty(PropertyFloat.SpentExperienceStrength, value.Value); }
+        }
+
+        public double? SpentExperienceEndurance
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceEndurance) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceEndurance); else SetProperty(PropertyFloat.SpentExperienceEndurance, value.Value); }
+        }
+
+        public double? SpentExperienceCoordination
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceCoordination) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceCoordination); else SetProperty(PropertyFloat.SpentExperienceCoordination, value.Value); }
+        }
+
+        public double? SpentExperienceQuickness
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceQuickness) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceQuickness); else SetProperty(PropertyFloat.SpentExperienceQuickness, value.Value); }
+        }
+
+        public double? SpentExperienceFocus
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceFocus) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceFocus); else SetProperty(PropertyFloat.SpentExperienceFocus, value.Value); }
+        }
+
+        public double? SpentExperienceSelf
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceSelf) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceSelf); else SetProperty(PropertyFloat.SpentExperienceSelf, value.Value); }
+        }
+
+
+        public double? SpentExperienceHealth
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceHealth) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceHealth); else SetProperty(PropertyFloat.SpentExperienceHealth, value.Value); }
+        }
+
+        public double? SpentExperienceStamina
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceStamina) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceStamina); else SetProperty(PropertyFloat.SpentExperienceStamina, value.Value); }
+        }
+
+        public double? SpentExperienceMana
+        {
+            get => GetProperty(PropertyFloat.SpentExperienceMana) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SpentExperienceMana); else SetProperty(PropertyFloat.SpentExperienceMana, value.Value); }
+        }
+
         // CONQUEST: Quest Bonus System
         public long? QuestCompletionCount
         {
@@ -1463,6 +1518,55 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyInt64.LumAugMissileCount) ?? 0;
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugMissileCount); else SetProperty(PropertyInt64.LumAugMissileCount, value.Value); }
+        }
+
+        // CONQUEST: Soul Fragment & PK System Properties
+        public long? LastSoulFragmentLootTime
+        {
+            get => GetProperty(PropertyInt64.LastSoulFragmentLootTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastSoulFragmentLootTime); else SetProperty(PropertyInt64.LastSoulFragmentLootTime, value.Value); }
+        }
+
+        public long? LastPKDeathTime
+        {
+            get => GetProperty(PropertyInt64.LastPKDeathTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastPKDeathTime); else SetProperty(PropertyInt64.LastPKDeathTime, value.Value); }
+        }
+
+        public long? LastPKFlagTime
+        {
+            get => GetProperty(PropertyInt64.LastPKFlagTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastPKFlagTime); else SetProperty(PropertyInt64.LastPKFlagTime, value.Value); }
+        }
+
+        public long? DailySoulFragmentCount
+        {
+            get => GetProperty(PropertyInt64.DailySoulFragmentCount) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.DailySoulFragmentCount); else SetProperty(PropertyInt64.DailySoulFragmentCount, value.Value); }
+        }
+
+        public long? LastSoulFragmentResetTime
+        {
+            get => GetProperty(PropertyInt64.LastSoulFragmentResetTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastSoulFragmentResetTime); else SetProperty(PropertyInt64.LastSoulFragmentResetTime, value.Value); }
+        }
+
+        public long? LastPKDungeonDeathLocation
+        {
+            get => GetProperty(PropertyInt64.LastPKDungeonDeathLocation);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastPKDungeonDeathLocation); else SetProperty(PropertyInt64.LastPKDungeonDeathLocation, value.Value); }
+        }
+
+        public long? LastPKDungeonDeathTime
+        {
+            get => GetProperty(PropertyInt64.LastPKDungeonDeathTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastPKDungeonDeathTime); else SetProperty(PropertyInt64.LastPKDungeonDeathTime, value.Value); }
+        }
+
+        public long? LastSoulFragmentCapNotifyTime
+        {
+            get => GetProperty(PropertyInt64.LastSoulFragmentCapNotifyTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastSoulFragmentCapNotifyTime); else SetProperty(PropertyInt64.LastSoulFragmentCapNotifyTime, value.Value); }
         }
     }
 }

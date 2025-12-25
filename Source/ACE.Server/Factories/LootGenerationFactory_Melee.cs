@@ -1,5 +1,6 @@
 using ACE.Common;
 using ACE.Database.Models.World;
+using ACE.Entity.Enum;
 using ACE.Server.Entity.Mutations;
 using ACE.Server.Factories.Entity;
 using ACE.Server.Factories.Enum;
@@ -30,12 +31,29 @@ namespace ACE.Server.Factories
             // thanks to 4eyebiped for helping with the data analysis of magloot retail logs
             // that went into reversing these mutation scripts
 
-            var weaponSkill = wo.WeaponSkill.ToMeleeWeaponSkill();
+            var weaponSkillEnum = wo.WeaponSkill;
+
+            // Check if weapon has a valid melee weapon skill
+            if (weaponSkillEnum != Skill.HeavyWeapons &&
+                weaponSkillEnum != Skill.LightWeapons &&
+                weaponSkillEnum != Skill.FinesseWeapons &&
+                weaponSkillEnum != Skill.TwoHandedCombat)
+            {
+                log.Error($"MutateMeleeWeapon({wo.WeenieClassId} - {wo.Name}) - Invalid WeaponSkill: {weaponSkillEnum}, skipping mutation");
+                return;
+            }
+
+            var weaponSkill = weaponSkillEnum.ToMeleeWeaponSkill();
 
             // mutate Damage / WieldDifficulty / Variance
             var scriptName = GetDamageScript(weaponSkill, roll.WeaponType);
 
             var mutationFilter = MutationCache.GetMutation(scriptName);
+            if (mutationFilter == null)
+            {
+                log.Error($"MutateMeleeWeapon({wo.WeenieClassId} - {wo.Name}) - Failed to load mutation script: {scriptName}");
+                return;
+            }
 
             mutationFilter.TryMutate(wo, profile.Tier);
 
@@ -43,6 +61,11 @@ namespace ACE.Server.Factories
             scriptName = GetOffenseDefenseScript(weaponSkill, roll.WeaponType);
 
             mutationFilter = MutationCache.GetMutation(scriptName);
+            if (mutationFilter == null)
+            {
+                log.Error($"MutateMeleeWeapon({wo.WeenieClassId} - {wo.Name}) - Failed to load mutation script: {scriptName}");
+                return;
+            }
 
             mutationFilter.TryMutate(wo, profile.Tier);
 

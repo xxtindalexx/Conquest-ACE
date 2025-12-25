@@ -51,7 +51,7 @@ namespace ACE.Server.Network
 
             if (Data != null && Data.Length > 0)
             {
-                var body = Data.GetBuffer();
+                var body = Data.ToArray();
                 Buffer.BlockCopy(body, 0, buffer, offset, (int)Data.Length);
                 offset += (int)Data.Length;
 

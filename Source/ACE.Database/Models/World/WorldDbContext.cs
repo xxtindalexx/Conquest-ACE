@@ -1,7 +1,8 @@
-using System;
-using System.Collections.Generic;
+using ACE.Database.Models.Shard;
 using Microsoft.EntityFrameworkCore;
 using Pomelo.EntityFrameworkCore.MySql.Scaffolding.Internal;
+using System;
+using System.Collections.Generic;
 
 namespace ACE.Database.Models.World;
 
@@ -123,6 +124,9 @@ public partial class WorldDbContext : DbContext
     public virtual DbSet<WeeniePropertiesString> WeeniePropertiesString { get; set; }
 
     public virtual DbSet<WeeniePropertiesTextureMap> WeeniePropertiesTextureMap { get; set; }
+
+    // CONQUEST: PK Dungeon configuration
+    public virtual DbSet<PkDungeonLandblock> PkDungeonLandblocks { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -1900,6 +1904,24 @@ public partial class WorldDbContext : DbContext
             entity.HasOne(d => d.Object).WithMany(p => p.WeeniePropertiesTextureMap)
                 .HasForeignKey(d => d.ObjectId)
                 .HasConstraintName("wcid_texturemap");
+        });
+
+        // CONQUEST: PK Dungeon Landblock configuration
+        modelBuilder.Entity<PkDungeonLandblock>(entity =>
+        {
+            entity.HasKey(e => new { e.Landblock, e.Variation }).HasName("PRIMARY");
+
+            entity.ToTable("pk_dungeon_landblocks", tb => tb.HasComment("CONQUEST: Stores PK-only dungeon landblock+variant combinations"));
+
+            entity.Property(e => e.Landblock)
+                .HasComment("Landblock ID (e.g., 0x002B)")
+                .HasColumnName("landblock");
+            entity.Property(e => e.Variation)
+                .HasComment("Variation/variant number (0 = base, 1+ = variants)")
+                .HasColumnName("variation");
+            entity.Property(e => e.Description)
+                .HasMaxLength(255)
+                .HasColumnName("description");
         });
 
         OnModelCreatingPartial(modelBuilder);
