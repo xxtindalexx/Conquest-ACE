@@ -354,6 +354,24 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyInt.SocietyRankRadblo); else SetProperty(PropertyInt.SocietyRankRadblo, value.Value); }
         }
 
+        public bool CanEnrage
+        {
+            get => GetProperty(PropertyBool.CanEnrage) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.CanEnrage); else SetProperty(PropertyBool.CanEnrage, value); }
+        }
+
+        public bool CanGrapple
+        {
+            get => GetProperty(PropertyBool.CanGrapple) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.CanGrapple); else SetProperty(PropertyBool.CanGrapple, value); }
+        }
+
+        public bool CanAOE
+        {
+            get => GetProperty(PropertyBool.CanAOE) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.CanAOE); else SetProperty(PropertyBool.CanAOE, value); }
+        }
+
         public FactionBits Society => Faction1Bits ?? FactionBits.None;
     }
 }

@@ -741,6 +741,13 @@ namespace ACE.Server.Physics
             return string.Format("Center: {0} Radius: {1}", Center, Radius);
         }
 
+        public bool IntersectsEnragedHotspot(Sphere sphere)
+        {
+            var delta = sphere.Center - Center;
+            var radSum = (Radius + sphere.Radius) * 7.0f; // 7x scaling for enraged hotspots
+            return delta.LengthSquared() < radSum * radSum;
+        }
+
         public bool Equals(Sphere sphere)
         {
             return Center.X == sphere.Center.X && Center.Y == sphere.Center.Y && Center.Z == sphere.Center.Z && Radius == sphere.Radius;

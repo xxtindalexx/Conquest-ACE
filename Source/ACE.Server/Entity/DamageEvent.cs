@@ -212,6 +212,13 @@ namespace ACE.Server.Entity
             else
                 GetBaseDamage(attacker, AttackMotion ?? MotionCommand.Invalid, AttackHook);
 
+            // Apply enrage multiplier if the attacker is a mob and enraged
+            if (attacker.IsEnraged && !(attacker is Player))
+            {
+                var enrageMultiplier = attacker.EnrageDamageMultiplier ?? 1.0f;
+                BaseDamage *= enrageMultiplier;
+            }
+
             if (DamageType == DamageType.Undef)
             {
                 if ((attacker?.Guid.IsPlayer() ?? false) || (damageSource?.Guid.IsPlayer() ?? false))
@@ -274,6 +281,12 @@ namespace ACE.Server.Entity
                     // verify: CriticalMultiplier only applied to the additional crit damage,
                     // whereas CD/CDR applied to the total damage (base damage + additional crit damage)
                     CriticalDamageMod = 1.0f + WorldObject.GetWeaponCritDamageMod(Weapon, attacker, attackSkill, defender);
+
+                    // Apply enrage multiplier if attacker is a mob and enraged
+                    if (attacker.IsEnraged && !(attacker is Player))
+                    {
+                        CriticalDamageMod *= attacker.EnrageDamageMultiplier ?? 1.0f;
+                    }
 
                     CriticalDamageRatingMod = Creature.GetPositiveRatingMod(attacker.GetCritDamageRating());
 
@@ -370,6 +383,13 @@ namespace ACE.Server.Entity
                 var splitMultiplier = (float)(DamageSource.ProjectileLauncher?.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ??
                                              DefaultSplitArrowDamageMultiplier);
                 Damage *= splitMultiplier;
+            }
+
+            // Apply enrage damage reduction to the final output damage if the defender is a mob and enraged
+            if (defender.IsEnraged && !(defender is Player))
+            {
+                var damageReduction = defender.EnrageDamageReduction ?? 0.0f; // Default to no reduction
+                Damage *= (1.0f - damageReduction); // Apply reduction (e.g., 0.2 = 20% reduction)
             }
 
             DamageMitigated = DamageBeforeMitigation - Damage;

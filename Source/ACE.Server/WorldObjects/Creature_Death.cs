@@ -40,6 +40,16 @@ namespace ACE.Server.WorldObjects
             IsTurning = false;
             IsMoving = false;
 
+            grappleLoopCTS?.Cancel();
+            hotspotLoopCTS?.Cancel();
+
+            // Reset fog to Clear upon death only if the creature was enraged
+            if (IsEnraged && CurrentLandblock != null)
+            {
+                var fogResetType = EnvironChangeType.Clear;
+                CurrentLandblock.SendEnvironChange(fogResetType);
+            }
+
             //QuestManager.OnDeath(lastDamager?.TryGetAttacker());
 
             if (KillQuest != null)
@@ -807,7 +817,8 @@ namespace ACE.Server.WorldObjects
             if (currentTime - lastResetTime > 86400) // 86400 seconds = 24 hours
             {
                 dailyCount = 0;
-                killerPlayer.LastSoulFragmentResetTime = (long)currentTime;
+                killerPlayer.SetProperty(PropertyInt64.DailySoulFragmentCount, (long)0);
+                killerPlayer.SetProperty(PropertyInt64.LastSoulFragmentResetTime, (long)currentTime);
             }
 
             // Roll for Soul Fragment drop (0.75% chance for ~1-2 per hour at 100-200 kills/hour)

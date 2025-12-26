@@ -601,6 +601,13 @@ namespace ACE.Server.Physics
             return true;
         }
 
+        public bool is_touchingEnragedHotspot(PhysicsObj obj)
+        {
+            return IsTouching(obj,
+                (Sphere s1, Sphere s2) => s1.IntersectsEnragedHotspot(s2),
+                (Sphere s, CylSphere cs, Vector3 d, float r) => cs.CollidesWithSphereEnragedHotspot(s, d, r));
+        }
+
         /// <summary>
         /// Initializes a new PartArray from a dataDID
         /// </summary>

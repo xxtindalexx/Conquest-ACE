@@ -265,6 +265,9 @@ namespace ACE.Server
             log.Info("Starting PropertyManager...");
             PropertyManager.Initialize();
 
+            log.Info("Initializing TransferLogger...");
+            TransferLogger.InitializeTransferMonitoring();
+
             log.Info("Initializing GuidManager...");
             GuidManager.Initialize();
 

@@ -469,6 +469,20 @@ namespace ACE.Server.Physics
             return cylSphere != null && Height == cylSphere.Height && Radius == cylSphere.Radius && LowPoint == cylSphere.LowPoint;
         }
 
+        public bool CollidesWithSphereEnragedHotspot(Sphere checkPos, Vector3 disp, float radsum)
+        {
+            radsum *= 3.0f; // 3x scaling for enraged hotspots
+
+            var result = false;
+
+            if (disp.X * disp.X + disp.Y * disp.Y <= radsum * radsum)
+            {
+                if (checkPos.Radius - PhysicsGlobals.EPSILON + Height * 0.5f >= Math.Abs(Height * 0.5f - disp.Z))
+                    result = true;
+            }
+            return result;
+        }
+
         public override int GetHashCode()
         {
             int hash = 0;

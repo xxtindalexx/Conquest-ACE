@@ -1331,6 +1331,66 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyFloat.ElementalDamageMod); else SetProperty(PropertyFloat.ElementalDamageMod, value.Value); }
         }
 
+        public bool SplitArrows
+        {
+            get => GetProperty(PropertyBool.SplitArrows) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.SplitArrows); else SetProperty(PropertyBool.SplitArrows, value); }
+        }
+
+        public int? SplitArrowCount
+        {
+            get => GetProperty(PropertyInt.SplitArrowCount);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.SplitArrowCount); else SetProperty(PropertyInt.SplitArrowCount, value.Value); }
+        }
+
+        public double? SplitArrowRange
+        {
+            get => GetProperty(PropertyFloat.SplitArrowRange);
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SplitArrowRange); else SetProperty(PropertyFloat.SplitArrowRange, value.Value); }
+        }
+
+        public double? SplitArrowDamageMultiplier
+        {
+            get => GetProperty(PropertyFloat.SplitArrowDamageMultiplier);
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.SplitArrowDamageMultiplier); else SetProperty(PropertyFloat.SplitArrowDamageMultiplier, value.Value); }
+        }
+
+        public float? EnrageDamageMultiplier
+        {
+            get => (float?)GetProperty(PropertyFloat.EnrageDamageMultiplier);
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.EnrageDamageMultiplier); else SetProperty(PropertyFloat.EnrageDamageMultiplier, value.Value); }
+        }
+
+        public float? EnrageDamageReduction
+        {
+            get => (float?)GetProperty(PropertyFloat.EnrageDamageReduction);
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.EnrageDamageReduction); else SetProperty(PropertyFloat.EnrageDamageReduction, value.Value); }
+        }
+
+        public float? EnrageThreshold
+        {
+            get => (float?)GetProperty(PropertyFloat.EnrageThreshold);
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.EnrageThreshold); else SetProperty(PropertyFloat.EnrageThreshold, value.Value); }
+        }
+
+        public int? EnrageFogColor
+        {
+            get => GetProperty(PropertyInt.EnrageFogColor);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.EnrageFogColor); else SetProperty(PropertyInt.EnrageFogColor, value.Value); }
+        }
+
+        public int? EnrageSound
+        {
+            get => GetProperty(PropertyInt.EnrageSound);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.EnrageSound); else SetProperty(PropertyInt.EnrageSound, value.Value); }
+        }
+
+        public int? EnrageVisualEffect
+        {
+            get => GetProperty(PropertyInt.EnrageVisualEffect);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.EnrageVisualEffect); else SetProperty(PropertyInt.EnrageVisualEffect, value.Value); }
+        }
+
         public WieldRequirement WieldRequirements
         {
             get => (WieldRequirement)(GetProperty(PropertyInt.WieldRequirements) ?? 0);
@@ -2733,6 +2793,42 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyInt.MaxLevel);
             set { if (!value.HasValue) RemoveProperty(PropertyInt.MaxLevel); else SetProperty(PropertyInt.MaxLevel, value.Value); }
+        }
+
+        public PortalRequirement PortalReqType
+        {
+            get => (PortalRequirement)(GetProperty(PropertyInt.PortalReqType) ?? 0);
+            set { if (value == PortalRequirement.None) RemoveProperty(PropertyInt.PortalReqType); else SetProperty(PropertyInt.PortalReqType, (int)value); }
+        }
+
+        public int? PortalReqValue
+        {
+            get => GetProperty(PropertyInt.PortalReqValue);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PortalReqValue); else SetProperty(PropertyInt.PortalReqValue, value.Value); }
+        }
+
+        public int? PortalReqMaxValue
+        {
+            get => GetProperty(PropertyInt.PortalReqMaxValue);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PortalReqMaxValue); else SetProperty(PropertyInt.PortalReqMaxValue, value.Value); }
+        }
+
+        public PortalRequirement PortalReqType2
+        {
+            get => (PortalRequirement)(GetProperty(PropertyInt.PortalReqType2) ?? 0);
+            set { if (value == PortalRequirement.None) RemoveProperty(PropertyInt.PortalReqType2); else SetProperty(PropertyInt.PortalReqType2, (int)value); }
+        }
+
+        public int? PortalReqValue2
+        {
+            get => GetProperty(PropertyInt.PortalReqValue2);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PortalReqValue2); else SetProperty(PropertyInt.PortalReqValue2, value.Value); }
+        }
+
+        public int? PortalReqMaxValue2
+        {
+            get => GetProperty(PropertyInt.PortalReqMaxValue2);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PortalReqMaxValue2); else SetProperty(PropertyInt.PortalReqMaxValue2, value.Value); }
         }
 
         public uint? CreatedByAccountId
