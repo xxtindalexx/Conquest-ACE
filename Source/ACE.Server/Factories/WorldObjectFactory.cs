@@ -128,6 +128,8 @@ namespace ACE.Server.Factories
                     return new Pet(weenie, guid);
                 case WeenieType.CombatPet:
                     return new CombatPet(weenie, guid);
+                case WeenieType.TreasureMap:
+                    return new TreasureMap(weenie, guid);
                 case WeenieType.Allegiance:
                     return new Allegiance(weenie, guid);
                 case WeenieType.AugmentationDevice:
@@ -243,6 +245,8 @@ namespace ACE.Server.Factories
                     return new Pet(biota);
                 case WeenieType.CombatPet:
                     return new CombatPet(biota);
+                case WeenieType.TreasureMap:
+                    return new TreasureMap(biota);
                 case WeenieType.Allegiance:
                     return new Allegiance(biota);
                 case WeenieType.AugmentationDevice:

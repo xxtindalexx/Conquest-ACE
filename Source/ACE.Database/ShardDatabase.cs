@@ -16,6 +16,7 @@ using ACE.Common;
 using ACE.Common.Extensions;
 using ACE.Database.Entity;
 using ACE.Database.Models.Shard;
+using ACE.Database.Models.World;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Database.Models.Auth;
@@ -1089,6 +1090,103 @@ namespace ACE.Database
                     context.Database.ExecuteSqlRaw($"DELETE FROM transfer_summaries WHERE LastTransfer < {{0}}", cutoffDate);
                     log.Info($"Cleaned up {count} old transfer summaries older than {daysToKeep} days");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Format a cooldown TimeSpan into a human-readable string
+        /// </summary>
+        private static string FormatCooldown(TimeSpan time)
+        {
+            if (time.TotalDays >= 1)
+                return $"{(int)time.Days}d {(int)time.Hours}h {(int)time.Minutes}m";
+            if (time.TotalHours >= 1)
+                return $"{(int)time.Hours}h {(int)time.Minutes}m";
+            if (time.TotalMinutes >= 1)
+                return $"{(int)time.Minutes}m {(int)time.Seconds}s";
+            return $"{(int)time.Seconds}s";
+        }
+
+        /// <summary>
+        /// Increment and check IP quest attempts for a player
+        /// Returns (success, message) tuple
+        /// </summary>
+        public (bool, string) IncrementAndCheckIPQuestAttempts(uint questId, string playerIp, uint characterId, int maxAttempts)
+        {
+            using (var context = new WorldDbContext())
+            using (var shardContext = new ShardDbContext())
+            {
+                // First, attempt to find the quest in the main database (timed quests)
+                var quest = context.Quest.FirstOrDefault(q => q.Id == questId);
+
+                // If the quest is missing from the database, check if the player has it as a flag
+                if (quest == null)
+                {
+                    var characterTracking = shardContext.CharacterPropertiesQuestRegistry
+                        .FirstOrDefault(q => q.CharacterId == characterId && q.QuestName == $"Quest_{questId}");
+
+                    if (characterTracking == null)
+                    {
+                        // FINAL CHECK - If the quest doesn't exist anywhere, reject the request
+                        return (false, "Invalid quest data. Quest is neither in the database nor in the character registry.");
+                    }
+
+                    // If found in the character's quest registry, create a temporary quest object
+                    quest = new Quest
+                    {
+                        Id = questId,
+                        Name = characterTracking.QuestName,
+                        MinDelta = 0, // Default cooldown (adjustable)
+                        IpLootLimit = 1 // Default IP limit (adjustable)
+                    };
+                }
+
+                // NOTE: For IP Quest items, we do NOT track character quests.
+                // We ONLY track IP-based solves in quest_ip_tracking table.
+                // This prevents duplicate key errors when multiple characters from same IP loot the item.
+
+                // IP-wide solve count enforcement
+                var ipTracking = shardContext.QuestIpTracking.FirstOrDefault(q => q.QuestId == questId && q.IpAddress == playerIp);
+                if (ipTracking == null)
+                {
+                    ipTracking = new QuestIpTracking
+                    {
+                        QuestId = questId,
+                        IpAddress = playerIp,
+                        SolvesCount = 1,
+                        LastSolveTime = DateTime.UtcNow
+                    };
+                    shardContext.QuestIpTracking.Add(ipTracking);
+                }
+                else
+                {
+                    // Only reset the count if there's a cooldown AND it has expired
+                    if (quest.MinDelta > 0)
+                    {
+                        var timeSinceLastSolve = (DateTime.UtcNow - ipTracking.LastSolveTime)?.TotalSeconds ?? double.MaxValue;
+                        if (timeSinceLastSolve >= quest.MinDelta)
+                        {
+                            ipTracking.SolvesCount = 0; // Reset solves count if cooldown expired
+                            ipTracking.LastSolveTime = DateTime.UtcNow;
+                        }
+                    }
+
+                    // Check if limit reached
+                    if (ipTracking.SolvesCount >= maxAttempts)
+                    {
+                        return (false, "You cannot loot this item. Your IP-wide limit has been reached.");
+                    }
+
+                    // Increment the count
+                    ipTracking.SolvesCount++;
+                    ipTracking.LastSolveTime = DateTime.UtcNow;
+                }
+
+                // Save changes to the database
+                shardContext.SaveChanges();
+                context.SaveChanges();
+
+                return (true, string.Empty);
             }
         }
     }

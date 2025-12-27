@@ -241,6 +241,8 @@ namespace ACE.Entity.Enum.Properties
         EnrageDamageMultiplier         = 9011,
         EnrageDamageReduction          = 9012,
         EnrageThreshold                = 9013,
+        NSCoordinates                  = 9014,  // North/South coordinate for treasure maps
+        EWCoordinates                  = 9015,  // East/West coordinate for treasure maps
         [AssessmentProperty]
         SplitArrowRange                = 9032,
         [AssessmentProperty]

@@ -1281,6 +1281,18 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyFloat.DamageVariance); else SetProperty(PropertyFloat.DamageVariance, value.Value); }
         }
 
+        public double? NSCoordinates
+        {
+            get => GetProperty(PropertyFloat.NSCoordinates);
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.NSCoordinates); else SetProperty(PropertyFloat.NSCoordinates, value.Value); }
+        }
+
+        public double? EWCoordinates
+        {
+            get => GetProperty(PropertyFloat.EWCoordinates);
+            set { if (!value.HasValue) RemoveProperty(PropertyFloat.EWCoordinates); else SetProperty(PropertyFloat.EWCoordinates, value.Value); }
+        }
+
         public int? WeaponTime
         {
             get => GetProperty(PropertyInt.WeaponTime);

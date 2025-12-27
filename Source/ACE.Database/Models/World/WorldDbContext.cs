@@ -28,6 +28,7 @@ public partial class WorldDbContext : DbContext
     public virtual DbSet<LandblockInstance> LandblockInstance { get; set; }
 
     public virtual DbSet<LandblockInstanceLink> LandblockInstanceLink { get; set; }
+    public virtual DbSet<LandblockDescription> LandblockDescription { get; set; }
 
     public virtual DbSet<PointsOfInterest> PointsOfInterest { get; set; }
 
@@ -351,6 +352,30 @@ public partial class WorldDbContext : DbContext
                 .HasConstraintName("instance_link");
         });
 
+        modelBuilder.Entity<LandblockDescription>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("landblock_description");
+
+            entity.HasIndex(e => e.Landblock, "idx_landblock");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Landblock).HasColumnName("landblock").IsRequired();
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(255);
+            entity.Property(e => e.IsDungeon).HasColumnName("is_dungeon");
+            entity.Property(e => e.HasDungeon).HasColumnName("has_dungeon");
+            entity.Property(e => e.Directions).HasColumnName("directions").HasColumnType("text");
+            entity.Property(e => e.Reference).HasColumnName("reference").HasColumnType("text");
+            entity.Property(e => e.MacroRegion).HasColumnName("macro_region").HasMaxLength(100);
+            entity.Property(e => e.MicroRegion).HasColumnName("micro_region").HasMaxLength(100);
+            entity.Property(e => e.LastModified)
+                .ValueGeneratedOnAddOrUpdate()
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("datetime")
+                .HasColumnName("last_modified");
+        });
+
         modelBuilder.Entity<PointsOfInterest>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PRIMARY");
@@ -409,6 +434,12 @@ public partial class WorldDbContext : DbContext
                 .IsRequired()
                 .HasComment("Unique Name of Quest")
                 .HasColumnName("name");
+            entity.Property(e => e.IsIpRestricted)
+                .HasComment("Whether this quest has IP-based restrictions")
+                .HasColumnName("is_ip_restricted");
+            entity.Property(e => e.IpLootLimit)
+                .HasComment("Maximum number of characters per IP that can complete this quest")
+                .HasColumnName("ip_loot_limit");
         });
 
         modelBuilder.Entity<Recipe>(entity =>

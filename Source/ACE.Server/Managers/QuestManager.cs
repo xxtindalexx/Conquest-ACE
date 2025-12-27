@@ -798,6 +798,32 @@ namespace ACE.Server.Managers
 
             player.QuestCompletionCount = player.Account.CachedQuestBonusCount;
         }
+
+        /// <summary>
+        /// Check if a player can loot an IP-restricted quest item
+        /// </summary>
+        public bool CanPlayerLootIPQuestItem(string questName, string playerIp, Network.Session session)
+        {
+            var quest = DatabaseManager.World.GetCachedQuest(questName);
+            if (quest == null)
+                return true; // If the quest doesn't exist, allow looting
+
+            uint characterId = session.Player.Character.Id;
+            int maxAttempts = (int)quest.IpLootLimit.GetValueOrDefault(1); // Default to 1 if not set
+
+            // Check and increment solves count
+            var result = DatabaseManager.ShardDB.IncrementAndCheckIPQuestAttempts(quest.Id, playerIp, characterId, maxAttempts);
+            bool success = result.Item1;
+            string message = result.Item2;
+            if (!success)
+            {
+                log.Debug($"Loot blocked for quest: {questName}, playerIp: {playerIp}, characterId: {characterId}. Reason: {message}");
+                session.Player.SendMessage(message, ChatMessageType.Broadcast);
+                return false;
+            }
+
+            return true; // Allow looting
+        }
     }
 }
 

@@ -103,7 +103,7 @@ public partial class ShardDbContext : DbContext
     public virtual DbSet<TransferMonitoringConfigDb> TransferMonitoringConfigs { get; set; }
     public virtual DbSet<BankCommandBlacklist> BankCommandBlacklist { get; set; }
     public virtual DbSet<CharTracker> CharTracker { get; set; }
-
+    public virtual DbSet<QuestIpTracking> QuestIpTracking { get; set; }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -162,6 +162,36 @@ public partial class ShardDbContext : DbContext
             entity.HasIndex(e => e.LoginTimestamp, "IX_char_tracker_LoginTimestamp");
         });
 
+        modelBuilder.Entity<QuestIpTracking>(entity =>
+        {
+            entity.ToTable("quest_ip_tracking");
+
+            // Define Composite Primary Key
+            entity.HasKey(e => new { e.QuestId, e.IpAddress });
+
+            entity.Property(e => e.QuestId)
+                  .HasColumnName("quest_id")
+                  .IsRequired();
+
+            entity.Property(e => e.IpAddress)
+                  .HasColumnName("ip_address")
+                  .HasMaxLength(45)
+                  .IsRequired();
+
+            entity.Property(e => e.SolvesCount)
+                  .HasColumnName("solves_count")
+                  .HasDefaultValue(0);
+
+            entity.Property(e => e.LastSolveTime)
+                  .HasColumnName("last_solve_time");
+
+            // Foreign Key Relationship to Quest Table (in world database)
+            //entity.HasOne(e => e.Quest)
+                 // .WithMany(q => q.QuestIpTrackings)
+                 // .HasForeignKey(e => e.QuestId)
+                 // .OnDelete(DeleteBehavior.Cascade)
+                  //.HasConstraintName("quest_ip_tracking_ibfk_1");
+        });
         modelBuilder
             .UseCollation("utf8mb4_0900_ai_ci")
             .HasCharSet("utf8mb4");

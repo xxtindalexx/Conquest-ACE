@@ -702,6 +702,20 @@ namespace ACE.Server.WorldObjects
         {
             var droppedItems = new List<WorldObject>();
 
+            // Treasure Map Drop Logic (adjust drop rate as needed: 0.01f = 1%, 0.10f = 10%)
+            if (IsMonster && ThreadSafeRandom.Next(0.0f, 1.0f) < 0.05f)  // 5% chance
+            {
+                var map = TreasureMap.TryCreateTreasureMap(this);
+
+                if (map != null)
+                {
+                    if (corpse != null)
+                        corpse.TryAddToInventory(map);
+                    else
+                        droppedItems.Add(map);
+                }
+            }
+
             // create death treasure from loot generation factory
             if (DeathTreasure != null)
             {

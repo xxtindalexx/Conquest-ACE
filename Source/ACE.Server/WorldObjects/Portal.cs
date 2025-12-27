@@ -1,8 +1,5 @@
-using System.Numerics;
-
-using log4net;
-
 using ACE.Common;
+using ACE.Database;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -12,6 +9,8 @@ using ACE.Server.Entity.Actions;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
+using log4net;
+using System.Numerics;
 
 namespace ACE.Server.WorldObjects
 {
@@ -159,6 +158,39 @@ namespace ACE.Server.WorldObjects
             if (player.PKTimerActive && !PortalIgnoresPkAttackTimer)
             {
                 return new ActivationResult(new GameEventWeenieError(player.Session, WeenieError.YouHaveBeenInPKBattleTooRecently));
+            }
+
+            // Check IP quest restrictions
+            var ipQuestName = GetProperty(PropertyString.IPQuest);
+            if (!string.IsNullOrEmpty(ipQuestName))
+            {
+                string playerIp = new System.Net.IPAddress(player.Account.LastLoginIP).ToString();
+                var quest = DatabaseManager.World.GetCachedQuest(ipQuestName);
+
+                if (quest != null)
+                {
+                    var result = DatabaseManager.ShardDB.IncrementAndCheckIPQuestAttempts(
+                        quest.Id,
+                        playerIp,
+                        player.Character.Id,
+                        (int)quest.IpLootLimit.GetValueOrDefault(1)
+                    );
+                    bool success = result.Item1;
+                    string message = result.Item2;
+
+                    if (!success)
+                    {
+                        // Custom message for portal restrictions
+                        var customMessage = "You cannot use this portal. Your IP-wide limit has been reached.";
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat(customMessage, ChatMessageType.Broadcast));
+                        return new ActivationResult(false);
+                    }
+                }
+                else
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Portal is restricted but the linked quest is missing!", ChatMessageType.System));
+                    return new ActivationResult(false);
+                }
             }
 
             if (!player.IgnorePortalRestrictions)
