@@ -33,7 +33,7 @@ namespace ACE.Server.Factories.Tables.Wcids
             ( WeenieClassName.ace31817_frostslingshot,    0.035f ),
             ( WeenieClassName.ace31815_electricslingshot, 0.035f ),
             ( WeenieClassName.conquest_netheratlatl,      0.03f ),
-            ( WeenieClassName.conquest_netherroyalatlatl, 0.03f ),
+            ( WeenieClassName.conquest_netherroyalatlatl, 0.04f ),
         };
 
         private static ChanceTable<WeenieClassName> T6_T8_Chances = new ChanceTable<WeenieClassName>()

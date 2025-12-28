@@ -59,22 +59,51 @@ namespace ACE.Server.Entity
             StackType = stackType;
         }
 
-        public void BuildStack(List<PropertiesEnchantmentRegistry> entries, Spell spell, WorldObject caster, bool equip = false, bool isWeaponSpell = false)
+        public void BuildStack(List<PropertiesEnchantmentRegistry> entries, Spell spell, WorldObject caster, bool equip = false)
         {
             Surpass = new List<PropertiesEnchantmentRegistry>();
             Refresh = new List<PropertiesEnchantmentRegistry>();
             Surpassed = new List<PropertiesEnchantmentRegistry>();
 
-            var powerLevel = spell.Power;
-
-            foreach (var entry in entries.OrderByDescending(i => i.PowerLevel))
+            long augmentLevel = 0;
+            if (caster is Creature creature)
             {
-                if (powerLevel > entry.PowerLevel)
+                switch (spell.School)
+                {
+                    case ACE.Entity.Enum.MagicSchool.WarMagic:
+                        augmentLevel = creature.LuminanceAugmentWarCount ?? 0;
+                        break;
+                    case ACE.Entity.Enum.MagicSchool.LifeMagic:
+                        augmentLevel = creature.LuminanceAugmentLifeCount ?? 0;
+                        break;
+                    case ACE.Entity.Enum.MagicSchool.ItemEnchantment:
+                        augmentLevel = creature.LuminanceAugmentItemCount ?? 0;
+                        break;
+                    case ACE.Entity.Enum.MagicSchool.CreatureEnchantment:
+                        augmentLevel = creature.LuminanceAugmentCreatureCount ?? 0;
+                        break;
+                    case ACE.Entity.Enum.MagicSchool.VoidMagic:
+                        augmentLevel = creature.LuminanceAugmentVoidCount ?? 0;
+                        break;
+                    case ACE.Entity.Enum.MagicSchool.None:
+                    default:
+                        break;
+                }
+
+            }
+
+            var powerLevel = spell.Power;
+            var auggedPowerLevel = powerLevel + augmentLevel;
+
+            foreach (var entry in entries.OrderByDescending(i => i.PowerLevel + (i.AugmentationLevelWhenCast ?? 0)))
+            {
+                var entryAuggedPowerLevel = entry.PowerLevel + (entry.AugmentationLevelWhenCast ?? 0);
+                if (auggedPowerLevel > entryAuggedPowerLevel)
                 {
                     // surpassing existing spell
                     Surpass.Add(entry);
                 }
-                else if (powerLevel == entry.PowerLevel)
+                else if (auggedPowerLevel == entryAuggedPowerLevel)
                 {
                     // refreshing existing spell
                     if (spell.Id == entry.SpellId)
@@ -88,16 +117,18 @@ namespace ACE.Server.Entity
                         // it should cast to its own layer?
 
                         //if (Refresh.Count > 1)
-                            //Console.WriteLine($"AddEnchantmentResult.BuildStack(): multiple refresh entries");
+                        //Console.WriteLine($"AddEnchantmentResult.BuildStack(): multiple refresh entries");
                     }
                     else
                     {
                         // handle special case to prevent message: Pumpkin Shield casts Web of Defense on you, refreshing Aura of Defense
                         var spellDuration = equip ? double.PositiveInfinity : spell.Duration;
 
-                        if (!equip && caster is Player player && player.AugmentationIncreasedSpellDuration > 0 && !isWeaponSpell)
-                            spellDuration *= 1.0f + player.AugmentationIncreasedSpellDuration * 0.2f;
-
+                        if (!equip && caster is Player player && (player.AugmentationIncreasedSpellDuration + player.LuminanceAugmentSpellDurationCount ?? 0) > 0)
+                        {
+                            spellDuration *= 1.0f + (player.AugmentationIncreasedSpellDuration * 0.2f);
+                            spellDuration += (((caster as Player).LuminanceAugmentSpellDurationCount ?? 0) * 0.05f);
+                        }
                         var entryDuration = entry.Duration == -1 ? double.PositiveInfinity : entry.Duration;
 
                         if (spellDuration > entryDuration || spellDuration == entryDuration && !SpellSet.SetSpells.Contains(entry.SpellId))
@@ -116,7 +147,7 @@ namespace ACE.Server.Entity
                         }
                     }
                 }
-                else if (powerLevel < entry.PowerLevel)
+                else if (auggedPowerLevel < entryAuggedPowerLevel)
                 {
                     // surpassed by existing spell
                     Surpassed.Add(entry);

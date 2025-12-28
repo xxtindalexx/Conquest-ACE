@@ -1459,37 +1459,6 @@ namespace ACE.Server.WorldObjects
             set { if (!value) RemoveProperty(PropertyBool.ExcludeFromLeaderboards); else SetProperty(PropertyBool.ExcludeFromLeaderboards, value); }
         }
 
-        // CONQUEST: Luminance Augmentation Tracking
-        public long? LuminanceAugmentCreatureCount
-        {
-            get => GetProperty(PropertyInt64.LumAugCreatureCount) ?? 0;
-            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugCreatureCount); else SetProperty(PropertyInt64.LumAugCreatureCount, value.Value); }
-        }
-
-        public long? LuminanceAugmentItemCount
-        {
-            get => GetProperty(PropertyInt64.LumAugItemCount) ?? 0;
-            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugItemCount); else SetProperty(PropertyInt64.LumAugItemCount, value.Value); }
-        }
-
-        public long? LuminanceAugmentLifeCount
-        {
-            get => GetProperty(PropertyInt64.LumAugLifeCount) ?? 0;
-            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugLifeCount); else SetProperty(PropertyInt64.LumAugLifeCount, value.Value); }
-        }
-
-        public long? LuminanceAugmentWarCount
-        {
-            get => GetProperty(PropertyInt64.LumAugWarCount) ?? 0;
-            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugWarCount); else SetProperty(PropertyInt64.LumAugWarCount, value.Value); }
-        }
-
-        public long? LuminanceAugmentVoidCount
-        {
-            get => GetProperty(PropertyInt64.LumAugVoidCount) ?? 0;
-            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugVoidCount); else SetProperty(PropertyInt64.LumAugVoidCount, value.Value); }
-        }
-
         public long? LuminanceAugmentSpellDurationCount
         {
             get => GetProperty(PropertyInt64.LumAugDurationCount) ?? 0;
@@ -1506,18 +1475,6 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyInt64.LumAugSummonCount) ?? 0;
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugSummonCount); else SetProperty(PropertyInt64.LumAugSummonCount, value.Value); }
-        }
-
-        public long? LuminanceAugmentMeleeCount
-        {
-            get => GetProperty(PropertyInt64.LumAugMeleeCount) ?? 0;
-            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugMeleeCount); else SetProperty(PropertyInt64.LumAugMeleeCount, value.Value); }
-        }
-
-        public long? LuminanceAugmentMissileCount
-        {
-            get => GetProperty(PropertyInt64.LumAugMissileCount) ?? 0;
-            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugMissileCount); else SetProperty(PropertyInt64.LumAugMissileCount, value.Value); }
         }
 
         // CONQUEST: Soul Fragment & PK System Properties

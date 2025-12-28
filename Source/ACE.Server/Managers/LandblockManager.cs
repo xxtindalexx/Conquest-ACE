@@ -731,7 +731,8 @@ namespace ACE.Server.Managers
                                 }
                             }
 
-                            NotifyAdjacents(landblock);
+                            if (landblock != null)
+                                NotifyAdjacents(landblock);
                         }
                         else
                             unloadFailed = true;

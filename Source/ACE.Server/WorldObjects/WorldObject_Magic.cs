@@ -403,7 +403,7 @@ namespace ACE.Server.WorldObjects
             }
 
             // create enchantment
-            var addResult = target.EnchantmentManager.Add(spell, caster, weapon, equip, isWeaponSpell);
+            var addResult = target.EnchantmentManager.Add(spell, caster, weapon, equip);
 
             // build message
             var suffix = "";

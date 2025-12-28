@@ -1065,14 +1065,21 @@ namespace ACE.Server.WorldObjects
                         }
 
                         // Check IP quest restrictions when picking up from world
+                        //Console.WriteLine($"[IPQuest] Pickup attempt: item={item.Name}, itemRootOwner={itemRootOwner?.Name ?? "null"}, containerRootOwner={containerRootOwner?.Name ?? "null"}, this={this.Name}");
+                        //Console.WriteLine($"[IPQuest] Condition check: (itemRootOwner != this) = {itemRootOwner != this}, (containerRootOwner == this) = {containerRootOwner == this}");
                         if (itemRootOwner != this && containerRootOwner == this)
                         {
+                            //Console.WriteLine($"[IPQuest] Condition passed, calling HandleIPQuestItem...");
                             if (!HandleIPQuestItem(item, itemRootOwner, containerRootOwner, itemGuid))
                             {
                                 //Console.WriteLine($"IPQuest logic blocked the item pick-up");
                                 EnqueuePickupDone(pickupMotion);
                                 return;
                             }
+                        }
+                        else
+                        {
+                            //Console.WriteLine($"[IPQuest] Condition failed, skipping IPQuest check");
                         }
 
                         if (DoHandleActionPutItemInContainer(item, itemRootOwner, itemWasEquipped, container, containerRootOwner, placement))
@@ -1283,20 +1290,24 @@ namespace ACE.Server.WorldObjects
             if (string.IsNullOrEmpty(ipQuestName))
                 return true; // If not an IPQuest item, allow normal processing
 
+            //Console.WriteLine($"[IPQuest] Item '{item.Name}' has IPQuest: '{ipQuestName}'");
+
             // Fetch the player's IP address
             string playerIp = new System.Net.IPAddress(Session.Player.Account.LastLoginIP).ToString();
-            //Console.WriteLine($"Player IP: {playerIp}");
+            //Console.WriteLine($"[IPQuest] Player IP: {playerIp}, Character: {Session.Player.Name}");
 
             // Fetch the quest object
             var quest = DatabaseManager.World.GetCachedQuest(ipQuestName);
             if (quest == null)
             {
-                //Console.WriteLine($"Quest '{ipQuestName}' not found.");
+                //Console.WriteLine($"[IPQuest] ERROR: Quest '{ipQuestName}' not found in database cache!");
                 Session.Player.SendMessage("Quest data is invalid or missing.", ChatMessageType.Broadcast);
                 return false;
             }
+            //Console.WriteLine($"[IPQuest] Quest found - ID: {quest.Id}, Name: {quest.Name}, IpLootLimit: {quest.IpLootLimit}, IsIPRestricted: {quest.IsIpRestricted}");
 
             // Check if the player is allowed to loot the item
+            //Console.WriteLine($"[IPQuest] Calling IncrementAndCheckIPQuestAttempts with questId={quest.Id}, playerIp={playerIp}, characterId={Session.Player.Character.Id}, maxAttempts={quest.IpLootLimit.GetValueOrDefault(1)}");
             var result = DatabaseManager.ShardDB.IncrementAndCheckIPQuestAttempts(
                 questId: quest.Id,
                 playerIp: playerIp,
@@ -1305,19 +1316,21 @@ namespace ACE.Server.WorldObjects
             );
             bool success = result.Item1;
             string message = result.Item2;
+            //Console.WriteLine($"[IPQuest] Result: success={success}, message='{message}'");
 
             if (!success)
             {
-                //Console.WriteLine($"Loot blocked for quest: {ipQuestName}, playerIp: {playerIp}, characterId: {Session.Player.Character.Id}. Reason: {message}");
+                //Console.WriteLine($"[IPQuest] Loot BLOCKED for quest: {ipQuestName}, playerIp: {playerIp}, characterId: {Session.Player.Character.Id}. Reason: {message}");
                 Session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
                 Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
                 return false;
             }
 
+            //Console.WriteLine($"[IPQuest] Loot ALLOWED for character {Session.Player.Name}");
             // Update player's quest completion tracking
             //if (!string.IsNullOrEmpty(ipQuestName))
-           // {
-           //     QuestManager.Stamp(ipQuestName);
+            // {
+            //     QuestManager.Stamp(ipQuestName);
             //}
 
             return true; // Allow looting
@@ -3062,6 +3075,21 @@ namespace ACE.Server.WorldObjects
             {
                 Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, sourceStack.Guid.Full, WeenieError.None));
                 return;
+            }
+
+            // Check IP quest restrictions when picking up stackable items from world/containers
+            //Console.WriteLine($"[IPQuest][StackMerge] Merge attempt: source={sourceStack.Name}, sourceRootOwner={sourceStackRootOwner?.Name ?? "null"}, targetRootOwner={targetStackRootOwner?.Name ?? "null"}, this={this.Name}");
+            //Console.WriteLine($"[IPQuest][StackMerge] Condition check: (sourceStackRootOwner != this) = {sourceStackRootOwner != this}, (targetStackRootOwner == this) = {targetStackRootOwner == this}");
+
+            if (sourceStackRootOwner != this && targetStackRootOwner == this)
+            {
+                //Console.WriteLine($"[IPQuest][StackMerge] Condition passed, calling HandleIPQuestItem...");
+                if (!HandleIPQuestItem(sourceStack, sourceStackRootOwner, targetStackRootOwner, mergeFromGuid))
+                {
+                    //Console.WriteLine($"[IPQuest][StackMerge] HandleIPQuestItem returned false, blocking stack merge");
+                    Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, mergeFromGuid));
+                    return;
+                }
             }
 
             if (IsTrading)

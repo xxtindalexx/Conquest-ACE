@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-
 using ACE.Common;
 using ACE.Common.Extensions;
 using ACE.Entity.Enum;
@@ -10,10 +5,15 @@ using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Managers;
-using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.GameEvent.Events;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Structure;
 using ACE.Server.WorldObjects.Entity;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace ACE.Server.WorldObjects.Managers
 {
@@ -131,7 +131,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// <summary>
         /// Add/update an enchantment in this object's registry
         /// </summary>
-        public virtual AddEnchantmentResult Add(Spell spell, WorldObject caster, WorldObject weapon, bool equip = false, bool isWeaponSpell = false)
+        public virtual AddEnchantmentResult Add(Spell spell, WorldObject caster, WorldObject weapon, bool equip = false)
         {
             var result = new AddEnchantmentResult();
 
@@ -141,7 +141,7 @@ namespace ACE.Server.WorldObjects.Managers
             // if none, add new record
             if (entries.Count == 0)
             {
-                var newEntry = BuildEntry(spell, caster, weapon, equip, isWeaponSpell);
+                var newEntry = BuildEntry(spell, caster, weapon, equip);
                 newEntry.LayerId = 1;
                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
                 WorldObject.ChangesDetected = true;
@@ -151,7 +151,7 @@ namespace ACE.Server.WorldObjects.Managers
                 return result;
             }
 
-            result.BuildStack(entries, spell, caster, equip, isWeaponSpell);
+            result.BuildStack(entries, spell, caster, equip);
 
             // handle cases:
             // surpassing: new spell is written to next layer
@@ -182,9 +182,10 @@ namespace ACE.Server.WorldObjects.Managers
                 // should be update the StatModVal here?
 
                 var duration = spell.Duration;
-                if (caster is Player player && player.AugmentationIncreasedSpellDuration > 0 && !isWeaponSpell && spell.DotDuration == 0)
-                    duration *= 1.0f + player.AugmentationIncreasedSpellDuration * 0.2f;
-
+                if (caster is Player player && (player.AugmentationIncreasedSpellDuration > 0 || (player.LuminanceAugmentSpellDurationCount ?? 0) > 0) && spell.DotDuration == 0)
+                {
+                    duration *= 1.0f + (player.AugmentationIncreasedSpellDuration * 0.2f) + ((player.LuminanceAugmentSpellDurationCount ?? 0) * 0.05f);
+                }
                 var timeRemaining = refreshSpell.Duration + refreshSpell.StartTime;
 
                 if (duration > timeRemaining)
@@ -206,7 +207,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// <summary>
         /// Builds an enchantment registry entry from a spell ID
         /// </summary>
-        private PropertiesEnchantmentRegistry BuildEntry(Spell spell, WorldObject caster = null, WorldObject weapon = null, bool equip = false, bool isWeaponSpell = false)
+        private PropertiesEnchantmentRegistry BuildEntry(Spell spell, WorldObject caster = null, WorldObject weapon = null, bool equip = false)
         {
             var entry = new PropertiesEnchantmentRegistry();
 
@@ -219,8 +220,11 @@ namespace ACE.Server.WorldObjects.Managers
             {
                 entry.Duration = spell.Duration;
 
-                if (caster is Player player && player.AugmentationIncreasedSpellDuration > 0 && !isWeaponSpell && spell.DotDuration == 0)
-                    entry.Duration *= 1.0f + player.AugmentationIncreasedSpellDuration * 0.2f;
+                if (caster is Player player && !spell.IsFellowshipSpell && (player.AugmentationIncreasedSpellDuration > 0 || (player.LuminanceAugmentSpellDurationCount ?? 0) > 0) && spell.DotDuration == 0)
+                {
+                    entry.Duration *= 1.0f + (player.AugmentationIncreasedSpellDuration * 0.2f) + ((player.LuminanceAugmentSpellDurationCount ?? 0) * 0.05f);
+                    //entry.Duration *= (caster as Player).LuminanceAugmentSpellDurationCount ?? 0 * 0.001f;
+                }
             }
             else
             {
@@ -245,10 +249,112 @@ namespace ACE.Server.WorldObjects.Managers
             entry.DegradeLimit = spell.DegradeLimit;
             entry.StatModType = spell.StatModType;
             entry.StatModKey = spell.StatModKey;
-            entry.StatModValue = spell.StatModVal;
+            bool selfCastEligible = (spell.IsBeneficial && spell.IsSelfTargeted) || spell.IsHarmful;
 
-            if (spell.IsBeneficial) // should "server" data be fixed or is this the better way to do this?
-                entry.StatModType |= EnchantmentTypeFlags.Beneficial;
+            //calculate luminance aug additions for statmod
+            var luminanceAug = 0.0f;
+
+            if (caster != null && caster is Creature)
+            {
+                var player = caster as Creature;
+                if (spell.School == MagicSchool.CreatureEnchantment && !spell.IsFellowshipSpell && spell.Id != 5753 && spell.IsBeneficial && spell.IsSelfTargeted)
+                {
+                    luminanceAug += player.LuminanceAugmentCreatureCount ?? 0.0f;
+                    entry.AugmentationLevelWhenCast = player.LuminanceAugmentCreatureCount ?? 0;
+                }
+                else if (spell.School == MagicSchool.CreatureEnchantment && spell.IsHarmful)
+                {
+                    luminanceAug -= player.LuminanceAugmentCreatureCount ?? 0.0f;
+                    entry.AugmentationLevelWhenCast = player.LuminanceAugmentCreatureCount ?? 0;
+                }
+
+                if (spell.School == MagicSchool.ItemEnchantment)
+                {
+                    // Impen: StatModKey == 28, but exclude Brittlemail/Tattercoat spell IDs
+                    if (spell.StatModKey == 28) //impen
+                    {
+                        if (spell.Id == 1487 || spell.Id == 1488 || spell.Id == 1489 || spell.Id == 1490 ||
+                            spell.Id == 1491 || spell.Id == 1492 || spell.Id == 4399 || spell.Id == 2100) // Brittlemail/Tattercoat
+                        {
+                            luminanceAug -= (player.LuminanceAugmentItemCount ?? 0.0f) * 1.00f;
+                        }
+                        else // Impen
+                        {
+                            luminanceAug += (player.LuminanceAugmentItemCount ?? 0.0f) * 1.00f;
+                        }
+                    }
+                    else if (spell.StatModKey == 360 && selfCastEligible) //blood drinker buffed
+                    {
+                        luminanceAug += (player.LuminanceAugmentItemCount ?? 0.0f) * 0.5f;
+                    }
+                    else if (spell.StatModKey == 170 && selfCastEligible) //spirit drinker
+                    {
+                        luminanceAug += (player.LuminanceAugmentItemCount ?? 0.0f) * 0.005f;
+                    }
+                    else if (spell.Name.Contains("Bane") || spell.StatModKey == 171
+                        || spell.StatModKey == 318 || spell.StatModKey == 317) //banes and surges
+                    {
+                        luminanceAug += (player.LuminanceAugmentItemCount ?? 0.0f) * 0.01f;
+                    }
+                    else if (spell.StatModKey == 168 || spell.StatModKey == 169 && selfCastEligible)
+                    {
+                        luminanceAug += GetItemAugPercentageRating(player.LuminanceAugmentItemCount ?? 0); //(player.LuminanceAugmentItemCount ?? 0.0f) * 0.01f;
+                    }
+                    else if (spell.StatModKey == 361 && selfCastEligible) //eg atlans alacrity
+                    {
+                        luminanceAug -= (player.LuminanceAugmentItemCount ?? 0.0f) * 1.0f;
+                    }
+                    if (selfCastEligible)
+                    {
+                        entry.AugmentationLevelWhenCast = player.LuminanceAugmentItemCount ?? 0;
+                    }
+                }
+                if (spell.School == MagicSchool.LifeMagic)
+                {
+                    if (spell.IsBeneficial && spell.IsSelfTargeted) //buffs
+                    {
+                        if (spell.StatModKey == 0) //armor -- single point
+                        {
+                            luminanceAug += (player.LuminanceAugmentLifeCount ?? 0.0f);
+                        }
+                        else if (spell.StatModKey == 64 || spell.StatModKey == 65 || spell.StatModKey == 66 //slash, pierce, bludge
+                            || spell.StatModKey == 67 || spell.StatModKey == 68 || spell.StatModKey == 69 || spell.StatModKey == 70) //fire, cold, acid, electric
+                        {
+                            luminanceAug -= GetLifeAugProtectRating(player.LuminanceAugmentLifeCount ?? 0);
+                        }
+                        else
+                        {
+                            luminanceAug += (player.LuminanceAugmentLifeCount ?? 0.0f) * 0.10f;
+                        }
+                    }
+                    else if (spell.IsHarmful) //debuffs -- single point
+                    {
+                        if (spell.StatModKey == 0)
+                        {
+                            luminanceAug -= (player.LuminanceAugmentLifeCount ?? 0.0f);
+                        }
+                        else if (spell.StatModKey == 64 || spell.StatModKey == 65 || spell.StatModKey == 66 //slash, pierce, bludge
+                            || spell.StatModKey == 67 || spell.StatModKey == 68 || spell.StatModKey == 69 || spell.StatModKey == 70 //fire, cold, acid, electric
+                            || spell.StatModKey == 312 || spell.StatModKey == 307 || spell.StatModKey == 318 || spell.StatModKey == 308 || spell.StatModKey == 317) //surge of regeneration
+                        {
+                            luminanceAug += (player.LuminanceAugmentLifeCount ?? 0.0f) * 0.01f;
+                        }
+                        else
+                        {
+                            luminanceAug -= (player.LuminanceAugmentLifeCount ?? 0.0f) * 0.10f;
+                        }
+                    }
+                    entry.AugmentationLevelWhenCast = player.LuminanceAugmentLifeCount ?? 0;
+                }
+
+                entry.StatModValue = spell.StatModVal + luminanceAug;
+
+            }
+            else
+            {
+                entry.StatModValue = spell.StatModVal;
+            }
+
 
             if (spell.IsDamageOverTime)
             {
@@ -276,6 +382,125 @@ namespace ACE.Server.WorldObjects.Managers
             }
 
             return entry;
+        }
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float GetLifeAugProtectRating(long LifeAugAmt)
+        {
+            float bonus = 0;
+            for (int x = 0; x < LifeAugAmt; x++)
+            {
+                if (x < 10)
+                {
+                    bonus += 0.01f;
+                }
+                else if (x < 30)
+                {
+                    bonus += 0.005f;
+                }
+                else if (x < 50)
+                {
+                    bonus += 0.0025f;
+                }
+                else if (x < 70)
+                {
+                    bonus += 0.00125f;
+                }
+                else if (x < 100)
+                {
+                    bonus += 0.000625f;
+                }
+                else if (x < 120)
+                {
+                    bonus += 0.000312f;
+                }
+                else if (x < 150)
+                {
+                    bonus += 0.000156f;
+                }
+                else if (x < 175)
+                {
+                    bonus += 0.000078f;
+                }
+                else if (x < 200)
+                {
+                    bonus += 0.000039f;
+                }
+                else if (x < 225)
+                {
+                    bonus += 0.0000195f;
+                }
+                else
+                {
+                    bonus += 0.0000100f;
+                }
+            }
+            return bonus;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float GetItemAugPercentageRating(long itemAugAmt)
+        {
+            float bonus = 0;
+            for (int x = 0; x < itemAugAmt; x++)
+            {
+                if (x < 100)
+                {
+                    bonus += 0.01f;
+                }
+                else if (x < 150)
+                {
+                    bonus += 0.0075f;
+                }
+                else if (x < 200)
+                {
+                    bonus += 0.005625f;
+                }
+                else if (x < 250)
+                {
+                    bonus += 0.004218f;
+                }
+                else if (x < 300)
+                {
+                    bonus += 0.003164f;
+                }
+                else if (x < 350)
+                {
+                    bonus += 0.002373f;
+                }
+                else if (x < 400)
+                {
+                    bonus += 0.001779f;
+                }
+                else if (x < 450)
+                {
+                    bonus += 0.001334f;
+                }
+                else
+                {
+                    bonus += 0.00100f;
+                }
+            }
+            return bonus;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float GetItemAugBloodDrinkerRating(long itemAugAmt, WorldObject weapon)
+        {
+            if (weapon.W_WeaponType == WeaponType.TwoHanded) //TwoHanded
+            {
+                return itemAugAmt * 0.25f;
+            }
+            if (weapon.IsCleaving && weapon.W_AttackType == AttackType.MultiStrike) //Both cleave, multi
+            {
+                return itemAugAmt * 0.25f;
+            }
+            if (weapon.IsCleaving || weapon.W_AttackType == AttackType.MultiStrike) //Either cleave, multi
+            {
+                return itemAugAmt * 0.5f;
+            }
+            return itemAugAmt;
         }
 
         /// <summary>

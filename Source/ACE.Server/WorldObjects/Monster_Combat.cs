@@ -728,13 +728,13 @@ namespace ACE.Server.WorldObjects
             // Define items and their respective messages
             var spawnOptions = new List<(int? DamageObjectId, int VisualObjectId, string Message)>
             {
-                (90000411, 91000411, "A searing pool of acid forms at their location, better run away!"),
-                (90000412, 91000412, "Fire bursts at their feet, move quickly!"),
-                (90000413, 91000413, "A chilling frost gathers, flee to avoid being frozen!"),
-                (90000414, 91000414, "A shocking vortex opens, get out of its pull!"),
-                (90000415, 91000415, "A Sandstorm stirs up, move now or be torn to shreds!"),
-                (90000416, 91000416, "A void emerges from the ground, quickly escape or wither away!"),
-                (null, 90000417, "An iron cage falls from the sky, dodge it or be trapped!")
+                (13370025, 13370026, "A searing pool of acid forms at their location, better run away!"),
+                (13370027, 13370028, "Fire bursts at their feet, move quickly!"),
+                (13370029, 13370030, "A chilling frost gathers, flee to avoid being frozen!"),
+                (13370031, 13370032, "A shocking vortex opens, get out of its pull!"),
+                (13370033, 13370034, "A Sandstorm stirs up, move now or be torn to shreds!"),
+                (13370035, 13370036, "A void emerges from the ground, quickly escape or wither away!"),
+                (null, 13370037, "An iron cage falls from the sky, dodge it or be trapped!")
             };
 
             // Select a random object set
@@ -754,7 +754,12 @@ namespace ACE.Server.WorldObjects
                     {
                         damageObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
                         damageObj.Location.LandblockId = new LandblockId(damageObj.Location.GetCell());
-                        damageObj.EnterWorld();
+                        // Thread-safe EnterWorld
+                        var damageObjToSpawn = damageObj;
+                        WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
+                        {
+                            damageObjToSpawn.EnterWorld();
+                        }));
                     }
                 }
             }
@@ -768,7 +773,12 @@ namespace ACE.Server.WorldObjects
 
             visualObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
             visualObj.Location.LandblockId = new LandblockId(visualObj.Location.GetCell());
-            visualObj.EnterWorld();
+            // Thread-safe EnterWorld
+            var visualObjToSpawn = visualObj;
+            WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
+            {
+                visualObjToSpawn.EnterWorld();
+            }));
 
             // Broadcast warning
             BroadcastMessage($"The enraged mob targets {targetPlayer.Name}! {message}", 250.0f);

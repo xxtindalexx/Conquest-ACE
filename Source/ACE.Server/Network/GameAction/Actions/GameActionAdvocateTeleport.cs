@@ -15,7 +15,7 @@ namespace ACE.Server.Network.GameAction.Actions
         public static void Handle(ClientMessage message, Session session)
         {
             var target = message.Payload.ReadString16L();
-            var position = new Position(message.Payload, session.Player.Location.Variation);
+            var position = new Position(message.Payload, null);
             // this check is also done clientside, see: PlayerDesc::PlayerIsPSR
             if (!session.Player.IsAdmin && !session.Player.IsArch && !session.Player.IsPsr)
                 return;

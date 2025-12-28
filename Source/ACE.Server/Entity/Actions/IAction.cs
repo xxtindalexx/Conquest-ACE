@@ -63,6 +63,7 @@ namespace ACE.Server.Entity.Actions
         Lock_UseUnlocker,
         MonsterAwareness_CheckTargetsInner,
         MonsterCombat_DeleteObjectAfterDelay,
+        MonsterCombat_SpawnHotspot,
         MonsterMagic_CastSpell,
         MonsterMelee_DoAttack,
         MonsterMissile_EnqueueBroadcast,

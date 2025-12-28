@@ -21,7 +21,9 @@ namespace ACE.Server.WorldObjects
 {
     partial class Player
     {
-        private static readonly Position MarketplaceDrop = DatabaseManager.World.GetCachedWeenie("portalmarketplace")?.GetPosition(PositionType.Destination) ?? new Position(0x5756015F, 95.119186f, -86.254936f, 0.005000f, -0.999941f, 0, 0, 0.010906f, false, 2);
+        // Marketplace drop location - Variant 2
+        // Note: Cannot use database weenie position because GetPosition() doesn't support variant parameter
+        private static readonly Position MarketplaceDrop = new Position(0x5756015F, 95.119186f, -86.254936f, 0.005f, 0f, 0f, 0.010906f, -0.999941f, false, 2);
 
         /// <summary>
         /// Teleports the player to position
