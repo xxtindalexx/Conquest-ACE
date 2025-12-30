@@ -1292,6 +1292,16 @@ namespace ACE.Server.WorldObjects
 
             //Console.WriteLine($"[IPQuest] Item '{item.Name}' has IPQuest: '{ipQuestName}'");
 
+            // FIRST: Check normal quest behavior (character-level check)
+            // This ensures the character hasn't already looted it and respects timers
+            if (!QuestManager.CanSolve(ipQuestName))
+            {
+                // Character already has this quest or timer hasn't expired
+                QuestManager.HandleSolveError(ipQuestName);
+                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
+                return false;
+            }
+
             // Fetch the player's IP address
             string playerIp = new System.Net.IPAddress(Session.Player.Account.LastLoginIP).ToString();
             //Console.WriteLine($"[IPQuest] Player IP: {playerIp}, Character: {Session.Player.Name}");
@@ -1306,7 +1316,7 @@ namespace ACE.Server.WorldObjects
             }
             //Console.WriteLine($"[IPQuest] Quest found - ID: {quest.Id}, Name: {quest.Name}, IpLootLimit: {quest.IpLootLimit}, IsIPRestricted: {quest.IsIpRestricted}");
 
-            // Check if the player is allowed to loot the item
+            // SECOND: Check IP restrictions (IP-level check)
             //Console.WriteLine($"[IPQuest] Calling IncrementAndCheckIPQuestAttempts with questId={quest.Id}, playerIp={playerIp}, characterId={Session.Player.Character.Id}, maxAttempts={quest.IpLootLimit.GetValueOrDefault(1)}");
             var result = DatabaseManager.ShardDB.IncrementAndCheckIPQuestAttempts(
                 questId: quest.Id,
@@ -1326,12 +1336,8 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
-            //Console.WriteLine($"[IPQuest] Loot ALLOWED for character {Session.Player.Name}");
-            // Update player's quest completion tracking
-            //if (!string.IsNullOrEmpty(ipQuestName))
-            // {
-            //     QuestManager.Stamp(ipQuestName);
-            //}
+            // THIRD: Stamp the quest for this character (tracks timer and completion)
+            QuestManager.Stamp(ipQuestName);
 
             return true; // Allow looting
         }

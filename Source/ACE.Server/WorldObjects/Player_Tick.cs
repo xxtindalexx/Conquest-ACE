@@ -611,6 +611,10 @@ namespace ACE.Server.WorldObjects
             // Check if current location is a PK-only dungeon
             if (ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
             {
+                // Admins bypass PK dungeon restrictions
+                if (IsAdmin)
+                    return;
+
                 string bootReason = null;
 
                 // Check 1: NPK players not allowed
