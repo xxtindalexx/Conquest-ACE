@@ -18,8 +18,8 @@ namespace ACE.Server.WorldObjects
         // todo: Figure out if this is the best place to do this, and whether there are concurrency issues associated with it.
         public void FellowshipCreate(string fellowshipName, bool shareXP)
         {
-            // An Olthoi player cannot create a fellowship
-            if (IsOlthoiPlayer)
+            // An Olthoi player or Mule cannot create a fellowship
+            if (IsOlthoiPlayer || IsMule)
             {
                 Session.Network.EnqueueSend(new GameEventWeenieError(Session, WeenieError.OlthoiCannotJoinFellowship));
                 return;
@@ -86,6 +86,14 @@ namespace ACE.Server.WorldObjects
         public void FellowshipRecruit(Player newPlayer)
         {
             if (newPlayer == null) return;
+
+            // An Olthoi player cannot join a fellowship
+            if (newPlayer.IsMule)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Mules are to lazy to join fellowships.", ChatMessageType.Broadcast));
+                SendWeenieError(WeenieError.None);
+                return;
+            }
 
             // An Olthoi player cannot join a fellowship
             if (newPlayer.IsOlthoiPlayer)

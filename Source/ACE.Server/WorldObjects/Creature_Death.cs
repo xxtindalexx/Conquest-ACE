@@ -586,36 +586,46 @@ namespace ACE.Server.WorldObjects
                         var killerPlayer = killer?.TryGetAttacker() as Player;
                         if (killerPlayer != null && (player.Level ?? 1) > 50)
                         {
-                            var lastSoulFragmentLoot = killerPlayer.LastSoulFragmentLootTime ?? 0;
-                            var currentTime = Time.GetUnixTime();
-                            var cooldownHours = ThreadSafeRandom.Next(6, 8);  // Random 6-8 hour cooldown
-                            var cooldownSeconds = cooldownHours * 3600;
-
-                            if (currentTime >= lastSoulFragmentLoot + cooldownSeconds)
+                            // CONQUEST: Don't drop soul fragments if killer and victim are in same allegiance
+                            if (killerPlayer.Allegiance != null && player.Allegiance != null &&
+                                killerPlayer.Allegiance.MonarchId == player.Allegiance.MonarchId)
                             {
-                                // Cooldown has passed, drop Soul Fragments
-                                var soulFragmentCount = ThreadSafeRandom.Next(1, 3);  // 1-3 soul fragments
-                                var soulFragmentWeenieId = 13370003u;  // TODO: Replace with actual Soul Fragment weenie ID
-
-                                for (int i = 0; i < soulFragmentCount; i++)
-                                {
-                                    var soulFragment = WorldObjectFactory.CreateNewWorldObject(soulFragmentWeenieId);
-                                    if (soulFragment != null)
-                                    {
-                                        soulFragment.Location = new Position(corpse.Location);
-                                        corpse.TryAddToInventory(soulFragment);
-                                    }
-                                }
-
-                                // Update the loot timestamp when Soul Fragments are created
-                                killerPlayer.LastSoulFragmentLootTime = (long)currentTime;
+                                // Same allegiance - no soul fragment drops
+                                // No message needed, silently skip
                             }
                             else
                             {
-                                // Still on cooldown - notify killer
-                                var timeRemaining = (lastSoulFragmentLoot + cooldownSeconds) - currentTime;
-                                var hoursRemaining = Math.Ceiling(timeRemaining / 3600.0);
-                                killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {hoursRemaining} more hour(s) before you can loot Soul Fragments again.", ChatMessageType.Broadcast));
+                                var lastSoulFragmentLoot = killerPlayer.LastSoulFragmentLootTime ?? 0;
+                                var currentTime = Time.GetUnixTime();
+                                var cooldownHours = ThreadSafeRandom.Next(6, 8);  // Random 6-8 hour cooldown
+                                var cooldownSeconds = cooldownHours * 3600;
+
+                                if (currentTime >= lastSoulFragmentLoot + cooldownSeconds)
+                                {
+                                    // Cooldown has passed, drop Soul Fragments
+                                    var soulFragmentCount = ThreadSafeRandom.Next(1, 3);  // 1-3 soul fragments
+                                    var soulFragmentWeenieId = 13370003u;  // TODO: Replace with actual Soul Fragment weenie ID
+
+                                    for (int i = 0; i < soulFragmentCount; i++)
+                                    {
+                                        var soulFragment = WorldObjectFactory.CreateNewWorldObject(soulFragmentWeenieId);
+                                        if (soulFragment != null)
+                                        {
+                                            soulFragment.Location = new Position(corpse.Location);
+                                            corpse.TryAddToInventory(soulFragment);
+                                        }
+                                    }
+
+                                    // Update the loot timestamp when Soul Fragments are created
+                                    killerPlayer.LastSoulFragmentLootTime = (long)currentTime;
+                                }
+                                else
+                                {
+                                    // Still on cooldown - notify killer
+                                    var timeRemaining = (lastSoulFragmentLoot + cooldownSeconds) - currentTime;
+                                    var hoursRemaining = Math.Ceiling(timeRemaining / 3600.0);
+                                    killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {hoursRemaining} more hour(s) before you can loot Soul Fragments again.", ChatMessageType.Broadcast));
+                                }
                             }
                         }
                     }

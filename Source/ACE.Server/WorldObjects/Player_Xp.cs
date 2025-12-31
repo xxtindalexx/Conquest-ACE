@@ -28,6 +28,10 @@ namespace ACE.Server.WorldObjects
         {
             //Console.WriteLine($"{Name}.EarnXP({amount}, {sharable}, {fixedAmount})");
 
+            // CONQUEST: Mules cannot earn XP
+            if (IsMule)
+                return;
+
             // apply xp modifiers.  Quest XP is multiplicative with general XP modification
             var questModifier = PropertyManager.GetDouble("quest_xp_modifier");
             var modifier = PropertyManager.GetDouble("xp_modifier");
@@ -80,7 +84,7 @@ namespace ACE.Server.WorldObjects
         /// <param name="shareable">If TRUE, this XP can be shared with fellowship members</param>
         public void GrantXP(long amount, XpType xpType, ShareType shareType = ShareType.All)
         {
-            if (IsOlthoiPlayer)
+            if (IsOlthoiPlayer || IsMule)
             {
                 if (HasVitae)
                     UpdateXpVitae(amount);

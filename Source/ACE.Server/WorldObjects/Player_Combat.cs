@@ -1176,6 +1176,13 @@ namespace ACE.Server.WorldObjects
 
             var targetPlayer = target as Player;
 
+            // CONQUEST: Mules cannot attack or be attacked
+            if (IsMule)
+                return new List<WeenieErrorWithString>() { WeenieErrorWithString.YouFailToAffect_YouAreNotPK, WeenieErrorWithString._FailsToAffectYou_TheyAreNotPK };
+
+            if (targetPlayer != null && targetPlayer.IsMule)
+                return new List<WeenieErrorWithString>() { WeenieErrorWithString.YouFailToAffect_TheyAreNotPK, WeenieErrorWithString._FailsToAffectYou_YouAreNotPK };
+
             if (targetPlayer != null)
             {
                 if (spell == null || spell.IsHarmful)

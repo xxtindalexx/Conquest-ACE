@@ -49,6 +49,7 @@
     <None Remove="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_dagger.txt" />
     <None Remove="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_dagger_ms.txt" />
     <None Remove="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_mace.txt" />
+    <None Remove="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_mace_jitte.txt" />
     <None Remove="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_spear.txt" />
     <None Remove="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_staff.txt" />
     <None Remove="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_sword.txt" />
@@ -152,6 +153,7 @@
     <EmbeddedResource Include="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_dagger.txt" />
     <EmbeddedResource Include="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_dagger_ms.txt" />
     <EmbeddedResource Include="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_mace.txt" />
+    <EmbeddedResource Include="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_mace_jitte.txt" />
     <EmbeddedResource Include="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_spear.txt" />
     <EmbeddedResource Include="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_staff.txt" />
     <EmbeddedResource Include="Entity\Mutations\MeleeWeapons\Damage_WieldDifficulty_DamageVariance\heavy_sword.txt" />

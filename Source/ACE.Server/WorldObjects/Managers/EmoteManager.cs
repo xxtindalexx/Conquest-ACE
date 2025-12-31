@@ -1546,30 +1546,39 @@ namespace ACE.Server.WorldObjects.Managers
                 case EmoteType.SetAttributeStat:
                     if (player != null && emote.Amount != null)
                     {
+                        var targetRank = (uint)emote.Amount;
+                        var xpCost = (uint)Player.GetXPCostByRank(targetRank);
+
                         switch (emote.Stat)
                         {
                             case 1:
-                                player.Strength.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Strength.ExperienceSpent = xpCost;
+                                player.Strength.Ranks = (ushort)targetRank;
                                 player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Strength));
                                 break;
                             case 2:
-                                player.Endurance.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Endurance.ExperienceSpent = xpCost;
+                                player.Endurance.Ranks = (ushort)targetRank;
                                 player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Endurance));
                                 break;
                             case 3:
-                                player.Quickness.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Quickness.ExperienceSpent = xpCost;
+                                player.Quickness.Ranks = (ushort)targetRank;
                                 player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Quickness));
                                 break;
                             case 4:
-                                player.Coordination.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Coordination.ExperienceSpent = xpCost;
+                                player.Coordination.Ranks = (ushort)targetRank;
                                 player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Coordination));
                                 break;
                             case 5:
-                                player.Focus.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Focus.ExperienceSpent = xpCost;
+                                player.Focus.Ranks = (ushort)targetRank;
                                 player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Focus));
                                 break;
                             case 6:
-                                player.Self.Ranks = Player.CalcAttributeRank(Player.GetXPCostByRank((uint)emote.Amount));
+                                player.Self.ExperienceSpent = xpCost;
+                                player.Self.Ranks = (ushort)targetRank;
                                 player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateAttribute(player, player.Self));
                                 break;
                             default:
@@ -1580,9 +1589,39 @@ namespace ACE.Server.WorldObjects.Managers
                     }
                     break;
                 case EmoteType.SetSecondaryAttributeStat:
-                    if (player != null)
+                    if (player != null && emote.Amount != null)
                     {
+                        var targetRank = (uint)emote.Amount;
+                        var vitalXpTable = DatManager.PortalDat.XpTable.VitalXpList;
 
+                        if (targetRank >= vitalXpTable.Count)
+                        {
+                            log.Warn($"SetSecondaryAttributeStat: target rank {targetRank} exceeds max vital rank");
+                            break;
+                        }
+
+                        var xpCost = vitalXpTable[(int)targetRank];
+
+                        switch (emote.Stat)
+                        {
+                            case 1: // MaxHealth
+                                player.Health.ExperienceSpent = xpCost;
+                                player.Health.Ranks = (ushort)targetRank;
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Health));
+                                break;
+                            case 3: // MaxStamina
+                                player.Stamina.ExperienceSpent = xpCost;
+                                player.Stamina.Ranks = (ushort)targetRank;
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Stamina));
+                                break;
+                            case 5: // MaxMana
+                                player.Mana.ExperienceSpent = xpCost;
+                                player.Mana.Ranks = (ushort)targetRank;
+                                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Mana));
+                                break;
+                            default:
+                                break;
+                        }
                     }
                     break;
                 case EmoteType.GrantAttributeStat:

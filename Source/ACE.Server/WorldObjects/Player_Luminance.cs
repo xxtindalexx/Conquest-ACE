@@ -14,7 +14,7 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void EarnLuminance(long amount, XpType xpType, ShareType shareType = ShareType.All)
         {
-            if (IsOlthoiPlayer)
+            if (IsOlthoiPlayer || IsMule)
                 return;
 
             // following the same model as Player_Xp

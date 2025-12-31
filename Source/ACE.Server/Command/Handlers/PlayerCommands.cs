@@ -713,6 +713,13 @@ namespace ACE.Server.Command.Handlers
             if (session.Player == null)
                 return;
 
+            // CONQUEST: Mules cannot use PK command
+            if (session.Player.IsMule)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Mules cannot toggle PK status.", ChatMessageType.Broadcast));
+                return;
+            }
+
             if (parameters.Length == 0)
             {
                 var status = session.Player.PlayerKillerStatus == PlayerKillerStatus.PK ? "ON" : "OFF";

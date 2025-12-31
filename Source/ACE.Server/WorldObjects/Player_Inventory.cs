@@ -1292,6 +1292,14 @@ namespace ACE.Server.WorldObjects
 
             //Console.WriteLine($"[IPQuest] Item '{item.Name}' has IPQuest: '{ipQuestName}'");
 
+            // CONQUEST: Mules cannot loot IPQuest items
+            if (IsMule)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Your IP has reached the limit for this item. Mule characters cannot loot IP-restricted quest items.", ChatMessageType.Broadcast));
+                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
+                return false;
+            }
+
             // FIRST: Check normal quest behavior (character-level check)
             // This ensures the character hasn't already looted it and respects timers
             if (!QuestManager.CanSolve(ipQuestName))
