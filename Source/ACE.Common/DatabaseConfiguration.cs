@@ -28,5 +28,14 @@ namespace ACE.Common
             Username = "root",
             Password = ""
         };
+
+        public MySqlConfiguration Log { get; set; } = new MySqlConfiguration()
+        {
+            Host = "127.0.0.1",
+            Port = 3306,
+            Database = "ace_log",
+            Username = "root",
+            Password = ""
+        };
     }
 }
