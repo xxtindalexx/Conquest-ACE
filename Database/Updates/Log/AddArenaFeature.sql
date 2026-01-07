@@ -1,10 +1,22 @@
 USE `ace_log`;
 
+-- Create pk_kills_log table if it doesn't exist (for Conquest which doesn't have LogBase.sql)
+CREATE TABLE IF NOT EXISTS `pk_kills_log` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Unique Id of this Kill',
+  `killer_id` INT UNSIGNED NOT NULL COMMENT 'Unique Id of Killer Character',
+  `victim_id` INT UNSIGNED NOT NULL COMMENT 'Unique Id of Victim Character',
+  `killer_monarch_id` INT UNSIGNED,
+  `victim_monarch_id` INT UNSIGNED,
+  `kill_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=INNODB DEFAULT CHARSET=utf8mb4;
+
+-- Add arena columns if they don't already exist
 ALTER TABLE pk_kills_log
-ADD killer_arena_player_id INT;
+ADD COLUMN IF NOT EXISTS killer_arena_player_id INT;
 
 ALTER TABLE pk_kills_log
-ADD victim_arena_player_id INT;
+ADD COLUMN IF NOT EXISTS victim_arena_player_id INT;
 
 --
 -- Table structure for table `arena_event
