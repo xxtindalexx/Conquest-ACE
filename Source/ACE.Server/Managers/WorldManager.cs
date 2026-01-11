@@ -497,6 +497,8 @@ namespace ACE.Server.Managers
 
             HouseManager.Tick();
 
+            ArenaManager.Tick();
+
             ServerPerformanceMonitor.RegisterEventEnd(ServerPerformanceMonitor.MonitorType.UpdateGameWorld_Entire);
             ServerPerformanceMonitor.RegisterCumulativeEvents();
 

@@ -96,5 +96,8 @@ namespace ACE.Entity.Enum.Properties
         GodState                       = 9006,
         TinkerLog                      = 9007,
         IPQuest                        = 9008,
+        ArenaRewardsByOpponent = 9009,
+        PKQuestInfo = 9010,
+        CurrentRareEnchantmentIds = 52029,
     }
 }

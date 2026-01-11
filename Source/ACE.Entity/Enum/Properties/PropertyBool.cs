@@ -201,5 +201,9 @@ namespace ACE.Entity.Enum.Properties
         /// If TRUE on a weapon, its cast-on-strike can proc on cleaved targets
         /// </summary>
         WeaponProcOnCleaveTargets = 9036,
+        IsArenaObserver = 9037,
+        IsPendingArenaObserver = 9038,
+        HasArenaRareDmgBuff = 9039,
+        HasArenaRareDmgReductionBuff = 9040,
     }
 }

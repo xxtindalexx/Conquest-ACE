@@ -396,6 +396,67 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.LumAugMissileCount); else SetProperty(PropertyInt64.LumAugMissileCount, value.Value); }
         }
 
+        // CONQUEST: Stored PvP Augmentation Values (for crash safety)
+        public long? StoredPvPCreatureAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPCreatureAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPCreatureAugs); else SetProperty(PropertyInt64.StoredPvPCreatureAugs, value.Value); }
+        }
+
+        public long? StoredPvPItemAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPItemAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPItemAugs); else SetProperty(PropertyInt64.StoredPvPItemAugs, value.Value); }
+        }
+
+        public long? StoredPvPLifeAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPLifeAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPLifeAugs); else SetProperty(PropertyInt64.StoredPvPLifeAugs, value.Value); }
+        }
+
+        public long? StoredPvPVoidAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPVoidAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPVoidAugs); else SetProperty(PropertyInt64.StoredPvPVoidAugs, value.Value); }
+        }
+
+        public long? StoredPvPWarAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPWarAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPWarAugs); else SetProperty(PropertyInt64.StoredPvPWarAugs, value.Value); }
+        }
+
+        public long? StoredPvPDurationAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPDurationAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPDurationAugs); else SetProperty(PropertyInt64.StoredPvPDurationAugs, value.Value); }
+        }
+
+        public long? StoredPvPSpecializeAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPSpecializeAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPSpecializeAugs); else SetProperty(PropertyInt64.StoredPvPSpecializeAugs, value.Value); }
+        }
+
+        public long? StoredPvPSummonAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPSummonAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPSummonAugs); else SetProperty(PropertyInt64.StoredPvPSummonAugs, value.Value); }
+        }
+
+        public long? StoredPvPMeleeAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPMeleeAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPMeleeAugs); else SetProperty(PropertyInt64.StoredPvPMeleeAugs, value.Value); }
+        }
+
+        public long? StoredPvPMissileAugs
+        {
+            get => GetProperty(PropertyInt64.StoredPvPMissileAugs) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPMissileAugs); else SetProperty(PropertyInt64.StoredPvPMissileAugs, value.Value); }
+        }
+
         public bool CanEnrage
         {
             get => GetProperty(PropertyBool.CanEnrage) ?? false;

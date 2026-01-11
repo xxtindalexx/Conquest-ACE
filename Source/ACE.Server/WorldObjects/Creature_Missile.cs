@@ -146,7 +146,8 @@ namespace ACE.Server.WorldObjects
             proj.EnqueueBroadcast(new GameMessageScript(proj.Guid, PlayScript.Launch, 0f));
 
             // Create split arrows if weapon has split property
-            if (weapon != null)
+            // CONQUEST: Split arrows do not work in PvP (when primary target is a player)
+            if (weapon != null && !(target is Player))
             {
                 var hasSplitArrows = weapon.GetProperty(PropertyBool.SplitArrows);
                 if (hasSplitArrows == true)
@@ -760,6 +761,10 @@ namespace ACE.Server.WorldObjects
                 creaturesFound++;
 
                 if (obj == primaryTarget || obj == this)
+                    continue;
+
+                // CONQUEST: Never target players with split arrows (PvP protection)
+                if (creature is Player)
                     continue;
 
                 // Check basic damage capability first

@@ -24,7 +24,7 @@ namespace ACE.Server.WorldObjects
         /// <param name="amount">The amount of XP being added</param>
         /// <param name="xpType">The source of XP being added</param>
         /// <param name="shareable">True if this XP can be shared with Fellowship</param>
-        public void EarnXP(long amount, XpType xpType, ShareType shareType = ShareType.All)
+        public void EarnXP(long amount, XpType xpType, ShareType shareType = ShareType.All, bool isArena = false)
         {
             //Console.WriteLine($"{Name}.EarnXP({amount}, {sharable}, {fixedAmount})");
 
@@ -38,7 +38,25 @@ namespace ACE.Server.WorldObjects
             if (xpType == XpType.Quest)
                 modifier *= questModifier;
 
-            // should this be passed upstream to fellowship / allegiance?
+            // CONQUEST: Fellowship XP Sharing - share BASE amount only (no personal bonuses)
+            // This prevents "bonus gatekeeping" where high-bonus players kick low-bonus players
+            if (Fellowship != null && Fellowship.ShareXP && shareType.HasFlag(ShareType.Fellowship))
+            {
+                // Apply only server modifiers, not personal bonuses
+                var baseAmount = (long)Math.Round(amount * modifier);
+
+                if (baseAmount < 0)
+                {
+                    Console.WriteLine($"{Name}.EarnXP({amount}, {shareType}) - Fellowship - base amount negative");
+                    return;
+                }
+
+                // Share the base amount - each member will apply their own bonuses
+                GrantXP(baseAmount, xpType, shareType);
+                return;
+            }
+
+            // Solo player or non-shareable XP - apply personal bonuses
             var enchantment = GetXPAndLuminanceModifier(xpType);
 
             // CONQUEST: Quest Bonus System - account-wide quest completion bonus
@@ -100,8 +118,17 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // CONQUEST: Apply personal bonuses to fellowship share
+            // When receiving a fellowship share, apply the recipient's personal bonuses
+            // (enchantment, quest count, PK dungeon) but NOT server modifiers (already applied)
+            var enchantment = GetXPAndLuminanceModifier(xpType);
+            var questBonus = GetQuestCountXPBonus();
+            var pkDungeonBonus = GetPKDungeonBonus();
+
+            var bonusedAmount = (long)Math.Round(amount * enchantment * questBonus * pkDungeonBonus);
+
             // Make sure UpdateXpAndLevel is done on this players thread
-            EnqueueAction(new ActionEventDelegate(ActionType.PlayerXp_UpdateXpAndLevel, () => UpdateXpAndLevel(amount, xpType)));
+            EnqueueAction(new ActionEventDelegate(ActionType.PlayerXp_UpdateXpAndLevel, () => UpdateXpAndLevel(bonusedAmount, xpType)));
 
             // for passing XP up the allegiance chain,
             // this function is only called at the very beginning, to start the process.
@@ -545,7 +572,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Raise the available XP by a percentage of the current level XP or a maximum
         /// </summary>
-        public void GrantLevelProportionalXp(double percent, long min, long max)
+        public void GrantLevelProportionalXp(double percent, long min, long max, bool isArena = false)
         {
             var nextLevelXP = GetXPBetweenLevels(Level.Value, Level.Value + 1);
 
@@ -558,7 +585,7 @@ namespace ACE.Server.WorldObjects
                 scaledXP = Math.Max(scaledXP, min);
 
             // apply xp modifiers?
-            EarnXP(scaledXP, XpType.Quest, ShareType.Allegiance);
+            EarnXP(scaledXP, XpType.Quest, ShareType.Allegiance, isArena);
         }
 
         /// <summary>

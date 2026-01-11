@@ -124,6 +124,9 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: Check PK-only dungeon enforcement
             PKDungeonEnforcementTick();
 
+            // CONQUEST: Check PvP custom augmentation mode timeout
+            CheckPvPModeTimeout();
+
             GagsTick();
 
             PhysicsObj.ObjMaint.DestroyObjects();

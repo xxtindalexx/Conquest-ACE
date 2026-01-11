@@ -232,6 +232,12 @@ namespace ACE.Server.WorldObjects
             if (success)
                 item.OnActivate(this);
 
+            //Handle use of PK Quests NPC
+            if (item.WeenieClassId == 43370016)
+            {
+                this.HandlePKQuestInquiry();
+            }
+
             // manually managed
             if (LastUseTime == float.MinValue)
                 return;

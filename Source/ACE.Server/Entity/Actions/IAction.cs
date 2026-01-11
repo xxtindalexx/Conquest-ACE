@@ -216,6 +216,16 @@ namespace ACE.Server.Entity.Actions
         WorldObjectNetworking_EnqueueMotionMissile,
         WorldObjectNetworking_EnqueueMotionMissilePersist,
 
+        // Arena Observer actions
+        ArenaObserver_EnterFreeze,
+        ArenaObserver_EnterCloak,
+        ArenaObserver_EnterProperties,
+        ArenaObserver_EnterTeleport,
+        ArenaObserver_EnterFinalize,
+        ArenaObserver_ExitFreeze,
+        ArenaObserver_ExitTeleport,
+        ArenaObserver_ExitFinalize,
+
         // GameMessage values map 1:1 with networking OpTypes.
         GameMessage_Unknown,
         GameMessage_None,

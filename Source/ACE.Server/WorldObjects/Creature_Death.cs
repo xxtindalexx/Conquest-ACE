@@ -584,7 +584,7 @@ namespace ACE.Server.WorldObjects
                         // Victim must be level > 50 to drop soul fragments
                         // Check if killer can loot Soul Fragments (6-8 hour cooldown)
                         var killerPlayer = killer?.TryGetAttacker() as Player;
-                        if (killerPlayer != null && (player.Level ?? 1) > 50)
+                        if (killerPlayer != null && (player.Level ?? 1) > 90)
                         {
                             // CONQUEST: Don't drop soul fragments if killer and victim are in same allegiance
                             if (killerPlayer.Allegiance != null && player.Allegiance != null &&

@@ -135,7 +135,9 @@ namespace ACE.Server.WorldObjects
                             specializedCost = heritageAdjustedCost.PrimaryCost;
                     }
 
-                    if (GetTotalSpecializedCredits(player) + specializedCost > 70)
+                    // CONQUEST: Specialization augmentations increase the specialization credit cap
+                    var specializationCap = 70 + (player.LuminanceAugmentSpecializeCount ?? 0);
+                    if (GetTotalSpecializedCredits(player) + specializedCost > specializationCap)
                     {
                         player.Session.Network.EnqueueSend(new GameEventWeenieErrorWithString(player.Session, WeenieErrorWithString.TooManyCreditsInSpecializedSkills, skill.Skill.ToSentence()));
                         return false;

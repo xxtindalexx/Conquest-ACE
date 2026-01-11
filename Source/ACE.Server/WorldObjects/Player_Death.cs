@@ -253,7 +253,9 @@ namespace ACE.Server.WorldObjects
         public void ThreadSafeTeleportOnDeath()
         {
             // teleport to sanctuary or best location
-            var newPosition = Sanctuary ?? Instantiation ?? Location;
+            var newPosition = new Position(Sanctuary ?? Instantiation ?? Location);
+            // CONQUEST: Reset to base variant (null) when respawning
+            newPosition.Variation = null;
 
             WorldManager.ThreadSafeTeleport(this, newPosition, new ActionEventDelegate(ActionType.PlayerDeath_EnqueueTeleport, () =>
             {

@@ -257,5 +257,12 @@ namespace ACE.Entity.Enum.Properties
         /// </summary>
         WeaponCleaveStrikeDecay        = 9036,
         MaxRandomSpawnTime             = 9034,
+        LastArenaCommandTimestamp = 9037,
+        LastPlayerCommandTimestamp = 9038,
+        ArenaHourlyTimestamp = 9039,
+        ArenaHourlyCount = 9040,
+        ArenaDailyRewardTimestamp = 9041,
+        ArenaDailyRewardCount = 9042,
+        ArenaSameClanDailyRewardCount = 9043,
     }
 }

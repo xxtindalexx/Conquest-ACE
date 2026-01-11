@@ -115,6 +115,13 @@ namespace ACE.Server.WorldObjects
             HandleAllegianceOnLogin();
             HandleHouseOnLogin();
 
+            // CONQUEST: If player logged out during PvP mode, restore their augmentations
+            if (InPvPMode)
+            {
+                // Player logged out while in PvP mode - restore their augmentations
+                ExitPvPMode();
+            }
+
             // retail appeared to send the squelch list very early,
             // even before the CreatePlayer, but doing it here
             if (SquelchManager.HasSquelches)

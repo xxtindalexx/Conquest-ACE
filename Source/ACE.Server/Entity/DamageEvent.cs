@@ -199,6 +199,25 @@ namespace ACE.Server.Entity
             if (!Overpower)
             {
                 EvasionChance = GetEvadeChance(attacker, defender);
+
+                // CONQUEST: Melee/Missile augmentation evasion reduction
+                // Attacker's augs reduce defender's ability to evade
+                if (playerAttacker != null && pkBattle)
+                {
+                    float meleeAugScale = 0.0010f;   // Melee aug evasion reduction scaling (0.1% per aug)
+                    float missileAugScale = 0.0010f; // Missile aug evasion reduction scaling (0.1% per aug)
+
+                    float meleeAug = playerAttacker.LuminanceAugmentMeleeCount ?? 0;
+                    float missileAug = playerAttacker.LuminanceAugmentMissileCount ?? 0;
+
+                    // Calculate individual reductions
+                    float meleeReduction = Math.Min(meleeAug * meleeAugScale, 0.95f);   // Max 95% reduction
+                    float missileReduction = Math.Min(missileAug * missileAugScale, 0.95f); // Max 95% reduction
+
+                    // Apply combined evasion reduction
+                    float totalEvasionReduction = 1.0f - ((1.0f - meleeReduction) * (1.0f - missileReduction));
+                    EvasionChance *= (1.0f - totalEvasionReduction);
+                }
                 if (EvasionChance > ThreadSafeRandom.Next(0.0f, 1.0f))
                 {
                     Evaded = true;
@@ -229,6 +248,20 @@ namespace ACE.Server.Entity
             }
 
             if (GeneralFailure) return 0.0f;
+
+            // CONQUEST: Melee/Missile augmentation flat damage bonus
+            var isMissile = Weapon != null && Weapon.IsMissileWeapon;
+            long damageBonus = 0;
+            if (isMissile && attacker.LuminanceAugmentMissileCount > 0)
+            {
+                damageBonus = attacker.LuminanceAugmentMissileCount.Value;
+            }
+            else if (attacker.LuminanceAugmentMeleeCount > 0)
+            {
+                damageBonus = attacker.LuminanceAugmentMeleeCount.Value;
+            }
+
+            BaseDamage += damageBonus;
 
             // get damage modifiers
             PowerMod = attacker.GetPowerMod(Weapon);
@@ -263,6 +296,28 @@ namespace ACE.Server.Entity
             if (playerDefender != null && (playerDefender.IsLoggingOut || playerDefender.PKLogout))
                 CriticalChance = 1.0f;
 
+            // CONQUEST: Melee/Missile augmentation critical damage bonus
+            // Define configurable parameter for critical damage adjustment (default 0.015 = 1.5% per aug)
+            float luminanceAugmentCritDamageMultiplier = 0.015f;
+            float luminanceAugmentBonus = 0;
+
+            switch (CombatType)
+            {
+                case CombatType.Melee:
+                    if (attacker.LuminanceAugmentMeleeCount > 0)
+                    {
+                        luminanceAugmentBonus = attacker.LuminanceAugmentMeleeCount.Value * luminanceAugmentCritDamageMultiplier;
+                    }
+                    break;
+
+                case CombatType.Missile:
+                    if (attacker.LuminanceAugmentMissileCount > 0)
+                    {
+                        luminanceAugmentBonus = attacker.LuminanceAugmentMissileCount.Value * luminanceAugmentCritDamageMultiplier;
+                    }
+                    break;
+            }
+
             if (CriticalChance > ThreadSafeRandom.Next(0.0f, 1.0f))
             {
                 if (playerDefender != null && playerDefender.AugmentationCriticalDefense > 0)
@@ -280,7 +335,8 @@ namespace ACE.Server.Entity
 
                     // verify: CriticalMultiplier only applied to the additional crit damage,
                     // whereas CD/CDR applied to the total damage (base damage + additional crit damage)
-                    CriticalDamageMod = 1.0f + WorldObject.GetWeaponCritDamageMod(Weapon, attacker, attackSkill, defender);
+                    // CONQUEST: Include melee/missile augmentation critical damage bonus
+                    CriticalDamageMod = 1.0f + WorldObject.GetWeaponCritDamageMod(Weapon, attacker, attackSkill, defender) + luminanceAugmentBonus;
 
                     // Apply enrage multiplier if attacker is a mob and enraged
                     if (attacker.IsEnraged && !(attacker is Player))

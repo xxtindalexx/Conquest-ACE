@@ -452,45 +452,23 @@ namespace ACE.Server.Entity
         /// </summary>
         private void CalculateXPSharing()
         {
-            // - If all members of the fellowship are level 50 or above, all members will share XP equally
-
-            // - If all members of the fellowship are within 5 levels of the founder, XP will be shared equally
-
-            // - If members are all within ten levels of the founder, XP will be shared proportionally.
+            // CONQUEST: All members over level 1 can share XP equally regardless of level difference
 
             var fellows = GetFellowshipMembers();
 
-            var allEvenShareLevel = PropertyManager.GetLong("fellowship_even_share_level");
-            var allOverEvenShareLevel = !fellows.Values.Any(f => (f.Level ?? 1) < allEvenShareLevel);
+            // If all members are over level 1, enable XP sharing with even distribution
+            var allOverLevelOne = !fellows.Values.Any(f => (f.Level ?? 1) <= 1);
 
-            if (allOverEvenShareLevel)
+            if (allOverLevelOne)
             {
                 ShareXP = DesiredShareXP;
                 EvenShare = true;
                 return;
             }
 
-            var leader = PlayerManager.GetOnlinePlayer(FellowshipLeaderGuid);
-            if (leader == null)
-                return;
-
-            var maxLevelDiff = fellows.Values.Max(f => Math.Abs((leader.Level ?? 1) - (f.Level ?? 1)));
-
-            if (maxLevelDiff <= 5)
-            {
-                ShareXP = DesiredShareXP;
-                EvenShare = true;
-            }
-            else if (maxLevelDiff <= 10)
-            {
-                ShareXP = DesiredShareXP;
-                EvenShare = false;
-            }
-            else
-            {
-                ShareXP = false;
-                EvenShare = false;
-            }
+            // If anyone is level 1 or below, disable XP sharing
+            ShareXP = false;
+            EvenShare = false;
         }
 
         /// <summary>

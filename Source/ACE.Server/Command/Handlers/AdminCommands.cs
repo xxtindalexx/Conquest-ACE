@@ -1,21 +1,7 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Threading;
-using Microsoft.EntityFrameworkCore;
-
-using log4net;
-
 using ACE.Common;
 using ACE.Common.Extensions;
 using ACE.Database;
 using ACE.Database.Models.Auth;
-using ShardModels = ACE.Database.Models.Shard;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -31,8 +17,20 @@ using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Structure;
 using ACE.Server.WorldObjects;
 using ACE.Server.WorldObjects.Entity;
-
+using log4net;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Text;
+using System.Threading;
 using Position = ACE.Entity.Position;
+using ShardModels = ACE.Database.Models.Shard;
 
 namespace ACE.Server.Command.Handlers
 {
@@ -4862,6 +4860,12 @@ namespace ACE.Server.Command.Handlers
         }
 
         // morph
+        [CommandHandler("morph", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1,
+            "Morphs your bodily form into that of the specified creature",
+            "<wcid or classname> [name]\n" +
+            "Creates a new character with the appearance of the specified creature.\n" +
+            "You will be logged out and can log back in as the morphed character.\n" +
+            "Optional: specify a custom name for the morphed character.")]
         public static void HandleMorph(Session session, params string[] parameters)
         {
             // @morph - Morphs your bodily form into that of the specified creature. Be careful with this one!
@@ -4889,8 +4893,6 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Morphing you into {weenie.GetProperty(PropertyString.Name)} ({weenieDesc})... You will be logged out.", ChatMessageType.Broadcast));
-
             var guid = GuidManager.NewPlayerGuid();
 
             var player = new Player(weenie, guid, session.AccountId);
@@ -4905,7 +4907,14 @@ namespace ACE.Server.Command.Handlers
                 player.Character.Name = name;
             }
             else
-                name = weenie.GetProperty(PropertyString.Name);
+            {
+                // Generate a unique name if none provided: "WeenieNameXXXXX"
+                var baseName = weenie.GetProperty(PropertyString.Name);
+                var timestamp = DateTime.UtcNow.Ticks.ToString().Substring(10); // Last 8 digits
+                name = $"{baseName}{timestamp}";
+                player.Name = name;
+                player.Character.Name = name;
+            }
 
             DatabaseManager.Shard.IsCharacterNameAvailable(name, isAvailable =>
             {
@@ -4914,6 +4923,7 @@ namespace ACE.Server.Command.Handlers
                     CommandHandlerHelper.WriteOutputInfo(session, $"{name} is not available to use for the morphed character, try another name.", ChatMessageType.Broadcast);
                     return;
                 }
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Morphing you into {weenie.GetProperty(PropertyString.Name)} ({weenieDesc}) as '{name}'... You will be logged out.", ChatMessageType.Broadcast));
 
                 player.Location = session.Player.Location;
 
@@ -4972,18 +4982,73 @@ namespace ACE.Server.Command.Handlers
 
                 player.GenerateNewFace();
 
+                // CONQUEST: Store the original character ID for unmorph functionality
+                player.SetProperty(PropertyInt64.MorphedFromCharacterId, (long)session.Player.Character.Id);
+
                 var possessions = player.GetAllPossessions();
                 var possessedBiotas = new Collection<(Biota biota, ReaderWriterLockSlim rwLock)>();
                 foreach (var possession in possessions)
                     possessedBiotas.Add((possession.Biota, possession.BiotaDatabaseLock));
 
-                DatabaseManager.Shard.AddCharacterInParallel(player.Biota, player.BiotaDatabaseLock, possessedBiotas, player.Character, player.CharacterDatabaseLock, null);
-
-                PlayerManager.AddOfflinePlayer(player);
-                session.Characters.Add(new Database.Models.Shard.LoginCharacter { Id = player.Character.Id, IsPlussed = player.IsPlussed, AccountId = player.Account.AccountId, Name = player.Name });
-
-                session.LogOffPlayer();
+                DatabaseManager.Shard.AddCharacterInParallel(player.Biota, player.BiotaDatabaseLock, possessedBiotas, player.Character, player.CharacterDatabaseLock, success =>
+                {
+                    if (success)
+                    {
+                        PlayerManager.AddOfflinePlayer(player);
+                        session.Characters.Add(new Database.Models.Shard.LoginCharacter { Id = player.Character.Id, IsPlussed = player.IsPlussed, AccountId = player.Account.AccountId, Name = player.Name });
+                        session.LogOffPlayer();
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Failed to save morphed character to database. Please try again.", ChatMessageType.Broadcast));
+                    }
+                });
             });
+        }
+
+        // unmorph
+        [CommandHandler("unmorph", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 0,
+            "Returns you to your original form before morphing",
+            "Switches back to your original character if you are currently morphed.\n" +
+            "You will be logged out and can log back in as your original character.")]
+        public static void HandleUnmorph(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            // Check if player is morphed (has the MorphedFromCharacterId property)
+            var originalCharacterId = player.GetProperty(PropertyInt64.MorphedFromCharacterId);
+
+            if (originalCharacterId == null || originalCharacterId == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("You are not currently morphed. This command only works if you used /morph to create this character.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Verify the original character still exists and belongs to this account
+            var originalCharacter = DatabaseManager.Shard.BaseDatabase.GetCharacterStubByGuid((uint)originalCharacterId.Value);
+
+            if (originalCharacter == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Error: Could not find your original character. It may have been deleted.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (originalCharacter.AccountId != session.AccountId)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Error: The original character does not belong to your account.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Confirm the unmorph
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Unmorphing you back to {originalCharacter.Name}... You will be logged out.", ChatMessageType.Broadcast));
+
+            // Remove the morphed character from the session's character list
+            var morphedChar = session.Characters.FirstOrDefault(c => c.Id == player.Character.Id);
+            if (morphedChar.Id != 0) // LoginCharacter is a struct, so check if Id is valid instead of null check
+                session.Characters.Remove(morphedChar);
+
+            // Log the player out so they can select their original character
+            session.LogOffPlayer();
         }
 
         // qst
@@ -6506,6 +6571,167 @@ namespace ACE.Server.Command.Handlers
             }
 
             return false;
+        }
+
+        // CONQUEST: Arena Admin Commands
+        [CommandHandler("arenadebug", AccessLevel.Sentinel, CommandHandlerFlag.None, 0,
+            "Displays debug info about arenas")]
+        public static void HandleArenaDebug(Session session, params string[] parameters)
+        {
+            StringBuilder returnMsg = new StringBuilder();
+            returnMsg.Append("******** Arena Debug Info ********\n\n");
+
+            returnMsg.Append("Queued Players:\n\n");
+
+            var queuedPlayers = ArenaManager.GetQueuedPlayers();
+            if (queuedPlayers != null)
+            {
+                foreach (var arenaPlayer in queuedPlayers)
+                {
+                    returnMsg.Append($"  CharacterID = {arenaPlayer.CharacterId}\n");
+                    returnMsg.Append($"  CharacterName = {arenaPlayer.CharacterName}\n");
+                    returnMsg.Append($"  EventType = {arenaPlayer.EventType}\n");
+                    returnMsg.Append($"  CreatedDate = {arenaPlayer.CreateDateTime}\n");
+                    returnMsg.Append($"  IP = {arenaPlayer.PlayerIP}\n");
+                    returnMsg.Append($"  Level = {arenaPlayer.CharacterLevel}\n");
+                    returnMsg.Append($"  MonarchId = {arenaPlayer.MonarchId}\n");
+                    returnMsg.Append($"  MonarchName = {arenaPlayer.MonarchName}\n");
+                    returnMsg.Append($"  * properties that should be empty when queued *\n");
+                    returnMsg.Append($"    TeamGuid = {arenaPlayer.TeamGuid}\n");
+                    returnMsg.Append($"    EventID = {arenaPlayer.EventId}\n");
+                    returnMsg.Append($"    FinishPlace = {arenaPlayer.FinishPlace}\n");
+                    returnMsg.Append($"    IsDisqualified = {arenaPlayer.IsDisqualified}\n");
+                    returnMsg.Append($"    IsEliminated = {arenaPlayer.IsEliminated}\n");
+                    returnMsg.Append($"    TotalDeaths = {arenaPlayer.TotalDeaths}\n");
+                    returnMsg.Append($"    TotalKills = {arenaPlayer.TotalKills}\n");
+                    returnMsg.Append($"    TotalDmgDealt = {arenaPlayer.TotalDmgDealt}\n");
+                    returnMsg.Append($"    TotalDmgReceived = {arenaPlayer.TotalDmgReceived}\n\n");
+                }
+            }
+            else
+            {
+                returnMsg.Append("  No Queued Players\n\n");
+            }
+
+            returnMsg.Append($"\nActive Events:\n\n");
+
+            var activeEvents = ArenaManager.GetActiveEvents();
+            if (activeEvents != null)
+            {
+                foreach (var arenaEvent in activeEvents)
+                {
+                    returnMsg.Append($"  EventID = {arenaEvent.Id}\n");
+                    returnMsg.Append($"  EventType = {arenaEvent.EventType}\n");
+                    returnMsg.Append($"  Status = {arenaEvent.Status}\n");
+                    returnMsg.Append($"  Location = {arenaEvent.Location}\n");
+                    returnMsg.Append($"  CreatedDateTime = {arenaEvent.CreatedDateTime}\n");
+                    returnMsg.Append($"  StartDateTime = {arenaEvent.StartDateTime}\n");
+                    returnMsg.Append($"  EndDateTime = {arenaEvent.EndDateTime}\n");
+                    returnMsg.Append($"  PreEventCountdownStartDateTime = {arenaEvent.PreEventCountdownStartDateTime}\n");
+                    returnMsg.Append($"  CountdownStartDateTime = {arenaEvent.CountdownStartDateTime}\n");
+                    returnMsg.Append($"  TimeRemaining = {arenaEvent.TimeRemaining}\n");
+                    returnMsg.Append($"  WinningTeamGuid = {arenaEvent.WinningTeamGuid}\n");
+                    returnMsg.Append($"  IsOvertime = {arenaEvent.IsOvertime}\n");
+                    returnMsg.Append($"  OvertimeHealingModifier = {arenaEvent.OvertimeHealingModifier}\n");
+                    returnMsg.Append($"  OvertimeRemaining = {arenaEvent.OvertimeRemaining}\n");
+                    returnMsg.Append($"  CancelReason = {arenaEvent.CancelReason}\n");
+                    returnMsg.Append($"  Players:\n");
+                    foreach (var arenaPlayer in arenaEvent.Players)
+                    {
+                        returnMsg.Append($"    CharacterID = {arenaPlayer.CharacterId}\n");
+                        returnMsg.Append($"    CharacterName = {arenaPlayer.CharacterName}\n");
+                        returnMsg.Append($"    EventType = {arenaPlayer.EventType}\n");
+                        returnMsg.Append($"    CreatedDate = {arenaPlayer.CreateDateTime}\n");
+                        returnMsg.Append($"    IP = {arenaPlayer.PlayerIP}\n");
+                        returnMsg.Append($"    Level = {arenaPlayer.CharacterLevel}\n");
+                        returnMsg.Append($"    MonarchId = {arenaPlayer.MonarchId}\n");
+                        returnMsg.Append($"    MonarchName = {arenaPlayer.MonarchName}\n");
+                        returnMsg.Append($"    TeamGuid = {arenaPlayer.TeamGuid}\n");
+                        returnMsg.Append($"    EventID = {arenaPlayer.EventId}\n");
+                        returnMsg.Append($"    FinishPlace = {arenaPlayer.FinishPlace}\n");
+                        returnMsg.Append($"    IsDisqualified = {arenaPlayer.IsDisqualified}\n");
+                        returnMsg.Append($"    IsEliminated = {arenaPlayer.IsEliminated}\n");
+                        returnMsg.Append($"    TotalDeaths = {arenaPlayer.TotalDeaths}\n");
+                        returnMsg.Append($"    TotalKills = {arenaPlayer.TotalKills}\n");
+                        returnMsg.Append($"    TotalDmgDealt = {arenaPlayer.TotalDmgDealt}\n");
+                        returnMsg.Append($"    TotalDmgReceived = {arenaPlayer.TotalDmgReceived}\n\n");
+                    }
+
+                    returnMsg.Append($"\n");
+                }
+            }
+            else
+            {
+                returnMsg.Append("  No Active Events\n\n");
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, returnMsg.ToString());
+        }
+
+        [CommandHandler("arenaclearqueue", AccessLevel.Sentinel, CommandHandlerFlag.None, 0,
+            "Removes all players from one or all arena queues")]
+        public static void HandleArenaClearQueue(Session session, params string[] parameters)
+        {
+            string eventType = "";
+
+            if (parameters.Count() == 1)
+            {
+                eventType = parameters[0].ToLower();
+                if (!ArenaManager.IsValidEventType(eventType))
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Invalid parameters.  EventType {eventType} is not supported.  \nUsage:\n  To clear all queues  /ArenaClearQueue\n  To clear a single queue (2v2 in this example): /ArenaClearQueue 2v2");
+                    return;
+                }
+            }
+
+            if (parameters.Count() > 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Invalid parameters.\nUsage:\n  To clear all queues  /ArenaClearQueue\n  To clear a single queue (2v2 in this example): /ArenaClearQueue 2v2");
+                return;
+            }
+
+            ArenaManager.ClearQueue(eventType);
+            CommandHandlerHelper.WriteOutputInfo(session, $"You've successfully cleared the queue for {(string.IsNullOrEmpty(eventType) ? "all arena event types" : "the " + eventType + " event type")}");
+        }
+
+        [CommandHandler("arenacancelevent", AccessLevel.Sentinel, CommandHandlerFlag.None, 1,
+            "Cancels an active arena event by EventID")]
+        public static void HandleArenaCancelEvent(Session session, params string[] parameters)
+        {
+            string eventIdParam = "";
+            int eventId = -1;
+
+            if (parameters.Count() == 1)
+            {
+                eventIdParam = parameters[0].ToLower();
+                try
+                {
+                    eventId = int.Parse(eventIdParam);
+                }
+                catch (Exception)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Invalid parameters.  EventID {eventIdParam} is not a valid number.\nUsage:\n  /ArenaCancelEvent EventID");
+                    return;
+                }
+
+                var arenaEvent = ArenaManager.GetActiveEvents().FirstOrDefault(x => x.Id == eventId);
+
+                if (arenaEvent != null)
+                {
+                    arenaEvent.CancelReason = "Admin In-Game";
+                    ArenaManager.CancelEvent(arenaEvent);
+                    CommandHandlerHelper.WriteOutputInfo(session, $"You've successfully cancelled the {arenaEvent.EventType} arena event with EventID = {eventId}.");
+                }
+                else
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"There is no active arena event with EventID = {eventId}.");
+                }
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Invalid parameters.  Must provide a single EventID as parameter.\nUsage:\n  /ArenaCancelEvent EventID");
+                return;
+            }
         }
     }
 }

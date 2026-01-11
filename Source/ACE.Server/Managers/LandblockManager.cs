@@ -677,6 +677,8 @@ namespace ACE.Server.Managers
                     landblock.Unload(cacheKey.Variant);
 
                     bool unloadFailed = false;
+                    // CONQUEST: Store landblock ID for error logging before it might get nulled
+                    var landblockId = landblock?.Id.Raw ?? 0;
 
                     destructionQueue.TryRemove(cacheKey, out _);
                     landblockLock.EnterWriteLock();
@@ -742,7 +744,7 @@ namespace ACE.Server.Managers
                         landblockLock.ExitWriteLock();
                     }
                     if (unloadFailed)
-                        log.Error($"LandblockManager: failed to unload {landblock.Id.Raw:X8}");
+                        log.Error($"LandblockManager: failed to unload {landblockId:X8}"); // CONQUEST: Use stored ID to prevent NullReferenceException
                 }
             }
         }

@@ -1012,6 +1012,10 @@ namespace ACE.Server.WorldObjects
             if (attacker.PlayerKillerStatus == PlayerKillerStatus.Free || defender.PlayerKillerStatus == PlayerKillerStatus.Free)
                 return;
 
+            // CONQUEST: Enter PvP mode for both players (disables custom augs)
+            attacker.EnterPvPMode();
+            defender.EnterPvPMode();
+
             attacker.UpdatePKTimer();
             defender.UpdatePKTimer();
         }
@@ -1219,6 +1223,131 @@ namespace ACE.Server.WorldObjects
                 }
             }
             return null;
+        }
+
+        // CONQUEST: PvP Custom Augmentation Mode System
+        /// <summary>
+        /// Enters PvP mode - stores aug counts, zeros them out, and silently re-buffs the player
+        /// Preserves vital percentages after rebuffing
+        /// </summary>
+        public void EnterPvPMode()
+        {
+            LastPvPCombatTime = Time.GetUnixTime();
+
+            if (InPvPMode)
+                return; // Already in PvP mode, just update timer
+
+            // Store current vital percentages
+            var healthPercent = Health.Current / (float)Health.MaxValue;
+            var staminaPercent = Stamina.Current / (float)Stamina.MaxValue;
+            var manaPercent = Mana.Current / (float)Mana.MaxValue;
+
+            // Store current aug counts
+            StoredCreatureAugs = LuminanceAugmentCreatureCount ?? 0;
+            StoredItemAugs = LuminanceAugmentItemCount ?? 0;
+            StoredLifeAugs = LuminanceAugmentLifeCount ?? 0;
+            StoredVoidAugs = LuminanceAugmentVoidCount ?? 0;
+            StoredWarAugs = LuminanceAugmentWarCount ?? 0;
+            StoredDurationAugs = LuminanceAugmentSpellDurationCount ?? 0;
+            StoredSpecializeAugs = LuminanceAugmentSpecializeCount ?? 0;
+            StoredSummonAugs = LuminanceAugmentSummonCount ?? 0;
+            StoredMeleeAugs = LuminanceAugmentMeleeCount ?? 0;
+            StoredMissileAugs = LuminanceAugmentMissileCount ?? 0;
+
+            // Zero out all aug counts
+            LuminanceAugmentCreatureCount = 0;
+            LuminanceAugmentItemCount = 0;
+            LuminanceAugmentLifeCount = 0;
+            LuminanceAugmentVoidCount = 0;
+            LuminanceAugmentWarCount = 0;
+            LuminanceAugmentSpellDurationCount = 0;
+            LuminanceAugmentSpecializeCount = 0;
+            LuminanceAugmentSummonCount = 0;
+            LuminanceAugmentMeleeCount = 0;
+            LuminanceAugmentMissileCount = 0;
+
+            // Silently re-buff with base-level buffs (using existing buff system)
+            CreateSentinelBuffPlayers(new Player[] { this }, true, 8);
+
+            // Restore vital percentages based on new max values
+            Health.Current = (uint)(Health.MaxValue * healthPercent);
+            Stamina.Current = (uint)(Stamina.MaxValue * staminaPercent);
+            Mana.Current = (uint)(Mana.MaxValue * manaPercent);
+
+            // Send updated vitals to client
+            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Health));
+            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Stamina));
+            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Mana));
+
+            InPvPMode = true;
+
+            Session.Network.EnqueueSend(new GameMessageSystemChat(
+                "You have entered PvP combat mode. Custom augmentations temporarily disabled for balanced combat.",
+                ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// Exits PvP mode - restores original aug counts and silently re-buffs
+        /// Preserves vital percentages after rebuffing
+        /// </summary>
+        public void ExitPvPMode()
+        {
+            if (!InPvPMode)
+                return;
+
+            // Store current vital percentages
+            var healthPercent = Health.Current / (float)Health.MaxValue;
+            var staminaPercent = Stamina.Current / (float)Stamina.MaxValue;
+            var manaPercent = Mana.Current / (float)Mana.MaxValue;
+
+            // Restore original aug counts
+            LuminanceAugmentCreatureCount = StoredCreatureAugs;
+            LuminanceAugmentItemCount = StoredItemAugs;
+            LuminanceAugmentLifeCount = StoredLifeAugs;
+            LuminanceAugmentVoidCount = StoredVoidAugs;
+            LuminanceAugmentWarCount = StoredWarAugs;
+            LuminanceAugmentSpellDurationCount = StoredDurationAugs;
+            LuminanceAugmentSpecializeCount = StoredSpecializeAugs;
+            LuminanceAugmentSummonCount = StoredSummonAugs;
+            LuminanceAugmentMeleeCount = StoredMeleeAugs;
+            LuminanceAugmentMissileCount = StoredMissileAugs;
+
+            // Silently re-buff with full aug-boosted buffs
+            CreateSentinelBuffPlayers(new Player[] { this }, true, 8);
+
+            // Restore vital percentages based on new max values
+            Health.Current = (uint)(Health.MaxValue * healthPercent);
+            Stamina.Current = (uint)(Stamina.MaxValue * staminaPercent);
+            Mana.Current = (uint)(Mana.MaxValue * manaPercent);
+
+            // Send updated vitals to client
+            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Health));
+            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Stamina));
+            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Mana));
+
+            InPvPMode = false;
+
+            Session.Network.EnqueueSend(new GameMessageSystemChat(
+                "You have exited PvP combat mode. Custom augmentations restored.",
+                ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// Called from Heartbeat() - checks if player has been out of PvP combat long enough to exit PvP mode
+        /// </summary>
+        public void CheckPvPModeTimeout()
+        {
+            if (!InPvPMode)
+                return;
+
+            var currentTime = Time.GetUnixTime();
+            var timeSinceLastCombat = currentTime - LastPvPCombatTime;
+            var timeout = PropertyManager.GetDouble("pvp_custom_aug_timeout");
+
+            if (timeSinceLastCombat >= timeout)
+            {
+                ExitPvPMode();
+            }
         }
     }
 }

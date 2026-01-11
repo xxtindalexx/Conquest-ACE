@@ -1,6 +1,3 @@
-using System;
-using System.Reflection;
-using System.Text;
 using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Server.Entity;
@@ -9,8 +6,12 @@ using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages;
 using ACE.Server.Network.GameMessages.Messages;
-
 using log4net;
+using System;
+using System.Reflection;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace ACE.Server.Network.Handlers
 {
@@ -346,6 +347,49 @@ namespace ACE.Server.Network.Handlers
             }
             else
                 Console.WriteLine($"Unhandled TurbineChatHandler ChatNetworkBlobType: 0x{(uint)chatBlobType:X4}");
+        }
+
+        static bool webhookMissingErrorEmitted = false;
+
+        public static async Task SendWebhookedChat(string sender, string message, string webhookUrl = null, string channelName = "")
+        {
+            await Task.Run(() =>
+            {
+                try
+                {
+                    string webhook = webhookUrl;
+                    if (webhook == null)
+                    {
+                        webhook = PropertyManager.GetString("turbine_chat_webhook");
+                        if (webhook == "")
+                        {
+                            if (!webhookMissingErrorEmitted)
+                            {
+                                webhookMissingErrorEmitted = true;
+                                log.Warn("server property turbine_chat_webhook must be set in order to output chat to a Discord channel.");
+                            }
+                            return;
+                        }
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(channelName))
+                        channelName = $"[{channelName}] ";
+
+                    var dict = new System.Collections.Generic.Dictionary<string, string>();
+                    dict["content"] = $"{channelName}{sender}: \"{message.Replace("@", "")}\"";
+
+                    var payload = JsonSerializer.Serialize<dynamic>(dict);
+                    using (var wc = new System.Net.WebClient())
+                    {
+                        wc.Headers.Add("Content-Type", "application/json");
+                        wc.UploadString(webhook, payload);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    log.Error(ex);
+                }
+            });
         }
 
         private static void HandleChatReject(Session session, uint contextId, ChatType chatType, GameMessageTurbineChat gameMessageTurbineChat, string rejectReason)

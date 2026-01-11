@@ -490,6 +490,31 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public bool PKLogout;
 
+        // CONQUEST: PvP Custom Augmentation Mode
+        /// <summary>
+        /// True if player is currently in PvP mode with custom augmentations temporarily disabled
+        /// </summary>
+        public bool InPvPMode;
+
+        /// <summary>
+        /// Unix timestamp of the last PvP combat action
+        /// </summary>
+        public double LastPvPCombatTime;
+
+        /// <summary>
+        /// Stored augmentation counts while in PvP mode (to restore when exiting)
+        /// </summary>
+        public long StoredCreatureAugs;
+        public long StoredItemAugs;
+        public long StoredLifeAugs;
+        public long StoredVoidAugs;
+        public long StoredWarAugs;
+        public long StoredDurationAugs;
+        public long StoredSpecializeAugs;
+        public long StoredSummonAugs;
+        public long StoredMeleeAugs;
+        public long StoredMissileAugs;
+
         public bool IsLoggingOut;
 
         /// <summary>
@@ -530,6 +555,9 @@ namespace ACE.Server.WorldObjects
 
             if (Fellowship != null)
                 FellowshipQuit(false);
+
+            // Remove player from arena queue if they're queued
+            ArenaManager.RemovePlayerFromQueue(Character.Id);
 
             if (IsTrading && TradePartner != ObjectGuid.Invalid)
             {
