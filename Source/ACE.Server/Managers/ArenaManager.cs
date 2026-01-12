@@ -699,12 +699,10 @@ namespace ACE.Server.Managers
                             player.EnqueueBroadcast(new GameMessageSystemChat("You have been added back to the front of the arena queue.", ChatMessageType.Broadcast));
                         }
 
-                        //If player is in an arena, teleport player to their LS
+                        //If player is in an arena, return them to their pre-arena location
                         if (player.CurrentLandblock?.IsArenaLandblock ?? false)
                         {
-                            var sanctuary = new Position(player.Sanctuary);
-                            sanctuary.Variation = null;
-                            player.Teleport(sanctuary);
+                            player.ReturnFromArena(); // CONQUEST: Return to pre-arena location
                         }
                     }
                 }
@@ -713,6 +711,33 @@ namespace ACE.Server.Managers
             {
                 log.Error($"Exception in ArenaManager.CancelEvent. Ex: {ex}");
             }
+        }
+
+        public static void HandlePlayerDamage(uint defenderId, uint attackerId, uint damageAmount)
+        {
+            if (damageAmount == 0)
+                return;
+
+            ArenaPlayer defender = null;
+            ArenaPlayer attacker = null;
+
+            foreach (var arena in arenaLocations.Values)
+            {
+                if (arena.HasActiveEvent)
+                {
+                    defender = arena.ActiveEvent.Players.FirstOrDefault(x => x.CharacterId == defenderId);
+                    attacker = arena.ActiveEvent.Players.FirstOrDefault(x => x.CharacterId == attackerId);
+
+                    if (defender != null && attacker != null)
+                        break;
+                }
+            }
+
+            if (defender != null)
+                defender.TotalDmgReceived += damageAmount;
+
+            if (attacker != null)
+                attacker.TotalDmgDealt += damageAmount;
         }
 
         public static void HandlePlayerDeath(uint victimId, uint killerId)
@@ -971,6 +996,9 @@ namespace ACE.Server.Managers
             if (player == null || arenaEvent == null)
                 return;
 
+            // CONQUEST: Store location before entering arena as observer
+            player.PreArenaLocation = player.Location;
+
             player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You are about to enter Arena Observer mode. You will be frozen in place for a bit before you are teleported to the arena.", ChatMessageType.System));
            
             var actionChain = new ActionChain();
@@ -1031,10 +1059,8 @@ namespace ACE.Server.Managers
             actionChain.AddDelaySeconds(3);
             actionChain.AddAction(player, ActionType.ArenaObserver_ExitTeleport, () =>
             {
-                var sanctuary = new Position(player.Sanctuary);
-                sanctuary.Variation = null;
-                player.Teleport(sanctuary);
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You've exited observer mode for an arena match and are being teleported to your lifestone.", ChatMessageType.System));                
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You've exited observer mode for an arena match.", ChatMessageType.System));
+                player.ReturnFromArena(); // CONQUEST: Return to pre-arena location                
             });
             actionChain.AddDelaySeconds(0.5);
             actionChain.AddAction(player, ActionType.ArenaObserver_ExitFinalize, () =>

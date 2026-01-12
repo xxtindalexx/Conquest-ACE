@@ -1,18 +1,18 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 using ACE.Common;
 using ACE.DatLoader.Entity;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using ACE.Entity.Models;
 using ACE.Server.Entity;
-using ACE.Server.Managers;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Managers;
 using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ACE.Server.WorldObjects
 {
@@ -508,6 +508,12 @@ namespace ACE.Server.WorldObjects
             var damageTaken = (uint)-UpdateVitalDelta(Health, (int)-amount);
             DamageHistory.Add(source, damageType, damageTaken);
 
+            // CONQUEST: Track arena damage dealt/received
+            if (source is Player attackerPlayer && CurrentLandblock?.IsArenaLandblock == true)
+            {
+                ACE.Server.Managers.ArenaManager.HandlePlayerDamage(Character.Id, attackerPlayer.Character.Id, damageTaken);
+            }
+
             // update stamina
             if (CombatMode != CombatMode.NonCombat)
             {
@@ -995,7 +1001,38 @@ namespace ACE.Server.WorldObjects
         {
             //log.Info($"Updating PK timer for {Name}");
 
+            // CONQUEST: Dispel rare enchantments when entering PvP combat
+            DispelPkRares();
+
             LastPkAttackTimestamp = Time.GetUnixTime();
+        }
+
+        /// <summary>
+        /// CONQUEST: Dispels all rare gem spell buffs when PvP combat begins
+        /// Uses cached HashSet for efficient lookup and removal
+        /// </summary>
+        private void DispelPkRares()
+        {
+            if (!PropertyManager.GetBool("dispel_rares_pvp"))
+                return;
+
+            if (RareSpellEnchantments.Count > 0)
+            {
+                foreach (var spellid in RareSpellEnchantments.ToArray())
+                {
+                    // Retrieve enchantment on target and remove it, if present
+                    if (EnchantmentManager.HasSpell(spellid))
+                    {
+                        var enchantment = EnchantmentManager.GetEnchantment(spellid);
+                        while (enchantment != null)
+                        {
+                            log.Info($"Dispel rare spell ID {spellid} from {Name} on PK flagging");
+                            EnchantmentManager.Remove(enchantment);
+                            enchantment = EnchantmentManager.GetEnchantment(spellid);
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -1012,9 +1049,12 @@ namespace ACE.Server.WorldObjects
             if (attacker.PlayerKillerStatus == PlayerKillerStatus.Free || defender.PlayerKillerStatus == PlayerKillerStatus.Free)
                 return;
 
-            // CONQUEST: Enter PvP mode for both players (disables custom augs)
-            attacker.EnterPvPMode();
-            defender.EnterPvPMode();
+            // CONQUEST: Enter PvP mode for both players (disables custom augs) if enabled
+            if (PropertyManager.GetBool("pvp_disable_custom_augs"))
+            {
+                attacker.EnterPvPMode();
+                defender.EnterPvPMode();
+            }
 
             attacker.UpdatePKTimer();
             defender.UpdatePKTimer();
@@ -1227,6 +1267,73 @@ namespace ACE.Server.WorldObjects
 
         // CONQUEST: PvP Custom Augmentation Mode System
         /// <summary>
+        /// Removes self-cast Life/Creature/Item enchantments to allow rebuffing with different power levels
+        /// This removes enchantments on the player AND on equipped items, but only where the player is the caster
+        /// Item cantrips (where the item is the caster) are preserved
+        /// </summary>
+        private void RemoveSelfCastBuffsForRebuff()
+        {
+            var enchantmentsToRemove = new List<PropertiesEnchantmentRegistry>();
+
+            // Remove self-cast enchantments on the player
+            var lifeEnchantments = EnchantmentManager.GetEnchantments(MagicSchool.LifeMagic);
+            foreach (var enchantment in lifeEnchantments)
+            {
+                // Only remove if self-cast (caster is this player)
+                if (enchantment.CasterObjectId == Guid.Full)
+                    enchantmentsToRemove.Add(enchantment);
+            }
+
+            var creatureEnchantments = EnchantmentManager.GetEnchantments(MagicSchool.CreatureEnchantment);
+            foreach (var enchantment in creatureEnchantments)
+            {
+                // Only remove if self-cast
+                if (enchantment.CasterObjectId == Guid.Full)
+                    enchantmentsToRemove.Add(enchantment);
+            }
+
+            var itemEnchantments = EnchantmentManager.GetEnchantments(MagicSchool.ItemEnchantment);
+            foreach (var enchantment in itemEnchantments)
+            {
+                // Only remove if self-cast
+                if (enchantment.CasterObjectId == Guid.Full)
+                    enchantmentsToRemove.Add(enchantment);
+            }
+
+            // Remove all collected player enchantments
+            foreach (var enchantment in enchantmentsToRemove)
+            {
+                EnchantmentManager.Dispel(enchantment);
+            }
+
+            // Now handle equipped items - remove self-cast banes/impen while preserving item cantrips
+            var equippedItems = EquippedObjects.Values.Where(i => (i.WeenieType == WeenieType.Clothing || i.IsShield) && i.IsEnchantable).ToList();
+
+            foreach (var item in equippedItems)
+            {
+                var itemEnchantmentsToRemove = new List<PropertiesEnchantmentRegistry>();
+
+                // Get all enchantments on this item
+                var allItemEnchantments = item.Biota.PropertiesEnchantmentRegistry.Clone(item.BiotaDatabaseLock);
+
+                foreach (var enchantment in allItemEnchantments)
+                {
+                    // Only remove if the PLAYER cast it (Impen/banes)
+                    // Preserve if the ITEM cast it (cantrips)
+                    if (enchantment.CasterObjectId == Guid.Full)
+                        itemEnchantmentsToRemove.Add(enchantment);
+                }
+
+                // Remove self-cast enchantments from this item
+                foreach (var enchantment in itemEnchantmentsToRemove)
+                {
+                    item.EnchantmentManager.Dispel(enchantment);
+                }
+            }
+        }
+
+        // CONQUEST: PvP Custom Augmentation Mode System
+        /// <summary>
         /// Enters PvP mode - stores aug counts, zeros them out, and silently re-buffs the player
         /// Preserves vital percentages after rebuffing
         /// </summary>
@@ -1242,17 +1349,17 @@ namespace ACE.Server.WorldObjects
             var staminaPercent = Stamina.Current / (float)Stamina.MaxValue;
             var manaPercent = Mana.Current / (float)Mana.MaxValue;
 
-            // Store current aug counts
-            StoredCreatureAugs = LuminanceAugmentCreatureCount ?? 0;
-            StoredItemAugs = LuminanceAugmentItemCount ?? 0;
-            StoredLifeAugs = LuminanceAugmentLifeCount ?? 0;
-            StoredVoidAugs = LuminanceAugmentVoidCount ?? 0;
-            StoredWarAugs = LuminanceAugmentWarCount ?? 0;
-            StoredDurationAugs = LuminanceAugmentSpellDurationCount ?? 0;
-            StoredSpecializeAugs = LuminanceAugmentSpecializeCount ?? 0;
-            StoredSummonAugs = LuminanceAugmentSummonCount ?? 0;
-            StoredMeleeAugs = LuminanceAugmentMeleeCount ?? 0;
-            StoredMissileAugs = LuminanceAugmentMissileCount ?? 0;
+            // Store current aug counts to database-backed properties (crash safe)
+            StoredPvPCreatureAugs = LuminanceAugmentCreatureCount ?? 0;
+            StoredPvPItemAugs = LuminanceAugmentItemCount ?? 0;
+            StoredPvPLifeAugs = LuminanceAugmentLifeCount ?? 0;
+            StoredPvPVoidAugs = LuminanceAugmentVoidCount ?? 0;
+            StoredPvPWarAugs = LuminanceAugmentWarCount ?? 0;
+            StoredPvPDurationAugs = LuminanceAugmentSpellDurationCount ?? 0;
+            StoredPvPSpecializeAugs = LuminanceAugmentSpecializeCount ?? 0;
+            StoredPvPSummonAugs = LuminanceAugmentSummonCount ?? 0;
+            StoredPvPMeleeAugs = LuminanceAugmentMeleeCount ?? 0;
+            StoredPvPMissileAugs = LuminanceAugmentMissileCount ?? 0;
 
             // Zero out all aug counts
             LuminanceAugmentCreatureCount = 0;
@@ -1266,8 +1373,11 @@ namespace ACE.Server.WorldObjects
             LuminanceAugmentMeleeCount = 0;
             LuminanceAugmentMissileCount = 0;
 
-            // Silently re-buff with base-level buffs (using existing buff system)
-            CreateSentinelBuffPlayers(new Player[] { this }, true, 8);
+            // Remove existing self-cast buffs so the lower-power buffs can be applied
+            RemoveSelfCastBuffsForRebuff();
+
+            // Silently re-buff with base-level buffs (using buff system without Sentinel restriction)
+            BuffPlayersForPvPMode(new Player[] { this }, true, 8);
 
             // Restore vital percentages based on new max values
             Health.Current = (uint)(Health.MaxValue * healthPercent);
@@ -1300,20 +1410,35 @@ namespace ACE.Server.WorldObjects
             var staminaPercent = Stamina.Current / (float)Stamina.MaxValue;
             var manaPercent = Mana.Current / (float)Mana.MaxValue;
 
-            // Restore original aug counts
-            LuminanceAugmentCreatureCount = StoredCreatureAugs;
-            LuminanceAugmentItemCount = StoredItemAugs;
-            LuminanceAugmentLifeCount = StoredLifeAugs;
-            LuminanceAugmentVoidCount = StoredVoidAugs;
-            LuminanceAugmentWarCount = StoredWarAugs;
-            LuminanceAugmentSpellDurationCount = StoredDurationAugs;
-            LuminanceAugmentSpecializeCount = StoredSpecializeAugs;
-            LuminanceAugmentSummonCount = StoredSummonAugs;
-            LuminanceAugmentMeleeCount = StoredMeleeAugs;
-            LuminanceAugmentMissileCount = StoredMissileAugs;
+            // Restore original aug counts from database-backed properties
+            LuminanceAugmentCreatureCount = StoredPvPCreatureAugs ?? 0;
+            LuminanceAugmentItemCount = StoredPvPItemAugs ?? 0;
+            LuminanceAugmentLifeCount = StoredPvPLifeAugs ?? 0;
+            LuminanceAugmentVoidCount = StoredPvPVoidAugs ?? 0;
+            LuminanceAugmentWarCount = StoredPvPWarAugs ?? 0;
+            LuminanceAugmentSpellDurationCount = StoredPvPDurationAugs ?? 0;
+            LuminanceAugmentSpecializeCount = StoredPvPSpecializeAugs ?? 0;
+            LuminanceAugmentSummonCount = StoredPvPSummonAugs ?? 0;
+            LuminanceAugmentMeleeCount = StoredPvPMeleeAugs ?? 0;
+            LuminanceAugmentMissileCount = StoredPvPMissileAugs ?? 0;
 
-            // Silently re-buff with full aug-boosted buffs
-            CreateSentinelBuffPlayers(new Player[] { this }, true, 8);
+            // CRITICAL: Clear the stored properties to prevent them from being read again
+            StoredPvPCreatureAugs = null;
+            StoredPvPItemAugs = null;
+            StoredPvPLifeAugs = null;
+            StoredPvPVoidAugs = null;
+            StoredPvPWarAugs = null;
+            StoredPvPDurationAugs = null;
+            StoredPvPSpecializeAugs = null;
+            StoredPvPSummonAugs = null;
+            StoredPvPMeleeAugs = null;
+            StoredPvPMissileAugs = null;
+
+            // Remove existing self-cast buffs so the higher-power buffs can be applied
+            RemoveSelfCastBuffsForRebuff();
+
+            // Silently re-buff with full aug-boosted buffs (using buff system without Sentinel restriction)
+            BuffPlayersForPvPMode(new Player[] { this }, true, 8);
 
             // Restore vital percentages based on new max values
             Health.Current = (uint)(Health.MaxValue * healthPercent);

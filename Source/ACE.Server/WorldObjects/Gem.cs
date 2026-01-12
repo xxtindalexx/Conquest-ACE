@@ -72,6 +72,20 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // CONQUEST: Block rare gem usage in arena landblocks
+            if (RareId != null && player.CurrentLandblock?.IsArenaLandblock == true)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("Rare gems cannot be used in arena matches.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // CONQUEST: Block rare gem usage during PvP combat (PK timer active)
+            if ((RareId != null || RareUsesTimer) && player.PKTimerActive)
+            {
+                player.SendWeenieError(WeenieError.YouHaveBeenInPKBattleTooRecently);
+                return;
+            }
+
             // handle rare gems
             if (RareId != null && player.GetCharacterOption(CharacterOption.ConfirmUseOfRareGems) && !confirmed)
             {

@@ -106,6 +106,12 @@ namespace ACE.Server.WorldObjects
                 pkPlayer.PkTimestamp = Time.GetUnixTime();
                 pkPlayer.PlayerKillsPk++;
 
+                // CONQUEST: Track arena kill/death
+                if (CurrentLandblock?.IsArenaLandblock ?? false)
+                {
+                    ACE.Server.Managers.ArenaManager.HandlePlayerDeath(Character.Id, pkPlayer.Character.Id);
+                }
+
                 // CONQUEST: Track PK death timestamp for 20-minute cooldown on /pk on command
                 SetProperty(PropertyInt64.LastPKDeathTime, (long)Time.GetUnixTime());
 

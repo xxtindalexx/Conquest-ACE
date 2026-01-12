@@ -810,8 +810,14 @@ namespace ACE.Server.WorldObjects
                 amount = (uint)-target.UpdateVitalDelta(target.Health, (int)-Math.Round(damage));
                 target.DamageHistory.Add(ProjectileSource, Spell.DamageType, amount);
 
+                // CONQUEST: Track arena damage dealt/received from spells
+                if (targetPlayer != null && sourcePlayer != null && target.CurrentLandblock?.IsArenaLandblock == true)
+                {
+                    ACE.Server.Managers.ArenaManager.HandlePlayerDamage(targetPlayer.Character.Id, sourcePlayer.Character.Id, amount);
+                }
+
                 //if (targetPlayer != null && targetPlayer.Fellowship != null)
-                    //targetPlayer.Fellowship.OnVitalUpdate(targetPlayer);
+                //targetPlayer.Fellowship.OnVitalUpdate(targetPlayer);
             }
 
             amount = (uint)Math.Round(damage);    // full amount for debugging

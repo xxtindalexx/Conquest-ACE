@@ -118,6 +118,15 @@ namespace ACE.Server.WorldObjects
             var ratingMod = BoostValue > 0 ? player.GetHealingRatingMod() : 1.0f;
 
             var boostValue = (int)Math.Round(BoostValue * ratingMod);
+            // CONQUEST: Disable food healing during arena overtime
+            if (player.CurrentLandblock?.IsArenaLandblock == true)
+            {
+                var arenaEvent = ACE.Server.Managers.ArenaManager.GetArenaEventByLandblock(player.Location.Landblock);
+                if (arenaEvent != null && arenaEvent.IsOvertime)
+                {
+                    boostValue = 0;
+                }
+            }
 
             var vitalChange = (uint)Math.Abs(player.UpdateVitalDelta(vital, boostValue));
 

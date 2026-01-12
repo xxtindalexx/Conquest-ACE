@@ -3422,6 +3422,28 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // CONQUEST: Check if player-to-player transfer is blocked by bank blacklist
+            if (target is Player targetPlayer)
+            {
+                // Check if the giver is blacklisted
+                if (ACE.Server.Managers.TransferLogger.IsPlayerBankBlacklisted(Name) ||
+                    ACE.Server.Managers.TransferLogger.IsAccountBankBlacklisted(Account.AccountName))
+                {
+                    Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "You are not permitted to transfer items to other players."));
+                    Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
+                    return;
+                }
+
+                // Check if the receiver is blacklisted
+                if (ACE.Server.Managers.TransferLogger.IsPlayerBankBlacklisted(targetPlayer.Name) ||
+                    ACE.Server.Managers.TransferLogger.IsAccountBankBlacklisted(targetPlayer.Account.AccountName))
+                {
+                    Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, $"{targetPlayer.Name} is not permitted to receive items from other players."));
+                    Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
+                    return;
+                }
+            }
+
             CreateMoveToChain(target, (success) =>
             {
                 if (CurrentLandblock == null) // Maybe we were teleported as we were motioning to pick up the item

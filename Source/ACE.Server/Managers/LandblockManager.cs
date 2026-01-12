@@ -657,8 +657,18 @@ namespace ACE.Server.Managers
         /// </summary>
         public static void AddToDestructionQueue(Landblock landblock, int? VariationId)
         {
-            var cacheKey = new VariantCacheId() { Landblock = landblock.Id.Landblock, Variant = VariationId ?? 0 };
-            destructionQueue.TryAdd(cacheKey, landblock);
+            // Always use the landblock's actual VariationId to ensure cache key consistency
+            var actualVariationId = landblock.VariationId ?? 0;
+            var cacheKey = new VariantCacheId() { Landblock = landblock.Id.Landblock, Variant = actualVariationId };
+
+            if (!destructionQueue.TryAdd(cacheKey, landblock))
+            {
+                log.Warn($"LandblockManager: landblock {landblock.Id.Raw:X8}, v:{actualVariationId} already queued for destruction");
+            }
+            else if (VariationId.HasValue && VariationId.Value != actualVariationId)
+            {
+                log.Warn($"LandblockManager: AddToDestructionQueue called with v:{VariationId} but landblock.VariationId is {actualVariationId}. Using landblock's actual VariationId.");
+            }
         }
 
         private static readonly System.Diagnostics.Stopwatch swTrySplitEach = new System.Diagnostics.Stopwatch();
@@ -677,8 +687,10 @@ namespace ACE.Server.Managers
                     landblock.Unload(cacheKey.Variant);
 
                     bool unloadFailed = false;
-                    // CONQUEST: Store landblock ID for error logging before it might get nulled
-                    var landblockId = landblock?.Id.Raw ?? 0;
+                    // CONQUEST: Store landblock properties before Remove() call, which can null the landblock
+                    var landblockIdRaw = landblock?.Id.Raw ?? 0;
+                    var landblockIdLandblock = landblock?.Id.Landblock ?? 0;
+                    var landblockVariationId = landblock?.VariationId ?? 0;
 
                     destructionQueue.TryRemove(cacheKey, out _);
                     landblockLock.EnterWriteLock();
@@ -737,14 +749,22 @@ namespace ACE.Server.Managers
                                 NotifyAdjacents(landblock);
                         }
                         else
+                        { 
                             unloadFailed = true;
+                            // Check if it exists with actual VariationId
+                            // CONQUEST: Use stored values to prevent NullReferenceException
+                            var actualKey = new VariantCacheId() { Landblock = landblockIdLandblock, Variant = landblockVariationId };
+                            var existsWithActualVariant = loadedLandblocks.ContainsKey(actualKey);
+                            log.Error($"LandblockManager: failed to remove {landblockIdRaw:X8}, v:{cacheKey.Variant} from loadedLandblocks. " +
+                                     $"Landblock.VariationId={landblockVariationId}, ExistsWithActualVariant={existsWithActualVariant}");
+                        }
                     }
                     finally
                     {
                         landblockLock.ExitWriteLock();
                     }
                     if (unloadFailed)
-                        log.Error($"LandblockManager: failed to unload {landblockId:X8}"); // CONQUEST: Use stored ID to prevent NullReferenceException
+                        log.Error($"LandblockManager: failed to unload {landblockIdRaw:X8}"); // CONQUEST: Use stored ID to prevent NullReferenceException
                 }
             }
         }

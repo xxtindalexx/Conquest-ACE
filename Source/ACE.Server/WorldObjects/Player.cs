@@ -501,20 +501,33 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public double LastPvPCombatTime;
 
-        /// <summary>
-        /// Stored augmentation counts while in PvP mode (to restore when exiting)
-        /// </summary>
-        public long StoredCreatureAugs;
-        public long StoredItemAugs;
-        public long StoredLifeAugs;
-        public long StoredVoidAugs;
-        public long StoredWarAugs;
-        public long StoredDurationAugs;
-        public long StoredSpecializeAugs;
-        public long StoredSummonAugs;
-        public long StoredMeleeAugs;
-        public long StoredMissileAugs;
+        // Note: Stored augmentation values are now database-backed properties in Creature_Properties.cs (StoredPvP*Augs)
 
+        // CONQUEST: Arena pre-entry location (in-memory, returns to lifestone on crash)
+        /// <summary>
+        /// Stores the player's location before entering an arena, so they can be returned there instead of lifestone
+        /// </summary>
+        public ACE.Entity.Position PreArenaLocation;
+
+        /// <summary>
+        /// CONQUEST: Returns the player to their pre-arena location, or lifestone if not set
+        /// </summary>
+        public void ReturnFromArena()
+        {
+            if (PreArenaLocation != null)
+            {
+                // Return to pre-arena location
+                Teleport(PreArenaLocation);
+
+                // Clear stored location
+                PreArenaLocation = null;
+            }
+            else
+            {
+                // No stored location, send to lifestone
+                Teleport(Sanctuary);
+            }
+        }
         public bool IsLoggingOut;
 
         /// <summary>

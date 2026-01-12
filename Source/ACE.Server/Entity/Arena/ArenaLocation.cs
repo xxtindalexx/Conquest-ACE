@@ -229,6 +229,8 @@ namespace ACE.Server.Entity
                                         if (teamPlayer != null)
                                         {
                                             log.Info($"ArenaLocation.Tick() - {ArenaName} status = 2 - teleporting {teamPlayer.Name} to position {teamPosition.Value.ToLOCString}");
+                                            // CONQUEST: Store location before entering arena
+                                            teamPlayer.PreArenaLocation = teamPlayer.Location;
                                             teamPlayer.Teleport(teamPosition.Value);
                                         }
                                     }
@@ -240,6 +242,8 @@ namespace ACE.Server.Entity
                                 {
                                     var j = i < positions.Count ? i : positions.Count - 1;
                                     log.Info($"ArenaLocation.Tick() - {ArenaName} status = 2 - teleporting {playerList[i].Name} to position {positions[j].ToLOCString}");
+                                    // CONQUEST: Store location before entering arena
+                                    playerList[i].PreArenaLocation = playerList[i].Location;
                                     playerList[i].Teleport(positions[j]);
                                 }
                             }
@@ -460,10 +464,8 @@ namespace ACE.Server.Entity
                                 {
                                     if (player.CurrentLandblock?.IsArenaLandblock ?? false)
                                     {
-                                        player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Thank you for playing arenas.  You've loitered a bit too long after the event.  Have a nice trip to your Lifestone!", ChatMessageType.System));
-                                        var sanctuary = new Position(player.Sanctuary);
-                                        sanctuary.Variation = null;
-                                        player.Teleport(sanctuary);
+                                        player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Thank you for playing arenas.  You've loitered a bit too long after the event.", ChatMessageType.System));
+                                        player.ReturnFromArena(); // CONQUEST: Return to pre-arena location
                                     }
                                 }
                             }
@@ -799,7 +801,7 @@ namespace ACE.Server.Entity
                 var player = PlayerManager.GetOnlinePlayer(winner.CharacterId);
                 if (player != null)
                 {
-                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Congratulations, you've won the {ActiveEvent.EventTypeDisplay} arena event against {loserList}!\nIf you're still in {ArenaName} you have a short period before you're teleported to your Lifestone so hurry up and loot.", ChatMessageType.System));
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Congratulations, you've won the {ActiveEvent.EventTypeDisplay} arena event against {loserList}!\nIf you're still in {ArenaName} you have a short period before you're teleported to your previous location so hurry up and loot.", ChatMessageType.System));
 
                     //Reward the winners
                     var shouldReward = IsPlayerRewardEligible(player, winner, ActiveEvent.Players) && !underageViolation;
@@ -1293,7 +1295,7 @@ namespace ACE.Server.Entity
                 var player = PlayerManager.GetOnlinePlayer(arenaPlayer.CharacterId);
                 if (player != null)
                 {
-                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your {ActiveEvent.EventTypeDisplay} arena event has ended in a draw.  If you are still in the arena you can recall now or have a short period before you are teleported to your lifestone.", ChatMessageType.System));
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your {ActiveEvent.EventTypeDisplay} arena event has ended in a draw.  If you are still in the arena you can recall now or have a short period before you are teleported to your previous location.", ChatMessageType.System));
 
                     var shouldReward = IsPlayerRewardEligible(player, arenaPlayer, ActiveEvent.Players) && !underageViolation;
 
@@ -1408,10 +1410,8 @@ namespace ACE.Server.Entity
                         continue;
                     }
 
-                    var sanctuary = new Position(player.Sanctuary);
-                    sanctuary.Variation = null;
-                    player.Teleport(sanctuary);
-                    player.Session.Network.EnqueueSend(new GameMessageSystemChat("You've been teleported to your lifestone because you were inside an arena location without being an active participant in an arena event", ChatMessageType.System));
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat("You've been teleported because you were inside an arena location without being an active participant in an arena event", ChatMessageType.System));
+                    player.ReturnFromArena(); // CONQUEST: Return to pre-arena location
                 }
             }
             catch (Exception ex)

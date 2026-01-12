@@ -74,5 +74,16 @@ namespace ACE.Entity.Enum.Properties
         LumAugMissileDefenseCount = 9025,
         LumAugMagicDefenseCount   = 9026,
         MorphedFromCharacterId    = 9039,
+        // CONQUEST: Stored PvP Augmentation Values (database-backed for crash safety)
+        StoredPvPCreatureAugs = 9040,
+        StoredPvPItemAugs = 9041,
+        StoredPvPLifeAugs = 9042,
+        StoredPvPVoidAugs = 9043,
+        StoredPvPWarAugs = 9044,
+        StoredPvPDurationAugs = 9045,
+        StoredPvPSpecializeAugs = 9046,
+        StoredPvPSummonAugs = 9047,
+        StoredPvPMeleeAugs = 9048,
+        StoredPvPMissileAugs = 9049,
     }
 }

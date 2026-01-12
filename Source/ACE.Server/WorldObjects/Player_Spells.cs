@@ -294,6 +294,104 @@ namespace ACE.Server.WorldObjects
             });
         }
 
+        /// <summary>
+        /// CONQUEST: Buff players for PvP mode - EXACT copy of CreateSentinelBuffPlayers without Sentinel restriction
+        /// This method is used to rebuff players when entering/exiting PvP mode, regardless of access level
+        /// </summary>
+        public void BuffPlayersForPvPMode(IEnumerable<Player> players, bool self = false, ulong maxLevel = 8)
+        {
+            // NOTE: Sentinel access check REMOVED - this is the only difference from CreateSentinelBuffPlayers
+
+            var SelfOrOther = self ? "Self" : "Other";
+
+            // ensure level 8s are installed
+            var maxSpellLevel = Math.Clamp(maxLevel, 1, 8);
+            if (maxSpellLevel == 8 && DatabaseManager.World.GetCachedSpell((uint)SpellId.ArmorOther8) == null)
+                maxSpellLevel = 7;
+
+            var tySpell = typeof(SpellId);
+            List<BuffMessage> buffMessages = new List<BuffMessage>();
+            // prepare messages
+            List<string> buffsNotImplementedYet = new List<string>();
+            foreach (var spell in Buffs)
+            {
+                var spellNamPrefix = spell;
+                bool isBane = false;
+                if (spellNamPrefix.StartsWith("@"))
+                {
+                    isBane = true;
+                    spellNamPrefix = spellNamPrefix.Substring(1);
+                }
+                string fullSpellEnumName = spellNamPrefix + ((isBane) ? string.Empty : SelfOrOther) + maxSpellLevel;
+                string fullSpellEnumNameAlt = spellNamPrefix + ((isBane) ? string.Empty : ((SelfOrOther == "Self") ? "Other" : "Self")) + maxSpellLevel;
+                uint spellID = (uint)Enum.Parse(tySpell, fullSpellEnumName);
+                var buffMsg = BuildBuffMessage(spellID);
+
+                if (buffMsg == null)
+                {
+                    spellID = (uint)Enum.Parse(tySpell, fullSpellEnumNameAlt);
+                    buffMsg = BuildBuffMessage(spellID);
+                }
+
+                if (buffMsg != null)
+                {
+                    buffMsg.Bane = isBane;
+                    buffMessages.Add(buffMsg);
+                }
+                else
+                {
+                    buffsNotImplementedYet.Add(fullSpellEnumName);
+                }
+            }
+            // buff each player
+            players.ToList().ForEach(targetPlayer =>
+            {
+                if (buffMessages.Any(k => !k.Bane))
+                {
+                    // bake player into the messages
+                    buffMessages.Where(k => !k.Bane).ToList().ForEach(k => k.SetTargetPlayer(targetPlayer));
+                    // update client-side enchantments
+                    targetPlayer.Session.Network.EnqueueSend(buffMessages.Where(k => !k.Bane).Select(k => k.SessionMessage).ToArray());
+                    // run client-side effect scripts, omitting duplicates
+                    targetPlayer.EnqueueBroadcast(buffMessages.Where(k => !k.Bane).ToList().GroupBy(m => m.Spell.TargetEffect).Select(a => a.First().LandblockMessage).ToArray());
+                    // update server-side enchantments
+
+                    var buffsForPlayer = buffMessages.Where(k => !k.Bane).ToList().Select(k => k.Enchantment);
+
+                    var lifeBuffsForPlayer = buffsForPlayer.Where(k => k.Spell.School == MagicSchool.LifeMagic).ToList();
+                    var critterBuffsForPlayer = buffsForPlayer.Where(k => k.Spell.School == MagicSchool.CreatureEnchantment).ToList();
+                    var itemBuffsForPlayer = buffsForPlayer.Where(k => k.Spell.School == MagicSchool.ItemEnchantment).ToList();
+
+                    lifeBuffsForPlayer.ForEach(spl =>
+                    {
+                        CreateEnchantmentSilent(spl.Spell, targetPlayer);
+                    });
+                    critterBuffsForPlayer.ForEach(spl =>
+                    {
+                        CreateEnchantmentSilent(spl.Spell, targetPlayer);
+                    });
+                    itemBuffsForPlayer.ForEach(spl =>
+                    {
+                        CreateEnchantmentSilent(spl.Spell, targetPlayer);
+                    });
+                }
+                if (buffMessages.Any(k => k.Bane))
+                {
+                    // Impen/bane
+                    var items = targetPlayer.EquippedObjects.Values.ToList();
+                    var itembuffs = buffMessages.Where(k => k.Bane).ToList();
+                    foreach (var itemBuff in itembuffs)
+                    {
+                        foreach (var item in items)
+                        {
+                            if ((item.WeenieType == WeenieType.Clothing || item.IsShield) && item.IsEnchantable)
+                                CreateEnchantmentSilent(itemBuff.Spell, item);
+                        }
+                    }
+                }
+            });
+        }
+
         private void CreateEnchantmentSilent(Spell spell, WorldObject target)
         {
             var addResult = target.EnchantmentManager.Add(spell, this, null);

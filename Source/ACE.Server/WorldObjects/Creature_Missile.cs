@@ -68,9 +68,10 @@ namespace ACE.Server.WorldObjects
         }
 
         // Split arrow constants
-        private const int DEFAULT_SPLIT_ARROW_COUNT = 3;
+        // CONQUEST: Main target takes 100% damage, 2 additional arrows each deal 30% damage
+        private const int DEFAULT_SPLIT_ARROW_COUNT = 2;
         private const float DEFAULT_SPLIT_ARROW_RANGE = 8f;
-        private const float DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER = 0.6f;
+        private const float DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER = 0.3f;
 
         // Split arrow validation constants
         private const int SPLIT_ARROW_COUNT_MIN = 0;

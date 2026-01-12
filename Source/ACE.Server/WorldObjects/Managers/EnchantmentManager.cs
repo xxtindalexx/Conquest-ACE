@@ -146,6 +146,12 @@ namespace ACE.Server.WorldObjects.Managers
                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
                 WorldObject.ChangesDetected = true;
 
+                // CONQUEST: Track rare spell enchantments for PvP dispelling
+                if (caster is Gem gem && (gem.RareUsesTimer || gem.RareId != null) && Player != null)
+                {
+                    Player.AddRareEnchantment(spell.Id);
+                }
+
                 result.Enchantment = newEntry;
                 result.StackType = StackType.Initial;
                 return result;
@@ -170,6 +176,12 @@ namespace ACE.Server.WorldObjects.Managers
                 var newEntry = BuildEntry(spell, caster, weapon, equip);
                 newEntry.LayerId = result.NextLayerId;
                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
+
+                // CONQUEST: Track rare spell enchantments for PvP dispelling
+                if (caster is Gem gem && (gem.RareUsesTimer || gem.RareId != null) && Player != null)
+                {
+                    Player.AddRareEnchantment(spell.Id);
+                }
 
                 result.Enchantment = newEntry;
             }
@@ -546,6 +558,13 @@ namespace ACE.Server.WorldObjects.Managers
 
             if (WorldObject.Biota.PropertiesEnchantmentRegistry.TryRemoveEnchantment(entry.SpellId, entry.CasterObjectId, WorldObject.BiotaDatabaseLock))
                 WorldObject.ChangesDetected = true;
+
+            // CONQUEST: Remove from rare spell tracking when enchantment is removed
+            if (Player != null && spellID >= 0)
+            {
+                Player.TryRemoveRareEnchantment((uint)spellID);
+            }
+
 
             if (Player != null)
             {
@@ -1644,6 +1663,13 @@ namespace ACE.Server.WorldObjects.Managers
                 if (damageSourcePlayer != null)
                 {
                     creature.TakeDamageOverTime_NotifySource(damageSourcePlayer, damageType, amount, aetheria);
+
+                    // CONQUEST: Track arena damage dealt/received from DoTs
+                    var defenderPlayer = creature as Player;
+                    if (defenderPlayer != null && creature.CurrentLandblock?.IsArenaLandblock == true)
+                    {
+                        ACE.Server.Managers.ArenaManager.HandlePlayerDamage(defenderPlayer.Character.Id, damageSourcePlayer.Character.Id, (uint)Math.Round(amount));
+                    }
 
                     if (creature.IsAlive)
                         creature.EmoteManager.OnDamage(damageSourcePlayer);

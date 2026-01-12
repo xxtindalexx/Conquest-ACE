@@ -522,6 +522,17 @@ namespace ACE.Server.WorldObjects
                     srcVital = "stamina";
                     break;
                 default:   // Health
+                    var targetP = targetCreature as Player;
+
+                    // CONQUEST: Apply arena overtime healing reduction
+                    if (targetP != null && targetP.CurrentLandblock?.IsArenaLandblock == true)
+                    {
+                        var arenaEvent = ACE.Server.Managers.ArenaManager.GetArenaEventByLandblock(targetP.Location.Landblock);
+                        if (arenaEvent != null && arenaEvent.IsOvertime)
+                        {
+                            tryBoost = boost = (int)Math.Round(boost * arenaEvent.OvertimeHealingModifier);
+                        }
+                    }
                     boost = targetCreature.UpdateVitalDelta(targetCreature.Health, tryBoost);
                     srcVital = "health";
 
@@ -779,6 +790,18 @@ namespace ACE.Server.WorldObjects
                     break;
                 default:   // Health
                     srcVital = "health";
+                    // CONQUEST: Apply arena overtime healing reduction to source (Martyr-style spells)
+                    if (targetPlayer != null &&
+                        spell.Destination == PropertyAttribute2nd.Health &&
+                        srcVitalChange < 0 &&
+                        targetPlayer.CurrentLandblock?.IsArenaLandblock == true)
+                    {
+                        var arenaEvent = ACE.Server.Managers.ArenaManager.GetArenaEventByLandblock(targetPlayer.Location.Landblock);
+                        if (arenaEvent != null && arenaEvent.IsOvertime)
+                        {
+                            srcVitalChange = Convert.ToUInt32(Math.Round(srcVitalChange * arenaEvent.OvertimeHealingModifier));
+                        }
+                    }
                     srcVitalChange = (uint)-transferSource.UpdateVitalDelta(transferSource.Health, -(int)srcVitalChange);
 
                     transferSource.DamageHistory.Add(this, DamageType.Health, srcVitalChange);
@@ -803,6 +826,15 @@ namespace ACE.Server.WorldObjects
                     break;
                 default:   // Health
                     destVital = "health";
+                    // CONQUEST: Apply arena overtime healing reduction to destination
+                    if (targetPlayer != null && targetPlayer.CurrentLandblock?.IsArenaLandblock == true)
+                    {
+                        var arenaEvent = ACE.Server.Managers.ArenaManager.GetArenaEventByLandblock(targetPlayer.Location.Landblock);
+                        if (arenaEvent != null && arenaEvent.IsOvertime)
+                        {
+                            destVitalChange = Convert.ToUInt32(Math.Round(destVitalChange * arenaEvent.OvertimeHealingModifier));
+                        }
+                    }
                     destVitalChange = (uint)destination.UpdateVitalDelta(destination.Health, destVitalChange);
 
                     destination.DamageHistory.OnHeal(destVitalChange);

@@ -116,9 +116,8 @@ namespace ACE.Server.WorldObjects
             HandleHouseOnLogin();
 
             // CONQUEST: If player logged out during PvP mode, restore their augmentations
-            if (InPvPMode)
+            if (PropertyManager.GetBool("pvp_disable_custom_augs") && InPvPMode)
             {
-                // Player logged out while in PvP mode - restore their augmentations
                 ExitPvPMode();
             }
 

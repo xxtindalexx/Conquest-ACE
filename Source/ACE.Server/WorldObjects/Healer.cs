@@ -210,6 +210,17 @@ namespace ACE.Server.WorldObjects
             // heal up
             var healAmount = GetHealAmount(healer, target, missingVital, out var critical, out var staminaCost);
 
+            // CONQUEST: Apply arena overtime healing reduction
+            if (target.CurrentLandblock?.IsArenaLandblock == true)
+            {
+                var arenaEvent = ACE.Server.Managers.ArenaManager.GetArenaEventByLandblock(target.Location.Landblock);
+                if (arenaEvent != null && arenaEvent.IsOvertime)
+                {
+                    healAmount = Convert.ToUInt32(Math.Round(healAmount * arenaEvent.OvertimeHealingModifier));
+                    staminaCost = Convert.ToUInt32(Math.Round(staminaCost * arenaEvent.OvertimeHealingModifier));
+                }
+            }
+
             healer.UpdateVitalDelta(healer.Stamina, (int)-staminaCost);
             // Amount displayed to player can exceed actual amount healed due to heal boost ratings, but we only want to record the actual amount healed
             var actualHealAmount = (uint)target.UpdateVitalDelta(vital, healAmount);

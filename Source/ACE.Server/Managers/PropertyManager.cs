@@ -580,6 +580,8 @@ namespace ACE.Server.Managers
                 ("player_receive_immediate_save", new Property<bool>(false, "if enabled, when the player receives items from an NPC, they will be saved immediately")),
                 ("pk_server", new Property<bool>(false, "set this to TRUE for darktide servers")),
                 ("pk_server_safe_training_academy", new Property<bool>(false, "set this to TRUE to disable pk fighting in training academy and time to exit starter town safely")),
+                ("pvp_disable_custom_augs", new Property<bool>(false, "CONQUEST: if TRUE, custom augmentations (PropertyInt64 9007-9026) are temporarily disabled during PvP combat for balanced fights. Augmentations are restored after pvp_custom_aug_timeout seconds without combat.")),
+                ("dispel_rares_pvp", new Property<bool>(false, "CONQUEST: if TRUE, rare gem spell buffs are automatically dispelled when PvP combat begins, and rare gems cannot be used while PK timer is active.")),
                 ("pkl_server", new Property<bool>(false, "set this to TRUE for pink servers")),
                 ("quest_info_enabled", new Property<bool>(false, "toggles the /myquests player command")),
                 ("rares_real_time", new Property<bool>(true, "allow for second chance roll based on an rng seeded timestamp for a rare on rare eligible kills that do not generate a rare, rares_max_seconds_between defines maximum seconds before second chance kicks in")),

@@ -125,7 +125,8 @@ namespace ACE.Server.WorldObjects
             PKDungeonEnforcementTick();
 
             // CONQUEST: Check PvP custom augmentation mode timeout
-            CheckPvPModeTimeout();
+            if (PropertyManager.GetBool("pvp_disable_custom_augs"))
+                CheckPvPModeTimeout();
 
             GagsTick();
 
