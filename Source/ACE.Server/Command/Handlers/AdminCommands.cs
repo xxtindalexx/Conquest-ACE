@@ -2342,11 +2342,13 @@ namespace ACE.Server.Command.Handlers
         // teleloc cell x y z [qx qy qz qw]
         [CommandHandler("teleloc", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 4,
             "Teleport yourself to the specified location.",
-            "cell [x y z] (qw qx qy qz)\n" +
+            "cell [x y z] (qw qx qy qz) [variation]\n" +
             "@teleloc follows the same number order as displayed from @loc output\n" +
+            "Optional variation parameter for dungeon instances (e.g., v:2)\n" +
             "Example: @teleloc 0x7F0401AD [12.319900 -28.482000 0.005000] -0.338946 0.000000 0.000000 -0.940806\n" +
             "Example: @teleloc 0x7F0401AD 12.319900 -28.482000 0.005000 -0.338946 0.000000 0.000000 -0.940806\n" +
-            "Example: @teleloc 7F0401AD 12.319900 -28.482000 0.005000")]
+            "Example: @teleloc 7F0401AD 12.319900 -28.482000 0.005000\n" +
+            "Example: @teleloc 0x01D50145 12.0 -28.0 0.005 1 0 0 0 2")]
         public static void HandleTeleportLOC(Session session, params string[] parameters)
         {
             try
@@ -2379,7 +2381,20 @@ namespace ACE.Server.Command.Handlers
                     positionData[i] = position;
                 }
 
-                session.Player.Teleport(new Position(cell, positionData[0], positionData[1], positionData[2], positionData[4], positionData[5], positionData[6], positionData[3]));
+                // CONQUEST: Handle optional variation parameter or preserve player's current variation
+                int? targetVariation = session.Player.Location.Variation; // Default to current variation
+
+                // Check if variation parameter was provided (9th parameter for full coords, or 5th for short form)
+                if (parameters.Length >= 9 && int.TryParse(parameters[8], out var variationParam))
+                {
+                    targetVariation = variationParam;
+                }
+                else if (parameters.Length >= 5 && parameters.Length < 8 && int.TryParse(parameters[4], out var shortVariationParam))
+                {
+                    targetVariation = shortVariationParam;
+                }
+
+                session.Player.Teleport(new Position(cell, positionData[0], positionData[1], positionData[2], positionData[4], positionData[5], positionData[6], positionData[3], false, targetVariation));
             }
             catch (Exception)
             {

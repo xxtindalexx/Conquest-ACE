@@ -257,7 +257,7 @@ namespace ACE.Server.Entity
             //log.DebugFormat("Landblock({0:X8})", (id.Raw | 0xFFFF));
 
             Id = id;
-            VariationId = VariationId;
+            VariationId = variation; // CONQUEST: Fixed typo - was assigning VariationId to itself instead of variation parameter
 
             CellLandblock = DatManager.CellDat.ReadFromDat<CellLandblock>(Id.Raw | 0xFFFF);
             LandblockInfo = DatManager.CellDat.ReadFromDat<LandblockInfo>((uint)Id.Landblock << 16 | 0xFFFE);

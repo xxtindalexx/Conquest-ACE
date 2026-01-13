@@ -1149,7 +1149,7 @@ namespace ACE.Server.Command.Handlers.Processors
                 }
 
                 // Save to ModsDirectory/Clothing folder
-                var clothingDir = Path.Combine(ConfigManager.Config.Server.ModsDirectory, "Clothing");
+                var clothingDir = Path.Combine(ConfigManager.Config.Server.ModsDirectory, "CustomClothingBase\\json");
                 if (!Directory.Exists(clothingDir))
                     Directory.CreateDirectory(clothingDir);
 

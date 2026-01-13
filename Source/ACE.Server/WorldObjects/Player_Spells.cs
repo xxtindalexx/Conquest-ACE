@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 using ACE.Database;
 using ACE.Database.Models.Shard;
 using ACE.DatLoader;
@@ -11,9 +7,13 @@ using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Managers;
-using ACE.Server.Network.Structure;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Server.Network.Structure;
+using ACE.Server.Physics.Animation;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ACE.Server.WorldObjects
 {
@@ -200,7 +200,7 @@ namespace ACE.Server.WorldObjects
             EquipDequipItemFromSet(item, spells, prevSpells);
         }
 
-        public void CreateSentinelBuffPlayers(IEnumerable<Player> players, bool self = false, ulong maxLevel = 8)
+        public void CreateSentinelBuffPlayers(IEnumerable<Player> players, bool self = false, ulong maxLevel = 8, bool suppressVisualEffects = false)
         {
             if (!(Session.AccessLevel >= AccessLevel.Sentinel)) return;
 
@@ -254,8 +254,13 @@ namespace ACE.Server.WorldObjects
                     buffMessages.Where(k => !k.Bane).ToList().ForEach(k => k.SetTargetPlayer(targetPlayer));
                     // update client-side enchantments
                     targetPlayer.Session.Network.EnqueueSend(buffMessages.Where(k => !k.Bane).Select(k => k.SessionMessage).ToArray());
-                    // run client-side effect scripts, omitting duplicates
-                    targetPlayer.EnqueueBroadcast(buffMessages.Where(k => !k.Bane).ToList().GroupBy(m => m.Spell.TargetEffect).Select(a => a.First().LandblockMessage).ToArray());
+                    // CONQUEST: Only broadcast visual effects if not suppressed (for silent PvP mode transitions)
+                    if (!suppressVisualEffects)
+                    {
+                        // run client-side effect scripts, omitting duplicates
+                        targetPlayer.EnqueueBroadcast(buffMessages.Where(k => !k.Bane).ToList().GroupBy(m => m.Spell.TargetEffect).Select(a => a.First().LandblockMessage).ToArray());
+                    }
+
                     // update server-side enchantments
 
                     var buffsForPlayer = buffMessages.Where(k => !k.Bane).ToList().Select(k => k.Enchantment);
@@ -298,7 +303,7 @@ namespace ACE.Server.WorldObjects
         /// CONQUEST: Buff players for PvP mode - EXACT copy of CreateSentinelBuffPlayers without Sentinel restriction
         /// This method is used to rebuff players when entering/exiting PvP mode, regardless of access level
         /// </summary>
-        public void BuffPlayersForPvPMode(IEnumerable<Player> players, bool self = false, ulong maxLevel = 8)
+        public void BuffPlayersForPvPMode(IEnumerable<Player> players, bool self = false, ulong maxLevel = 8, bool suppressVisualEffects = false)
         {
             // NOTE: Sentinel access check REMOVED - this is the only difference from CreateSentinelBuffPlayers
 
@@ -352,8 +357,12 @@ namespace ACE.Server.WorldObjects
                     buffMessages.Where(k => !k.Bane).ToList().ForEach(k => k.SetTargetPlayer(targetPlayer));
                     // update client-side enchantments
                     targetPlayer.Session.Network.EnqueueSend(buffMessages.Where(k => !k.Bane).Select(k => k.SessionMessage).ToArray());
-                    // run client-side effect scripts, omitting duplicates
-                    targetPlayer.EnqueueBroadcast(buffMessages.Where(k => !k.Bane).ToList().GroupBy(m => m.Spell.TargetEffect).Select(a => a.First().LandblockMessage).ToArray());
+                    // CONQUEST: Only broadcast visual effects if not suppressed(for silent PvP mode transitions)
+                        if (!suppressVisualEffects)
+                        {
+                            // run client-side effect scripts, omitting duplicates
+                            targetPlayer.EnqueueBroadcast(buffMessages.Where(k => !k.Bane).ToList().GroupBy(m => m.Spell.TargetEffect).Select(a => a.First().LandblockMessage).ToArray());
+                        }
                     // update server-side enchantments
 
                     var buffsForPlayer = buffMessages.Where(k => !k.Bane).ToList().Select(k => k.Enchantment);

@@ -2050,14 +2050,62 @@ namespace ACE.Server.WorldObjects
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"You don't have enough luminance banked to transfer. Need {Amount:N0} but only have {BankedLuminance:N0}.", ChatMessageType.System));
                 return false;
             }
-            
+
+            // CONQUEST: Check daily transfer limit
+            CheckAndResetLuminanceDailyLimits();
+            var transferLimit = PropertyManager.GetLong("luminance_transfer_daily_limit");
+            if (transferLimit > 0)
+            {
+                var alreadyTransferred = LuminanceTransferredToday ?? 0;
+                var remainingTransfer = transferLimit - alreadyTransferred;
+
+                if (Amount > remainingTransfer)
+                {
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Daily transfer limit: You can transfer {remainingTransfer:N0} more luminance today (limit: {transferLimit:N0}, already transferred: {alreadyTransferred:N0}). Resets at midnight EST.", ChatMessageType.System));
+                    return false;
+                }
+            }
+
             var tarplayer = FindTargetByName(CharacterDestination);
             if (tarplayer == null)
             {
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"Character '{CharacterDestination}' not found.", ChatMessageType.System));
                 return false;
             }
-            
+
+            // CONQUEST: Check receiver's daily limit
+            var receiveLimit = PropertyManager.GetLong("luminance_receive_daily_limit");
+            if (receiveLimit > 0)
+            {
+                long receiverAlreadyReceived = 0;
+                long receiverLastResetTime = 0;
+
+                if (tarplayer is OfflinePlayer offlineCheck)
+                {
+                    receiverAlreadyReceived = offlineCheck.GetProperty(PropertyInt64.LuminanceReceivedToday) ?? 0;
+                    receiverLastResetTime = offlineCheck.GetProperty(PropertyInt64.LastLuminanceResetTime) ?? 0;
+                }
+                else if (tarplayer is Player onlineCheck)
+                {
+                    // Reset receiver's limits if needed
+                    onlineCheck.CheckAndResetLuminanceDailyLimits();
+                    receiverAlreadyReceived = onlineCheck.LuminanceReceivedToday ?? 0;
+                }
+
+                // Check if receiver's last reset needs updating (for offline players)
+                if (tarplayer is OfflinePlayer && receiverLastResetTime < GetCurrentDayStartEst())
+                {
+                    receiverAlreadyReceived = 0; // Reset because it's a new day
+                }
+
+                var remainingReceive = receiveLimit - receiverAlreadyReceived;
+                if (Amount > remainingReceive)
+                {
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"{tarplayer.Name} can only receive {remainingReceive:N0} more luminance today (limit: {receiveLimit:N0}, already received: {receiverAlreadyReceived:N0}). Resets at midnight EST.", ChatMessageType.System));
+                    return false;
+                }
+            }
+
             if (tarplayer is OfflinePlayer)
             {
                 var offlinePlayer = tarplayer as OfflinePlayer;
@@ -2081,6 +2129,27 @@ namespace ACE.Server.WorldObjects
                 }
                 
                 offlinePlayer.BankedLuminance += Amount;
+
+                // CONQUEST: Update daily tracking for both players
+                LuminanceTransferredToday = (LuminanceTransferredToday ?? 0) + Amount;
+
+                // Update receiver's daily tracking (handle reset if needed)
+                var receiverLastReset = offlinePlayer.GetProperty(PropertyInt64.LastLuminanceResetTime) ?? 0;
+                var currentDayStart = GetCurrentDayStartEst();
+
+                if (receiverLastReset < currentDayStart)
+                {
+                    // New day - reset receiver's counter
+                    offlinePlayer.SetProperty(PropertyInt64.LuminanceReceivedToday, Amount);
+                    offlinePlayer.SetProperty(PropertyInt64.LastLuminanceResetTime, currentDayStart);
+                }
+                else
+                {
+                    // Same day - add to existing
+                    var currentReceived = offlinePlayer.GetProperty(PropertyInt64.LuminanceReceivedToday) ?? 0;
+                    offlinePlayer.SetProperty(PropertyInt64.LuminanceReceivedToday, currentReceived + Amount);
+                }
+
                 offlinePlayer.SaveBiotaToDatabase();
                 
                 // Send confirmation to sender
@@ -2113,6 +2182,10 @@ namespace ACE.Server.WorldObjects
                         // Perform atomic transfer
                         this.BankedLuminance -= Amount;
                         onlinePlayer.BankedLuminance = (onlinePlayer.BankedLuminance ?? 0) + Amount;
+
+                        // CONQUEST: Update daily tracking for both players
+                        this.LuminanceTransferredToday = (this.LuminanceTransferredToday ?? 0) + Amount;
+                        onlinePlayer.LuminanceReceivedToday = (onlinePlayer.LuminanceReceivedToday ?? 0) + Amount;
                     }
                 }
                 
@@ -2440,6 +2513,56 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyInt64.EventTokens) ?? 0;
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.EventTokens); else SetProperty(PropertyInt64.EventTokens, value.Value); }
+        }
+
+        // CONQUEST: Daily luminance transfer tracking
+        public long? LuminanceTransferredToday
+        {
+            get => GetProperty(PropertyInt64.LuminanceTransferredToday) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LuminanceTransferredToday); else SetProperty(PropertyInt64.LuminanceTransferredToday, value.Value); }
+        }
+
+        public long? LuminanceReceivedToday
+        {
+            get => GetProperty(PropertyInt64.LuminanceReceivedToday) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LuminanceReceivedToday); else SetProperty(PropertyInt64.LuminanceReceivedToday, value.Value); }
+        }
+
+        public long? LastLuminanceResetTime
+        {
+            get => GetProperty(PropertyInt64.LastLuminanceResetTime) ?? 0;
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastLuminanceResetTime); else SetProperty(PropertyInt64.LastLuminanceResetTime, value.Value); }
+        }
+
+        /// <summary>
+        /// CONQUEST: Gets the Unix timestamp for the start of the current day in EST (midnight EST)
+        /// </summary>
+        private long GetCurrentDayStartEst()
+        {
+            var estZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+            var nowUtc = DateTime.UtcNow;
+            var nowEst = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, estZone);
+            var dayStartEst = nowEst.Date; // Midnight EST
+            var dayStartUtc = TimeZoneInfo.ConvertTimeToUtc(dayStartEst, estZone);
+            return new DateTimeOffset(dayStartUtc).ToUnixTimeSeconds();
+        }
+
+        /// <summary>
+        /// CONQUEST: Checks if daily luminance limits need to be reset (midnight EST)
+        /// Resets LuminanceTransferredToday and LuminanceReceivedToday if it's a new day
+        /// </summary>
+        public void CheckAndResetLuminanceDailyLimits()
+        {
+            var currentDayStart = GetCurrentDayStartEst();
+            var lastReset = LastLuminanceResetTime ?? 0;
+
+            if (lastReset < currentDayStart)
+            {
+                // It's a new day - reset the counters
+                LuminanceTransferredToday = 0;
+                LuminanceReceivedToday = 0;
+                LastLuminanceResetTime = currentDayStart;
+            }
         }
         // CONQUEST: BankedMythicalKeys property removed - Mythical Keys not used in Conquest
         /*public long? BankedMythicalKeys

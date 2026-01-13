@@ -296,6 +296,10 @@ namespace ACE.Server.WorldObjects
             if (creatureAttacker != null)
                 SetCurrentAttacker(creatureAttacker);
 
+            // CONQUEST: Update PK timers when evading attacks from other players
+            if (attacker is Player attackerPlayer)
+                UpdatePKTimers(attackerPlayer, this);
+
             if (UnderLifestoneProtection)
                 return;
 
@@ -1036,11 +1040,11 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// Called when a successful attack is landed in PVP
+        /// Called when PVP combat interaction occurs (damage, evade, resist)
         /// The timestamp for both PKs are updated
-        /// 
-        /// If a physical attack is evaded, or a magic spell is resisted,
-        /// this function should NOT be called.
+        ///
+        /// CONQUEST: This is now called for evade and resist as well to trigger
+        /// aug canceling and rebuffing when entering PvP combat.
         /// </summary>
         public static void UpdatePKTimers(Player attacker, Player defender)
         {
@@ -1377,7 +1381,8 @@ namespace ACE.Server.WorldObjects
             RemoveSelfCastBuffsForRebuff();
 
             // Silently re-buff with base-level buffs (using buff system without Sentinel restriction)
-            BuffPlayersForPvPMode(new Player[] { this }, true, 8);
+            // CONQUEST: Suppress visual effects when entering PvP mode
+            BuffPlayersForPvPMode(new Player[] { this }, true, 8, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
             Health.Current = (uint)(Health.MaxValue * healthPercent);
@@ -1438,7 +1443,8 @@ namespace ACE.Server.WorldObjects
             RemoveSelfCastBuffsForRebuff();
 
             // Silently re-buff with full aug-boosted buffs (using buff system without Sentinel restriction)
-            BuffPlayersForPvPMode(new Player[] { this }, true, 8);
+            // CONQUEST: Suppress visual effects when exiting PvP mode
+            BuffPlayersForPvPMode(new Player[] { this }, true, 8, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
             Health.Current = (uint)(Health.MaxValue * healthPercent);

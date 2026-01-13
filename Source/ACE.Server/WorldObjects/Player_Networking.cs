@@ -34,6 +34,58 @@ namespace ACE.Server.WorldObjects
             Character.TotalLogins++;
             CharacterChangesDetected = true;
 
+            // CONQUEST: VPN/Proxy Detection
+            if (PropertyManager.GetBool("enable_vpn_detection"))
+            {
+                var playerIP = Session.EndPoint.Address.ToString();
+                var apiKey = PropertyManager.GetString("proxycheck_api_key");
+
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                {
+                    var session = Session; // Capture session reference for async context
+                    var playerName = Name;
+                    var accountName = Account.AccountName;
+
+                    // Run VPN check asynchronously without blocking login
+                    var _ = System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var ispInfo = await Network.VPNDetection.CheckVPN(playerIP);
+                            if (ispInfo != null && !string.IsNullOrEmpty(ispInfo.Proxy) && ispInfo.Proxy.ToLower().Equals("yes"))
+                            {
+                                log.Warn($"[VPN DETECTED] Player {playerName} (Account: {accountName}) logged in from VPN/Proxy. IP: {playerIP}, ISP: {ispInfo.Provider}, Type: {ispInfo.Type}, Country: {ispInfo.Country} - DISCONNECTING");
+
+                                // Broadcast to audit channel
+                                var auditMsg = $"[VPN DETECTED] Player: {playerName} | Account: {accountName} | IP: {playerIP} | ISP: {ispInfo.Provider} | Type: {ispInfo.Type} | Country: {ispInfo.Country} - Connection blocked";
+                                PlayerManager.BroadcastToAuditChannel(null, auditMsg);
+
+                                // Send message to player before kicking
+                                session.Network?.EnqueueSend(new GameMessageSystemChat("VPN/Proxy connections are not permitted on this server. Please disconnect from your VPN and try again.", ChatMessageType.Broadcast));
+
+                                // Wait briefly for message to send
+                                await System.Threading.Tasks.Task.Delay(1000);
+
+                                // Terminate the session
+                                session.Terminate(Network.Enum.SessionTerminationReason.AccountBanned, null, null, "VPN/Proxy detected");
+                            }
+                            else if (ispInfo != null)
+                            {
+                                log.Debug($"[VPN CHECK] Player {playerName} logged in from clean IP: {playerIP}, ISP: {ispInfo.Provider}, Country: {ispInfo.Country}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error($"[VPN CHECK] Error checking VPN for player {playerName} at IP {playerIP}: {ex.Message}");
+                        }
+                    });
+                }
+                else
+                {
+                    log.Warn("[VPN DETECTION] enable_vpn_detection is TRUE but proxycheck_api_key is not configured. VPN detection disabled.");
+                }
+            }
+
             // CONQUEST: Initialize account-wide quest completion count on login
             QuestCompletionCount = Account.CachedQuestBonusCount;
 

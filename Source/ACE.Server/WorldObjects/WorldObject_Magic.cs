@@ -204,6 +204,10 @@ namespace ACE.Server.WorldObjects
                         targetPlayer.SetCurrentAttacker(casterCreature);
 
                     Proficiency.OnSuccessUse(targetPlayer, targetPlayer.GetCreatureSkill(Skill.MagicDefense), magicSkill);
+
+                    // CONQUEST: Update PK timers when resisting spells from other players
+                    if (player != null)
+                        Player.UpdatePKTimers(player, targetPlayer);
                 }
 
                 if (this is Creature creature)

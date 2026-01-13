@@ -85,5 +85,9 @@ namespace ACE.Entity.Enum.Properties
         StoredPvPSummonAugs = 9047,
         StoredPvPMeleeAugs = 9048,
         StoredPvPMissileAugs = 9049,
+        // CONQUEST: Daily Luminance Transfer Limits (reset at midnight EST)
+        LuminanceTransferredToday = 9050,  // Amount of luminance transferred today
+        LuminanceReceivedToday = 9051,     // Amount of luminance received today
+        LastLuminanceResetTime = 9052,     // Unix timestamp of last daily reset (midnight EST)
     }
 }

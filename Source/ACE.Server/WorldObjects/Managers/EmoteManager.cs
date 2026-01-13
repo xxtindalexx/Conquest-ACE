@@ -575,6 +575,14 @@ namespace ACE.Server.WorldObjects.Managers
                     {
                         var stat = targetObject.GetProperty((PropertyInt64)emote.Stat);
 
+                        // CONQUEST: For luminance checks, include BankedLuminance as well as AvailableLuminance
+                        if (emote.Stat == (int)PropertyInt64.AvailableLuminance && targetObject is Player lumPlayer)
+                        {
+                            var availableLum = lumPlayer.AvailableLuminance ?? 0;
+                            var bankedLum = lumPlayer.BankedLuminance ?? 0;
+                            stat = availableLum + bankedLum; // Check total luminance
+                        }
+
                         if (stat == null && HasValidTestNoQuality(emote.Message))
                             ExecuteEmoteSet(EmoteCategory.TestNoQuality, emote.Message, targetObject, true);
                         else

@@ -67,7 +67,8 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// Spends the amount of luminance specified, deducting it from available luminance
+        /// Spends the amount of luminance specified, deducting it from banked luminance first, then available luminance
+        /// CONQUEST: Changed to check BankedLuminance first for NPC transactions
         /// </summary>
         public bool SpendLuminance(long amount)
         {
@@ -75,16 +76,18 @@ namespace ACE.Server.WorldObjects
             if (!BankedLuminance.HasValue) { BankedLuminance = 0; }
             if (!AvailableLuminance.HasValue) { AvailableLuminance = 0; }
 
-            if (AvailableLuminance > 0 && AvailableLuminance >= amount)
+            // CONQUEST: Try banked luminance first (for NPC transactions)
+            if (BankedLuminance > 0 && BankedLuminance >= amount)
             {
-                AvailableLuminance = AvailableLuminance - amount;
+                BankedLuminance = BankedLuminance - amount;
                 UpdateLuminance();
                 return true;
             }
 
-            if (BankedLuminance > 0 && BankedLuminance >= amount)
+            // Fall back to available luminance (from aetheria)
+            if (AvailableLuminance > 0 && AvailableLuminance >= amount)
             {
-                BankedLuminance = BankedLuminance - amount;
+                AvailableLuminance = AvailableLuminance - amount;
                 UpdateLuminance();
                 return true;
             }
