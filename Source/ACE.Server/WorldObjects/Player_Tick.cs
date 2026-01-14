@@ -519,7 +519,36 @@ namespace ACE.Server.WorldObjects
 
                 var landblockUpdate = (Location.Cell >> 16 != newPosition.Cell >> 16) || variationChange;
 
+                // CONQUEST: Store old landblock info before updating Location
+                var oldLandblock = (ushort)(Location.Cell >> 16);
+                // Get old variation from CurrentLandblock instead of Location.Variation (which can be reset to 0)
+                var oldVariation = CurrentLandblock?.VariationId ?? Location.Variation ?? 0;
+
                 Location = new ACE.Entity.Position(newPosition);
+
+                // CONQUEST: Check if entering/exiting PK dungeon landblock (if pvp_disable_custom_augs is enabled)
+                if (landblockUpdate && PropertyManager.GetBool("pvp_disable_custom_augs"))
+                {
+                    var newLandblock = (ushort)(newPosition.Cell >> 16);
+                    var newVariation = newPosition.Variation ?? 0;
+
+                    var wasInPKDungeon = ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((oldLandblock, oldVariation));
+                    var nowInPKDungeon = ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((newLandblock, newVariation));
+
+                    //log.Info($"[PK DUNGEON DEBUG] {Name} - Landblock change detected. Old: 0x{oldLandblock:X4} v{oldVariation} -> New: 0x{newLandblock:X4} v{newVariation}. WasInPK: {wasInPKDungeon}, NowInPK: {nowInPKDungeon}, InPKDungeonMode:{ InPKDungeonMode}");
+                    if (!wasInPKDungeon && nowInPKDungeon)
+                    {
+                        // Entering PK dungeon - strip augs and rebuff
+                        //log.Info($"[PK DUNGEON DEBUG] {Name} - Calling EnterPKDungeonMode()");
+                        EnterPKDungeonMode();
+                    }
+                    else if (wasInPKDungeon && !nowInPKDungeon)
+                    {
+                        // Exiting PK dungeon - restore augs and rebuff
+                        //log.Info($"[PK DUNGEON DEBUG] {Name} - Calling ExitPKDungeonMode()");
+                        ExitPKDungeonMode();
+                    }
+                }
 
                 if (RecordCast.Enabled)
                     RecordCast.Log($"CurPos: {Location.ToLOCString()}");

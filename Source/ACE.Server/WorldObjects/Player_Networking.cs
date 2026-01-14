@@ -173,6 +173,60 @@ namespace ACE.Server.WorldObjects
                 ExitPvPMode();
             }
 
+            // CONQUEST: Login restoration safety check for PK dungeon / PvP aug stripping system
+            // If player logged out or crashed with stored augs but mode flags were cleared,
+            // restore their augs or enter PK dungeon mode if they're logging in inside a PK dungeon
+            if (PropertyManager.GetBool("pvp_disable_custom_augs"))
+            {
+                var hasStoredAugs = (StoredPvPCreatureAugs != null && StoredPvPCreatureAugs != 0);
+                var inAnyMode = InPKDungeonMode || InPvPMode;
+
+                // Check if player is logging in inside a PK dungeon landblock
+                var currentLandblock = (ushort)(Location.Cell >> 16);
+                var currentVariation = Location.Variation ?? 0;
+                var isInPKDungeon = ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation));
+
+                if (isInPKDungeon)
+                {
+                    // Player is logging in inside a PK dungeon - enter PK dungeon mode
+                    // This will either use existing stored values or create new ones
+                    //log.Info($"[PK DUNGEON DEBUG] {Name} - Login detected inside PK dungeon (0x{currentLandblock:X4} v{currentVariation}), calling EnterPKDungeonMode()");
+                    EnterPKDungeonMode();
+                }
+                else if (hasStoredAugs && !inAnyMode)
+                {
+                    // Player has stored augs but is not in any mode and not in a PK dungeon
+                    // This means they logged out during PvP/dungeon mode - restore their augs
+                    //log.Info($"[PK DUNGEON DEBUG] {Name} - Login detected with stored augs but no active mode. Restoring augs. Stored Creature: {StoredPvPCreatureAugs}");
+
+                    // Restore aug counts
+                    LuminanceAugmentCreatureCount = StoredPvPCreatureAugs ?? 0;
+                    LuminanceAugmentItemCount = StoredPvPItemAugs ?? 0;
+                    LuminanceAugmentLifeCount = StoredPvPLifeAugs ?? 0;
+                    LuminanceAugmentVoidCount = StoredPvPVoidAugs ?? 0;
+                    LuminanceAugmentWarCount = StoredPvPWarAugs ?? 0;
+                    LuminanceAugmentSpellDurationCount = StoredPvPDurationAugs ?? 0;
+                    LuminanceAugmentSpecializeCount = StoredPvPSpecializeAugs ?? 0;
+                    LuminanceAugmentSummonCount = StoredPvPSummonAugs ?? 0;
+                    LuminanceAugmentMeleeCount = StoredPvPMeleeAugs ?? 0;
+                    LuminanceAugmentMissileCount = StoredPvPMissileAugs ?? 0;
+
+                    // Clear stored properties
+                    StoredPvPCreatureAugs = null;
+                    StoredPvPItemAugs = null;
+                    StoredPvPLifeAugs = null;
+                    StoredPvPVoidAugs = null;
+                    StoredPvPWarAugs = null;
+                    StoredPvPDurationAugs = null;
+                    StoredPvPSpecializeAugs = null;
+                    StoredPvPSummonAugs = null;
+                    StoredPvPMeleeAugs = null;
+                    StoredPvPMissileAugs = null;
+
+                    //log.Info($"[PK DUNGEON DEBUG] {Name} - Restored augs on login. Creature: {LuminanceAugmentCreatureCount}, Item: {LuminanceAugmentItemCount}, Life: {LuminanceAugmentLifeCount}");
+                }
+            }
+
             // retail appeared to send the squelch list very early,
             // even before the CreatePlayer, but doing it here
             if (SquelchManager.HasSquelches)

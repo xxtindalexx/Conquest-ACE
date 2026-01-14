@@ -501,6 +501,16 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public double LastPvPCombatTime;
 
+        /// <summary>
+        /// CONQUEST: True if player is currently in a PK dungeon with custom augmentations temporarily disabled
+        /// </summary>
+        public bool InPKDungeonMode;
+
+        /// <summary>
+        /// CONQUEST: Unix timestamp of the last time player was in a PK dungeon
+        /// </summary>
+        public double LastPKDungeonCombatTime;
+
         // Note: Stored augmentation values are now database-backed properties in Creature_Properties.cs (StoredPvP*Augs)
 
         // CONQUEST: Arena pre-entry location (in-memory, returns to lifestone on crash)
