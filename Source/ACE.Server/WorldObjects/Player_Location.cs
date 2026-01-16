@@ -802,9 +802,11 @@ namespace ACE.Server.WorldObjects
             var endpoint = this.Session.EndPoint;
             var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(endpoint.Address.ToString());
             var maxAllowed = ConfigManager.Config.Server.Network.MaximumCharactersOutsideMarketplace;
+            // CONQUEST: Check if this account is exempt from multibox restrictions
+            var accountExempt = DatabaseManager.Authentication.IsAccountMultiboxExempt(Account.AccountId);
 
             // -1 means unlimited, so skip the check entirely
-            if (!ipAllowsUnlimited && maxAllowed != -1)
+            if (!ipAllowsUnlimited && !accountExempt && maxAllowed != -1)
             {
                 var players = PlayerManager.GetAllOnline();
                 foreach (var p in players.Where(x => x.Session.EndPoint.Address.Equals(endpoint.Address)))
@@ -815,6 +817,10 @@ namespace ACE.Server.WorldObjects
 
                     // Skip admin characters (IsPlussed)
                     if (p.IsPlussed)
+                        continue;
+
+                    // CONQUEST: Skip accounts that are exempt from multibox restrictions
+                    if (DatabaseManager.Authentication.IsAccountMultiboxExempt(p.Account.AccountId))
                         continue;
 
                     // If exceeding the limit, log off the older connection

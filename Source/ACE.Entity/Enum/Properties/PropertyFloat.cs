@@ -241,6 +241,16 @@ namespace ACE.Entity.Enum.Properties
         EnrageDamageMultiplier         = 9011,
         EnrageDamageReduction          = 9012,
         EnrageThreshold                = 9013,
+        EnrageLeapRadius = 9300,
+        EnrageLeapInterval = 9301,
+        EnrageLeapWarningTime = 9302,
+        EnrageLeapMinRange = 9303,
+        EnrageLeapMaxRange = 9304,
+        EnrageMirrorImageSpawnRadius = 9306,
+        EnrageMirrorImageInterval = 9307,
+        EnrageMirrorImageChance = 9308,
+        EnrageLeapKnockbackDistance = 9309,
+        EnrageLeapStunDuration = 9310,
         NSCoordinates                  = 9014,  // North/South coordinate for treasure maps
         EWCoordinates                  = 9015,  // East/West coordinate for treasure maps
         [AssessmentProperty]

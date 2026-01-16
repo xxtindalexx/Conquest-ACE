@@ -189,6 +189,11 @@ namespace ACE.Entity.Enum.Properties
         CanGrapple = 9015,
         CanAOE = 9016,
         EnragedHotspot = 9017,
+        EnrageLeapEnabled = 9100,
+        EnrageLeapPositionLock = 9101,
+        EnrageMirrorImageEnabled = 9102,
+        EnrageMirrorImmuneDuringClones = 9103,
+        EnrageLeapKnockback = 9104,
         [AssessmentProperty]
         SplitArrows = 9030,
         IsSplitArrow = 9031,

@@ -384,6 +384,18 @@ namespace ACE.Server.WorldObjects
         /// <param name="amount">The amount of damage rounded</param>
         public virtual uint TakeDamage(WorldObject source, DamageType damageType, float amount, bool crit = false)
         {
+            // Check mirror image immunity
+            if (EnrageMirrorImageImmune)
+            {
+                if (source is Player player)
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"{Name} is invulnerable while mirror images remain! Destroy them first!",
+                        ChatMessageType.Combat));
+                }
+                return 0;
+            }
+
             var tryDamage = (int)Math.Round(amount);
             var damage = -UpdateVitalDelta(Health, -tryDamage);
 
@@ -496,6 +508,18 @@ namespace ACE.Server.WorldObjects
             if (CanAOE)
             {
                 StartHotspotSpawnLoopWithDelay();
+            }
+
+            // **Start Leap Attack Loop**
+            if (GetProperty(PropertyBool.EnrageLeapEnabled) ?? false)
+            {
+                StartLeapAttackLoopWithDelay();
+            }
+
+            // **Start Mirror Image Interval Check**
+            if (GetProperty(PropertyBool.EnrageMirrorImageEnabled) ?? false)
+            {
+                StartMirrorImageIntervalCheck();
             }
 
             // **Broadcast an enrage message**
@@ -675,6 +699,9 @@ namespace ACE.Server.WorldObjects
             if (targetPlayer == null || ct.IsCancellationRequested)
                 return;
 
+            // Set grapple target (for leap exclusion)
+            EnrageGrappleTargetGuid = targetPlayer.Guid.Full;
+
             BroadcastMessage($"Get Over Here {targetPlayer.Name}!", 250.0f);
 
             var destination = new Position(this.Location);
@@ -691,6 +718,9 @@ namespace ACE.Server.WorldObjects
 
             // Delay further AI switching
             await Task.Delay(6000, ct);
+
+            // Clear grapple target after delay
+            EnrageGrappleTargetGuid = null;
         }
 
         /// <summary>
@@ -758,7 +788,10 @@ namespace ACE.Server.WorldObjects
                         var damageObjToSpawn = damageObj;
                         WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
                         {
-                            damageObjToSpawn.EnterWorld();
+                            if (!damageObjToSpawn.EnterWorld())
+                            {
+                                log.Warn($"Failed to spawn enrage hotspot damage object {damageObjToSpawn.Name} at {damageObjToSpawn.Location}");
+                            }
                         }));
                     }
                 }
@@ -777,7 +810,10 @@ namespace ACE.Server.WorldObjects
             var visualObjToSpawn = visualObj;
             WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
             {
-                visualObjToSpawn.EnterWorld();
+                if (!visualObjToSpawn.EnterWorld())
+                {
+                    log.Warn($"Failed to spawn enrage hotspot visual {visualObjToSpawn.Name} at {visualObjToSpawn.Location}");
+                }
             }));
 
             // Broadcast warning
@@ -814,6 +850,122 @@ namespace ACE.Server.WorldObjects
             foreach (var player in playersInRange)
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
+            }
+        }
+
+        private CancellationTokenSource leapLoopCTS;
+        private Task leapLoopTask;
+
+        public void StartLeapAttackLoopWithDelay()
+        {
+            leapLoopCTS?.Cancel();
+            leapLoopCTS = new CancellationTokenSource();
+
+            leapLoopTask = Task.Run(async () =>
+            {
+                try
+                {
+                    var initialDelay = GetProperty(PropertyFloat.EnrageLeapInterval) ?? 25.0f;
+                    await Task.Delay(TimeSpan.FromSeconds(initialDelay), leapLoopCTS.Token);
+                    await StartLeapAttackLoopAsync(leapLoopCTS.Token);
+                }
+                catch (Exception ex) when (ex is not TaskCanceledException)
+                {
+                    Console.WriteLine($"{Name}: leap loop terminated unexpectedly.");
+                }
+            });
+        }
+
+        private async Task StartLeapAttackLoopAsync(CancellationToken ct)
+        {
+            try
+            {
+                while (IsEnraged && IsAlive && !ct.IsCancellationRequested)
+                {
+                    var interval = GetProperty(PropertyFloat.EnrageLeapInterval) ?? 25.0f;
+
+                    // Trigger leap attack
+                    if (!EnrageLeapInProgress)
+                    {
+                        TriggerEnrageLeap();
+                    }
+
+                    // Wait for next leap
+                    await Task.Delay(TimeSpan.FromSeconds(interval), ct);
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                // Expected on shutdown or despawn
+            }
+        }
+
+        private CancellationTokenSource mirrorLoopCTS;
+        private Task mirrorLoopTask;
+
+        public void StartMirrorImageIntervalCheck()
+        {
+            mirrorLoopCTS?.Cancel();
+            mirrorLoopCTS = new CancellationTokenSource();
+
+            mirrorLoopTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await StartMirrorImageIntervalCheckAsync(mirrorLoopCTS.Token);
+                }
+                catch (Exception ex) when (ex is not TaskCanceledException)
+                {
+                    Console.WriteLine($"{Name}: mirror image loop terminated unexpectedly.");
+                }
+            });
+        }
+
+        private async Task StartMirrorImageIntervalCheckAsync(CancellationToken ct)
+        {
+            var random = new Random();
+
+            try
+            {
+                while (IsEnraged && IsAlive && !ct.IsCancellationRequested)
+                {
+                    var interval = GetProperty(PropertyFloat.EnrageMirrorImageInterval) ?? 45.0f;
+                    var chance = GetProperty(PropertyFloat.EnrageMirrorImageChance) ?? 0.35f;
+
+                    // Wait for interval
+                    await Task.Delay(TimeSpan.FromSeconds(interval), ct);
+
+                    // Check if mirror hasn't triggered yet and random chance passes
+                    if (!EnrageMirrorImageTriggered && random.NextDouble() <= chance)
+                    {
+                        TriggerEnrageMirrorImage();
+                    }
+
+                    // Check if mirror clones are still alive
+                    if (EnrageMirrorImageImmune && EnrageMirrorImageClones.Count > 0)
+                    {
+                        // Remove dead clones from list
+                        EnrageMirrorImageClones.RemoveAll(c => c.IsDead || c.IsDestroyed);
+
+                        // If all clones dead, remove immunity
+                        if (EnrageMirrorImageClones.Count == 0)
+                        {
+                            EnrageMirrorImageImmune = false;
+
+                            // Broadcast that boss is vulnerable again
+                            var msg = $"{Name} becomes vulnerable as the last mirror image fades!";
+                            var players = GetPlayersInRange(250.0f);
+                            foreach (var player in players)
+                            {
+                                player.Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                // Expected on shutdown or despawn
             }
         }
 

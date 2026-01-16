@@ -161,6 +161,10 @@ namespace ACE.Server.WorldObjects
             Func<PhysicsObj, bool> touchCheck,
             Action<Creature> activationAction)
         {
+            // Safety check: don't activate if not attached to a landblock
+            if (CurrentLandblock == null)
+                return;
+
             foreach (var creatureGuid in Creatures.ToList())
             {
                 var creature = CurrentLandblock.GetObject(creatureGuid) as Creature;

@@ -6770,5 +6770,230 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
         }
+
+        // CONQUEST: Multibox Exemption System Commands
+
+        // exemptmultibox <accountname> <reason>
+        [CommandHandler("exemptmultibox", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 2,
+            "Grant multibox exemption to an account (for households/families)",
+            "accountname reason\nExample: exemptmultibox JohnDoe Married couple household")]
+        public static void HandleExemptMultibox(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /exemptmultibox <accountname> <reason> or /exm <accountname> <reason>");
+                CommandHandlerHelper.WriteOutputInfo(session, "Example: /exemptmultibox JohnDoe Married couple household");
+                CommandHandlerHelper.WriteOutputInfo(session, "Example: /exm JohnDoe Married couple household");
+                return;
+            }
+
+            var accountName = parameters[0];
+            var reason = string.Join(" ", parameters.Skip(1));
+
+            // Get the account
+            var account = DatabaseManager.Authentication.GetAccountByName(accountName);
+            if (account == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' not found.");
+                return;
+            }
+
+            // Check if already exempt
+            if (DatabaseManager.Authentication.IsAccountMultiboxExempt(account.AccountId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' is already exempt from multibox restrictions.");
+                return;
+            }
+
+            // Add exemption
+            try
+            {
+                DatabaseManager.Authentication.AddMultiboxExemption(account.AccountId, session.Player.Name, reason);
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' has been granted multibox exemption.");
+                CommandHandlerHelper.WriteOutputInfo(session, $"Reason: {reason}");
+
+                // Audit logging
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"[MULTIBOX EXEMPT] Admin {session.Player.Name} granted exemption to account '{accountName}' (ID: {account.AccountId}). Reason: {reason}");
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error granting exemption: {ex.Message}");
+                log.Error($"Error granting multibox exemption to account {accountName}: {ex}");
+            }
+        }
+
+        // revokemultibox <accountname>
+        [CommandHandler("revokemultibox", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
+            "Revoke multibox exemption from an account",
+            "accountname\nExample: revokemultibox JohnDoe")]
+        public static void HandleRevokeMultibox(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /revokemultibox <accountname> or /rm <accountname>");
+                return;
+            }
+
+            var accountName = parameters[0];
+
+            // Get the account
+            var account = DatabaseManager.Authentication.GetAccountByName(accountName);
+            if (account == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' not found.");
+                return;
+            }
+
+            // Check if exempt
+            if (!DatabaseManager.Authentication.IsAccountMultiboxExempt(account.AccountId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' is not currently exempt from multibox restrictions.");
+                return;
+            }
+
+            // Remove exemption
+            try
+            {
+                bool removed = DatabaseManager.Authentication.RemoveMultiboxExemption(account.AccountId);
+                if (removed)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' multibox exemption has been revoked.");
+
+                    // Audit logging
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"[MULTIBOX EXEMPT] Admin {session.Player.Name} revoked exemption from account '{accountName}' (ID: {account.AccountId}).");
+
+                    // CONQUEST: Immediately enforce connection limits - kick characters from revoked account if they put the IP over limit
+                    var maxAllowed = ConfigManager.Config.Server.Network.MaximumCharactersOutsideMarketplace;
+                    if (maxAllowed != -1)
+                    {
+                        // Find all online characters from this account
+                        var revokedAccountPlayers = PlayerManager.GetAllOnline()
+                            .Where(p => p.Account.AccountId == account.AccountId)
+                            .ToList();
+
+                        foreach (var revokedPlayer in revokedAccountPlayers)
+                        {
+                            // Skip if in exempt landblock (they're safe in marketplace/apartments)
+                            if (revokedPlayer.CurrentLandblock != null &&
+                                ACE.Server.Entity.Landblock.connectionExemptLandblocks.Contains(revokedPlayer.CurrentLandblock.Id.Landblock))
+                                continue;
+
+                            // Skip if admin
+                            if (revokedPlayer.IsPlussed)
+                                continue;
+
+                            // Count non-exempt connections from this IP
+                            var ipAddress = revokedPlayer.Session.EndPoint.Address;
+                            var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(ipAddress.ToString());
+
+                            if (!ipAllowsUnlimited)
+                            {
+                                int nonexemptCount = 0;
+                                var allPlayersFromIP = PlayerManager.GetAllOnline()
+                                    .Where(p => p.Session.EndPoint.Address.Equals(ipAddress))
+                                    .ToList();
+
+                                foreach (var p in allPlayersFromIP)
+                                {
+                                    // Skip players in exempt landblocks
+                                    if (p.CurrentLandblock != null &&
+                                        ACE.Server.Entity.Landblock.connectionExemptLandblocks.Contains(p.CurrentLandblock.Id.Landblock))
+                                        continue;
+
+                                    // Skip admin characters
+                                    if (p.IsPlussed)
+                                        continue;
+
+                                    // Skip accounts that are STILL exempt (not the one we just revoked)
+                                    if (DatabaseManager.Authentication.IsAccountMultiboxExempt(p.Account.AccountId))
+                                        continue;
+
+                                    nonexemptCount++;
+                                }
+
+                                // If over limit, kick the character from the revoked account
+                                if (nonexemptCount > maxAllowed)
+                                {
+                                    revokedPlayer.SendMessage($"Your account's multibox exemption has been revoked. Only {maxAllowed} character{(maxAllowed == 1 ? "" : "s")} per IP allowed outside Marketplace.");
+                                    revokedPlayer.Session.LogOffPlayer();
+                                    CommandHandlerHelper.WriteOutputInfo(session, $"Logged off character '{revokedPlayer.Name}' from account '{accountName}' (exceeded connection limit).");
+                                    log.Info($"[MULTIBOX EXEMPT] Character '{revokedPlayer.Name}' logged off after exemption revoked - IP exceeded connection limit");
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Failed to revoke exemption for account '{accountName}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error revoking exemption: {ex.Message}");
+                log.Error($"Error revoking multibox exemption from account {accountName}: {ex}");
+            }
+        }
+
+        // em <accountname> <reason> - Alias for exemptmultibox
+        [CommandHandler("exm", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 2,
+            "Grant multibox exemption (alias for exemptmultibox)",
+            "accountname reason\nExample: em JohnDoe Married couple household")]
+        public static void HandleEM(Session session, params string[] parameters)
+        {
+            HandleExemptMultibox(session, parameters);
+        }
+
+        // rm <accountname> - Alias for revokemultibox
+        [CommandHandler("rm", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
+            "Revoke multibox exemption (alias for revokemultibox)",
+            "accountname\nExample: rm JohnDoe")]
+        public static void HandleRM(Session session, params string[] parameters)
+        {
+            HandleRevokeMultibox(session, parameters);
+        }
+
+        // lm - Alias for listmultibox
+        [CommandHandler("lm", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 0,
+            "List multibox exemptions (alias for listmultibox)")]
+        public static void HandleLM(Session session, params string[] parameters)
+        {
+            HandleListMultibox(session, parameters);
+        }
+
+        // listmultibox
+        [CommandHandler("listmultibox", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 0,
+            "List all accounts with multibox exemptions can use /lm as shorthand alias")]
+        public static void HandleListMultibox(Session session, params string[] parameters)
+        {
+            try
+            {
+                var exemptions = DatabaseManager.Authentication.GetAllMultiboxExemptions();
+
+                if (exemptions == null || exemptions.Count == 0)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, "No accounts are currently exempt from multibox restrictions.");
+                    return;
+                }
+
+                CommandHandlerHelper.WriteOutputInfo(session, $"=== Multibox Exemptions ({exemptions.Count} total) ===");
+                foreach (var exemption in exemptions.OrderBy(e => e.ExemptedTime))
+                {
+                    var account = DatabaseManager.Authentication.GetAccountById(exemption.AccountId);
+                    var accountName = account?.AccountName ?? $"Unknown (ID: {exemption.AccountId})";
+
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Account: {accountName}");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"  Exempted By: {exemption.ExemptedBy}");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"  Date: {exemption.ExemptedTime:yyyy-MM-dd HH:mm:ss} UTC");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"  Reason: {exemption.Reason ?? "None specified"}");
+                    CommandHandlerHelper.WriteOutputInfo(session, "");
+                }
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error listing exemptions: {ex.Message}");
+                log.Error($"Error listing multibox exemptions: {ex}");
+            }
+        }
     }
 }

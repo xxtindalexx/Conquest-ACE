@@ -205,5 +205,71 @@ namespace ACE.Database
                 return quests.Count + quests.Where(x => x.NumTimesCompleted >= 1).Count();
             }
         }
+
+        // CONQUEST: Multibox Exemption System
+        /// <summary>
+        /// Check if an account is exempt from multibox restrictions
+        /// </summary>
+        public bool IsAccountMultiboxExempt(uint accountId)
+        {
+            using (var context = new AuthDbContext())
+            {
+                return context.AccountMultiboxExempt
+                    .AsNoTracking()
+                    .Any(r => r.AccountId == accountId);
+            }
+        }
+
+        /// <summary>
+        /// Add multibox exemption for an account
+        /// </summary>
+        public void AddMultiboxExemption(uint accountId, string exemptedBy, string reason)
+        {
+            using (var context = new AuthDbContext())
+            {
+                var exemption = new AccountMultiboxExempt
+                {
+                    AccountId = accountId,
+                    ExemptedBy = exemptedBy,
+                    ExemptedTime = DateTime.UtcNow,
+                    Reason = reason
+                };
+
+                context.AccountMultiboxExempt.Add(exemption);
+                context.SaveChanges();
+            }
+        }
+
+        /// <summary>
+        /// Remove multibox exemption for an account
+        /// </summary>
+        public bool RemoveMultiboxExemption(uint accountId)
+        {
+            using (var context = new AuthDbContext())
+            {
+                var exemption = context.AccountMultiboxExempt
+                    .FirstOrDefault(r => r.AccountId == accountId);
+
+                if (exemption == null)
+                    return false;
+
+                context.AccountMultiboxExempt.Remove(exemption);
+                context.SaveChanges();
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Get all multibox exemptions
+        /// </summary>
+        public List<AccountMultiboxExempt> GetAllMultiboxExemptions()
+        {
+            using (var context = new AuthDbContext())
+            {
+                return context.AccountMultiboxExempt
+                    .AsNoTracking()
+                    .ToList();
+            }
+        }
     }
 }

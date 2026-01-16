@@ -26,6 +26,9 @@ public partial class AuthDbContext : DbContext
     // CONQUEST: Leaderboards
     public virtual DbSet<Leaderboard> Leaderboard { get; set; }
 
+    // CONQUEST: Multibox Exemption System
+    public virtual DbSet<AccountMultiboxExempt> AccountMultiboxExempt { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -158,6 +161,33 @@ public partial class AuthDbContext : DbContext
 
             entity.Property(e => e.LeaderboardId).HasColumnName("LeaderboardID");
             entity.Property(e => e.Character).HasMaxLength(255);
+        });
+
+        // CONQUEST: Multibox Exemption System
+        modelBuilder.Entity<AccountMultiboxExempt>(entity =>
+        {
+            entity.HasKey(e => e.AccountId).HasName("PRIMARY");
+
+            entity.ToTable("account_multibox_exempt");
+
+            entity.Property(e => e.AccountId).HasColumnName("accountId");
+            entity.Property(e => e.ExemptedBy)
+                .IsRequired()
+                .HasMaxLength(50)
+                .HasColumnName("exemptedBy");
+            entity.Property(e => e.ExemptedTime)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("datetime")
+                .HasColumnName("exemptedTime");
+            entity.Property(e => e.Reason)
+                .HasMaxLength(255)
+                .HasColumnName("reason");
+
+            entity.HasOne<Account>()
+                .WithMany()
+                .HasForeignKey(d => d.AccountId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("fk_account_exempt");
         });
 
         OnModelCreatingPartial(modelBuilder);

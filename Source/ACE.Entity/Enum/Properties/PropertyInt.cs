@@ -665,6 +665,14 @@ namespace ACE.Entity.Enum.Properties
         EnrageFogColor = 9025,
         EnrageSound = 9026,
         EnrageVisualEffect = 9027,
+        EnrageLeapBaseDamage = 9200,
+        EnrageLeapParticleEffect = 9202,
+        EnrageMirrorImageCount = 9203,
+        EnrageMirrorImageHealthPercent = 9204,
+        EnrageMirrorImageDamagePercent = 9205,
+        EnrageLeapVisualEffect = 9206,
+        EnrageGroundMarkerWCID = 9207,
+        EnrageLeapKnockbackEffect = 9208,
         [AssessmentProperty]
         SplitArrowCount = 9031,
     }
