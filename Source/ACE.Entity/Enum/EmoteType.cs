@@ -145,5 +145,8 @@ namespace ACE.Entity.Enum
         GrantVitalStat                = 131, //Custom
         InqServerQuestSolves          = 132, //Custom - Check if quest has been completed by anyone on server
         FellowshipRoll                = 133, //Custom - Initiate fellowship roll for item (uses WeenieClassId for item to award)
+        TeleportToHouse               = 141, //Custom - Teleport player to their house
+        TeleportToMonarchMansion      = 142, //Custom - Teleport player to their monarch's mansion
+        TeleportToAllegianceHometown  = 143, //Custom - Teleport player to their allegiance hometown
     }
 }

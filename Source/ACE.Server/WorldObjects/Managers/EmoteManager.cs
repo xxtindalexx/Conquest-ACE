@@ -1814,6 +1814,74 @@ namespace ACE.Server.WorldObjects.Managers
                         }
                     }
                     break;
+
+                case EmoteType.TeleportToHouse:
+                    // Teleport player to their house
+                    if (player != null)
+                    {
+                        var house = player.House ?? player.GetAccountHouse();
+
+                        if (house == null)
+                        {
+                            player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YouMustOwnHouseToUseCommand));
+                        }
+                        else if (house.SlumLord != null && house.SlumLord.Location != null)
+                        {
+                            player.Teleport(house.SlumLord.Location);
+                        }
+                        else
+                        {
+                            player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YouMustOwnHouseToUseCommand));
+                        }
+                    }
+                    break;
+
+                case EmoteType.TeleportToMonarchMansion:
+                    // Teleport player to their monarch's mansion
+                    if (player != null)
+                    {
+                        if (player.Allegiance == null)
+                        {
+                            player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YouAreNotInAllegiance));
+                        }
+                        else
+                        {
+                            var monarchHouse = player.Allegiance.GetHouse();
+
+                            if (monarchHouse == null)
+                            {
+                                player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YourMonarchDoesNotOwnAMansionOrVilla));
+                            }
+                            else if (monarchHouse.SlumLord != null && monarchHouse.SlumLord.Location != null)
+                            {
+                                player.Teleport(monarchHouse.SlumLord.Location);
+                            }
+                            else
+                            {
+                                player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YourMonarchDoesNotOwnAMansionOrVilla));
+                            }
+                        }
+                    }
+                    break;
+
+                case EmoteType.TeleportToAllegianceHometown:
+                    // Teleport player to their allegiance hometown
+                    if (player != null)
+                    {
+                        if (player.Allegiance == null)
+                        {
+                            player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YouAreNotInAllegiance));
+                        }
+                        else if (player.Allegiance.Sanctuary == null)
+                        {
+                            player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YourAllegianceDoesNotHaveHometown));
+                        }
+                        else
+                        {
+                            player.Teleport(player.Allegiance.Sanctuary);
+                        }
+                    }
+                    break;
                 default:
                     log.Debug($"EmoteManager.Execute - Encountered Unhandled EmoteType {(EmoteType)emote.Type} for {WorldObject.Name} ({WorldObject.WeenieClassId})");
                     break;

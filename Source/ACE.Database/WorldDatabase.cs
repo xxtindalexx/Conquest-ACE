@@ -619,5 +619,222 @@ namespace ACE.Database
                     .ToList();
             }
         }
+
+        // =====================================
+        // Fellowship Roll Drops (Custom)
+        // =====================================
+
+        /// <summary>
+        /// Adds a fellowship roll drop to a creature weenie by creating a Death emote with FellowshipRoll action
+        /// </summary>
+        public bool AddFellowshipRollDrop(uint mobWcid, uint petWcid, float probability)
+        {
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    // Check if this exact drop already exists
+                    var existingEmotes = context.WeeniePropertiesEmote
+                        .Include(e => e.WeeniePropertiesEmoteAction)
+                        .Where(e => e.ObjectId == mobWcid && e.Category == 3) // Category 3 = Death
+                        .ToList();
+
+                    foreach (var emote in existingEmotes)
+                    {
+                        if (emote.WeeniePropertiesEmoteAction.Any(a => a.Type == 133 && a.WeenieClassId == petWcid))
+                        {
+                            // This drop already exists
+                            return false;
+                        }
+                    }
+
+                    // Create new emote
+                    var newEmote = new WeeniePropertiesEmote
+                    {
+                        ObjectId = mobWcid,
+                        Category = 3, // Death
+                        Probability = probability,
+                        WeenieClassId = null,
+                        Style = null,
+                        Substyle = null,
+                        Quest = null,
+                        VendorType = null,
+                        MinHealth = null,
+                        MaxHealth = null
+                    };
+
+                    context.WeeniePropertiesEmote.Add(newEmote);
+                    context.SaveChanges(); // Save to get the emote ID
+
+                    // Create the FellowshipRoll action
+                    var newAction = new WeeniePropertiesEmoteAction
+                    {
+                        EmoteId = newEmote.Id,
+                        Order = 0,
+                        Type = 133, // FellowshipRoll
+                        Delay = 0,
+                        Extent = 1,
+                        WeenieClassId = petWcid
+                    };
+
+                    context.WeeniePropertiesEmoteAction.Add(newAction);
+                    context.SaveChanges();
+
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error adding fellowship roll drop (Mob: {mobWcid}, Pet: {petWcid}): {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Removes a specific fellowship roll drop from a creature weenie
+        /// </summary>
+        public bool RemoveFellowshipRollDrop(uint mobWcid, uint petWcid)
+        {
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    // Find the emote with FellowshipRoll action for this specific pet
+                    var emotesToRemove = context.WeeniePropertiesEmote
+                        .Include(e => e.WeeniePropertiesEmoteAction)
+                        .Where(e => e.ObjectId == mobWcid && e.Category == 3) // Death emotes
+                        .ToList()
+                        .Where(e => e.WeeniePropertiesEmoteAction.Any(a => a.Type == 133 && a.WeenieClassId == petWcid))
+                        .ToList();
+
+                    if (emotesToRemove.Count == 0)
+                        return false;
+
+                    foreach (var emote in emotesToRemove)
+                    {
+                        // Remove the emote actions first
+                        var actionsToRemove = emote.WeeniePropertiesEmoteAction
+                            .Where(a => a.Type == 133 && a.WeenieClassId == petWcid)
+                            .ToList();
+
+                        foreach (var action in actionsToRemove)
+                        {
+                            context.WeeniePropertiesEmoteAction.Remove(action);
+                        }
+
+                        // If this emote has no more actions, remove the emote itself
+                        if (emote.WeeniePropertiesEmoteAction.Count == actionsToRemove.Count)
+                        {
+                            context.WeeniePropertiesEmote.Remove(emote);
+                        }
+                    }
+
+                    context.SaveChanges();
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error removing fellowship roll drop (Mob: {mobWcid}, Pet: {petWcid}): {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Gets all fellowship roll drops for a creature weenie
+        /// </summary>
+        public List<FellowshipRollDrop> GetFellowshipRollDrops(uint mobWcid)
+        {
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+                    var drops = new List<FellowshipRollDrop>();
+
+                    var emotes = context.WeeniePropertiesEmote
+                        .Include(e => e.WeeniePropertiesEmoteAction)
+                        .Where(e => e.ObjectId == mobWcid && e.Category == 3) // Death emotes
+                        .ToList();
+
+                    foreach (var emote in emotes)
+                    {
+                        var fellowshipActions = emote.WeeniePropertiesEmoteAction
+                            .Where(a => a.Type == 133 && a.WeenieClassId.HasValue) // FellowshipRoll
+                            .ToList();
+
+                        foreach (var action in fellowshipActions)
+                        {
+                            drops.Add(new FellowshipRollDrop
+                            {
+                                MobWcid = mobWcid,
+                                PetWcid = action.WeenieClassId.Value,
+                                Probability = emote.Probability
+                            });
+                        }
+                    }
+
+                    return drops;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error getting fellowship roll drops for mob {mobWcid}: {ex.Message}");
+                return new List<FellowshipRollDrop>();
+            }
+        }
+
+        /// <summary>
+        /// Clears all fellowship roll drops from a creature weenie
+        /// </summary>
+        public int ClearFellowshipRollDrops(uint mobWcid)
+        {
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    // Find all Death emotes with FellowshipRoll actions
+                    var emotesToRemove = context.WeeniePropertiesEmote
+                        .Include(e => e.WeeniePropertiesEmoteAction)
+                        .Where(e => e.ObjectId == mobWcid && e.Category == 3) // Death emotes
+                        .ToList()
+                        .Where(e => e.WeeniePropertiesEmoteAction.Any(a => a.Type == 133))
+                        .ToList();
+
+                    int count = 0;
+
+                    foreach (var emote in emotesToRemove)
+                    {
+                        // Count the fellowship roll actions
+                        var fellowshipActions = emote.WeeniePropertiesEmoteAction
+                            .Where(a => a.Type == 133)
+                            .ToList();
+
+                        count += fellowshipActions.Count;
+
+                        // Remove all fellowship roll actions
+                        foreach (var action in fellowshipActions)
+                        {
+                            context.WeeniePropertiesEmoteAction.Remove(action);
+                        }
+
+                        // If this emote has no more actions, remove the emote itself
+                        if (emote.WeeniePropertiesEmoteAction.Count == fellowshipActions.Count)
+                        {
+                            context.WeeniePropertiesEmote.Remove(emote);
+                        }
+                    }
+
+                    context.SaveChanges();
+                    return count;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error clearing fellowship roll drops for mob {mobWcid}: {ex.Message}");
+                return 0;
+            }
+        }
     }
 }

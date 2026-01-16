@@ -75,6 +75,10 @@ namespace ACE.Server.WorldObjects.Managers
                         // These events automatically trigger a response from client, others do not.
                         // do nothing further
                         break;
+                    case ConfirmationType.FellowshipRoll:
+                        // Fellowship roll timeout - process as pass
+                        HandleResponse(confirm.ConfirmationType, confirm.ContextId, false, true);
+                        break;
 
                     default:
                         HandleResponse(confirm.ConfirmationType, confirm.ContextId, false, true);
@@ -98,6 +102,10 @@ namespace ACE.Server.WorldObjects.Managers
                     case ConfirmationType.Fellowship:
                         // dialog box does not dismiss on ConfirmationDone, unlike on all other types, so we must let the player know when they click either yes or no, nothing occured because the offer has already expired.
                         Player.SendMessage("That offer of fellowship has expired."); // still looking for pcap accurate response
+                        break;
+                    case ConfirmationType.FellowshipRoll:
+                        // Fellowship roll has already completed
+                        Player.SendMessage("That fellowship roll has already completed.");
                         break;
 
                     default:

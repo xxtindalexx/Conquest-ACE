@@ -13,6 +13,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using static ACE.Server.Entity.Confirmation_Custom;
+using ACE.Server.Network;
 
 namespace ACE.Server.Managers
 {
@@ -181,6 +182,7 @@ namespace ACE.Server.Managers
                 if (fallbackWinner != null)
                 {
                     fellowship?.BroadcastToFellow($"All players passed on {itemName}. Attempting to award to {fallbackWinner.Name} by default.");
+                    
 
                     if (!AwardItemToPlayer(fallbackWinner, rollInstance.ItemWcid))
                     {
