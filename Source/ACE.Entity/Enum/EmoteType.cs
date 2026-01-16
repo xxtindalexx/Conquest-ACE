@@ -144,5 +144,6 @@ namespace ACE.Entity.Enum
         GrantAttributeStat            = 130, //Custom
         GrantVitalStat                = 131, //Custom
         InqServerQuestSolves          = 132, //Custom - Check if quest has been completed by anyone on server
+        FellowshipRoll                = 133, //Custom - Initiate fellowship roll for item (uses WeenieClassId for item to award)
     }
 }

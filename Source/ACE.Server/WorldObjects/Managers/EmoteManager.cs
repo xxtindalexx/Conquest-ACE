@@ -624,7 +624,7 @@ namespace ACE.Server.WorldObjects.Managers
                 case EmoteType.InqOwnsItems:
 
                     if (player != null)
-					{
+                    {
                         var numRequired = emote.StackSize ?? 1;
 
                         var items = player.GetInventoryItemsOfWCID(emote.WeenieClassId ?? 0);
@@ -1035,10 +1035,10 @@ namespace ACE.Server.WorldObjects.Managers
 
                         // ensure valid quaternion - all 0s for example can lock up physics engine
                         if (emote.AnglesX != null && emote.AnglesY != null && emote.AnglesZ != null && emote.AnglesW != null &&
-                           (emote.AnglesX != 0    || emote.AnglesY != 0    || emote.AnglesZ != 0    || emote.AnglesW != 0) )
+                           (emote.AnglesX != 0 || emote.AnglesY != 0 || emote.AnglesZ != 0 || emote.AnglesW != 0))
                         {
                             // also relative, or absolute?
-                            newPos.Rotation *= new Quaternion(emote.AnglesX.Value, emote.AnglesY.Value, emote.AnglesZ.Value, emote.AnglesW.Value);  
+                            newPos.Rotation *= new Quaternion(emote.AnglesX.Value, emote.AnglesY.Value, emote.AnglesZ.Value, emote.AnglesW.Value);
                         }
 
                         if (Debug)
@@ -1776,6 +1776,42 @@ namespace ACE.Server.WorldObjects.Managers
 
                         }
                         WorldObject.CurrentLandblock.SendEnvironChange(changeType);
+                    }
+                    break;
+
+                case EmoteType.FellowshipRoll:
+                    // Fellowship roll for item drops from boss creatures
+                    if (WorldObject is Creature creatures && emote.WeenieClassId != null)
+                    {
+                        var killer = targetObject as Player ?? player;
+                        if (killer == null) break;
+
+                        var fellowship = killer.Fellowship;
+
+                        // Check if in fellowship with ShareLoot enabled
+                        if (fellowship != null && fellowship.ShareLoot)
+                        {
+                            // Initiate fellowship roll
+                            ACE.Server.Managers.FellowshipRollManager.InitiateRoll(creatures, emote.WeenieClassId.Value, killer, fellowship);
+                        }
+                        else
+                        {
+                            // Not in fellowship or ShareLoot disabled, give directly to killer
+                            var wo = WorldObjectFactory.CreateNewWorldObject(emote.WeenieClassId.Value);
+                            if (wo != null)
+                            {
+                                if (killer.TryCreateInInventoryWithNetworking(wo))
+                                {
+                                    killer.SendMessage($"You received {wo.Name}!");
+                                }
+                                else
+                                {
+                                    // Inventory full, item not awarded
+                                    killer.SendMessage($"You received {wo.Name} but your inventory was full. Item was not awarded.");
+                                    wo.Destroy();
+                                }
+                            }
+                        }
                     }
                     break;
                 default:

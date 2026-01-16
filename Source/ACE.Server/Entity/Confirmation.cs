@@ -242,5 +242,30 @@ namespace ACE.Server.Entity
 
             Action();
         }
+
+        public class Confirmation_FellowshipRoll : Confirmation
+        {
+            public string RollId;
+            public string ItemName;
+
+            public Confirmation_FellowshipRoll(ObjectGuid playerGuid, string rollId, string itemName)
+                : base(playerGuid, ConfirmationType.FellowshipRoll)
+            {
+                RollId = rollId;
+                ItemName = itemName;
+            }
+
+            public override void ProcessConfirmation(bool response, bool timeout = false)
+            {
+                var player = Player;
+                if (player == null) return;
+
+                var fellowship = player.Fellowship;
+                if (fellowship == null) return;
+
+                // Register the player's response (Pass or Roll)
+                Managers.FellowshipRollManager.RegisterResponse(RollId, player, response, timeout);
+            }
+        }
     }
 }

@@ -313,6 +313,9 @@ namespace ACE.Server.Entity.Actions
         ControlFlowLoop,
         ControlFlowConditional,
         ControlFlowDelay,
+
+        // Fellowship roll system
+        FellowshipRollManager_ProcessTimeout,
     }
     public static class ActionTypeConverter
     {

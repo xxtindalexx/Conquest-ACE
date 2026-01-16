@@ -9,6 +9,7 @@ namespace ACE.Entity.Enum
          Fellowship       = 0x04,
          CraftInteraction = 0x05,
          Augmentation     = 0x06,
-         Yes_No           = 0x07
-     }
+         Yes_No           = 0x07,
+         FellowshipRoll   = 0x08
+    }
 }
