@@ -24,7 +24,7 @@ namespace ACE.Server.Command.Handlers
             "/fellowshiprollmob list 12345  (shows all fellowship roll drops for mob 12345)")]
         public static void HandleFellowshipRollMob(Session session, params string[] parameters)
         {
-            if (parameters.Length < 2)
+            if (parameters.Length < 1)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /fellowshiprollmob <add|remove|list|clear> <mobWcid> [petWcid] [probability]", ChatMessageType.Broadcast));
                 return;
@@ -32,25 +32,49 @@ namespace ACE.Server.Command.Handlers
 
             var action = parameters[0].ToLower();
 
-            if (!uint.TryParse(parameters[1], out var mobWcid))
-            {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Invalid mob WCID.", ChatMessageType.Broadcast));
-                return;
-            }
-
             switch (action)
             {
                 case "add":
-                    HandleAdd(session, mobWcid, parameters);
+                    if (parameters.Length < 4)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm add <mobWcid> <petWcid> <probability>", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    if (!uint.TryParse(parameters[1], out var addMobWcid))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Invalid mob WCID.", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    HandleAdd(session, addMobWcid, parameters);
                     break;
                 case "remove":
-                    HandleRemove(session, mobWcid, parameters);
+                    if (parameters.Length < 3)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm remove <mobWcid> <petWcid>", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    if (!uint.TryParse(parameters[1], out var removeMobWcid))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Invalid mob WCID.", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    HandleRemove(session, removeMobWcid, parameters);
                     break;
                 case "list":
-                    HandleList(session, mobWcid);
+                    HandleListAll(session);
                     break;
                 case "clear":
-                    HandleClear(session, mobWcid);
+                    if (parameters.Length < 2)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm clear <mobWcid>", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    if (!uint.TryParse(parameters[1], out var clearMobWcid))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Invalid mob WCID.", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    HandleClear(session, clearMobWcid);
                     break;
                 default:
                     session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown action: {action}. Use add, remove, list, or clear.", ChatMessageType.Broadcast));
@@ -160,33 +184,40 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        private static void HandleList(Session session, uint mobWcid)
+        private static void HandleListAll(Session session)
         {
-            var drops = DatabaseManager.World.GetFellowshipRollDrops(mobWcid);
+            var allDrops = DatabaseManager.World.GetAllFellowshipRollDrops();
 
-            if (drops == null || drops.Count == 0)
+            if (allDrops == null || allDrops.Count == 0)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"Mob {mobWcid} has no fellowship roll drops configured.",
+                    "No fellowship roll drops configured.",
                     ChatMessageType.Broadcast));
                 return;
             }
 
-            var mobWeenie = DatabaseManager.World.GetCachedWeenie(mobWcid);
-            var mobName = mobWeenie?.GetName() ?? $"Mob {mobWcid}";
+            // Group by mob WCID
+            var groupedByMob = allDrops.GroupBy(d => d.MobWcid).OrderBy(g => g.Key);
 
-            session.Network.EnqueueSend(new GameMessageSystemChat(
-                $"Fellowship roll drops for {mobName} ({mobWcid}):",
-                ChatMessageType.Broadcast));
-
-            foreach (var drop in drops)
+            foreach (var mobGroup in groupedByMob)
             {
-                var petWeenie = DatabaseManager.World.GetCachedWeenie(drop.PetWcid);
-                var petName = petWeenie?.GetName() ?? $"Unknown";
+                var mobWcid = mobGroup.Key;
+                var mobWeenie = DatabaseManager.World.GetCachedWeenie(mobWcid);
+                var mobName = mobWeenie?.GetName() ?? $"Unknown Mob";
 
                 session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"  - {petName} ({drop.PetWcid}): {drop.Probability * 100:F1}% chance",
+                    $"{mobName} ({mobWcid}):",
                     ChatMessageType.Broadcast));
+
+                foreach (var drop in mobGroup)
+                {
+                    var petWeenie = DatabaseManager.World.GetCachedWeenie(drop.PetWcid);
+                    var petName = petWeenie?.GetName() ?? $"Unknown";
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"  - {petName} ({drop.PetWcid}): {drop.Probability * 100:F1}% chance",
+                        ChatMessageType.Broadcast));
+                }
             }
         }
 

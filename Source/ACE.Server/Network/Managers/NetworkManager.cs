@@ -1,19 +1,18 @@
+using ACE.Common;
+using ACE.Database;
+using ACE.Server.Entity;
+using ACE.Server.Entity.Actions;
+using ACE.Server.Managers;
+using ACE.Server.Network.Enum;
+using ACE.Server.Network.Handlers;
+using ACE.Server.Network.Packets;
+using log4net;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-
-using log4net;
-
-using ACE.Common;
-using ACE.Server.Entity;
-using ACE.Server.Entity.Actions;
-using ACE.Server.Managers;
-using ACE.Server.Network.Packets;
-using ACE.Server.Network.Handlers;
-using ACE.Server.Network.Enum;
 
 namespace ACE.Server.Network.Managers
 {
@@ -117,9 +116,30 @@ namespace ACE.Server.Network.Managers
                         var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(endPoint.Address.ToString());
 
 
-                        // Increasing the allowed sessions per IP address by 1 allows the player to log a third account to character selection
-                        // Player event OnTeleportComplete() handles enforcement of more than 2 characters out of exempt areas
-                        var connectedSessionsAllowedPerIPAddress = ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress + 1;
+                        // CONQUEST: Check if any existing session from this IP has multibox exemption
+                        var anyAccountExempt = false;
+                        if (!ipAllowsUnlimited && ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress != -1)
+                        {
+                            var sessionsFromIP = GetSessionsByAddress(endPoint.Address);
+                            foreach (var sess in sessionsFromIP)
+                            {
+                                if (sess.Player != null && sess.Player.Account != null)
+                                {
+                                    if (DatabaseManager.Authentication.IsAccountMultiboxExempt(sess.Player.Account.AccountId))
+                                    {
+                                        anyAccountExempt = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // CONQUEST: Overall connection limit - allow proper number based on exemption
+                        // Regular accounts: 3 total connections
+                        // Exempt accounts (households): 6 total connections (doubled)
+                        var baseLimit = ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress;
+                        var effectiveLimit = anyAccountExempt ? baseLimit * 2 : baseLimit;
+                        var connectedSessionsAllowedPerIPAddress = effectiveLimit;
                         if (ipAllowsUnlimited || ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress == -1 || GetSessionEndpointTotalByAddressCount(endPoint.Address) < connectedSessionsAllowedPerIPAddress)
                         {
                             var session = FindOrCreateSession(connectionListener, endPoint);
@@ -252,8 +272,31 @@ namespace ACE.Server.Network.Managers
 
                 foreach (var s in sessionMap)
                 {
-                    if (s != null && s.EndPoint.Address.Equals(address))
+                    // Exclude admin/plussed accounts from connection limits
+                    if (s != null && s.EndPoint.Address.Equals(address) && (s.Player == null || !s.Player.IsPlussed))
                         result++;
+                }
+
+                return result;
+            }
+            finally
+            {
+                sessionLock.ExitReadLock();
+            }
+        }
+
+        public static List<Session> GetSessionsByAddress(IPAddress address)
+        {
+            sessionLock.EnterReadLock();
+            try
+            {
+                var result = new List<Session>();
+
+                foreach (var s in sessionMap)
+                {
+                    // Exclude admin/plussed accounts from connection limits
+                    if (s != null && s.EndPoint.Address.Equals(address) && (s.Player == null || !s.Player.IsPlussed))
+                        result.Add(s);
                 }
 
                 return result;

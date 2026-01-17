@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 using ACE.Database;
 using ACE.Entity;
 using ACE.Entity.Enum.Properties;
@@ -10,6 +7,9 @@ using ACE.Server.Factories;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
+using log4net;
+using System;
+using System.Collections.Generic;
 
 namespace ACE.Server.Managers
 {
@@ -197,60 +197,12 @@ namespace ACE.Server.Managers
             WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.AllegianceManager_DoPassXP, () => DoPassXP(vassalNode, amount, direct, luminance)));
         }
 
-        private static void DoPassXP(AllegianceNode vassalNode, ulong amount, bool direct, bool luminance = false)
+        private static void DoPassXP(AllegianceNode vassalNode, ulong amount, bool direct, bool luminance = false, int depth = 1)
         {
-            // http://asheron.wikia.com/wiki/Allegiance_Experience
-
-            // Pre-patch:
-            // Vassal-to-patron pass-up has no effective cap, but patron-to-grandpatron pass-up caps with an effective Loyalty of 175.
-            // If you're sworn for 10 days to the same patron, the base Loyalty required to maximize the pass-up from your vassal through you to your patron is only 88.
-            // Take into account level 7 enchantments, and you can see how there's practically no need to spend XP on the skill, due to the ease in reaching the cap.
-            // Leadership is arguably worse off. In theory, you need to train Leadership and spend XP on it in order to get maximum results.
-            // However, effective Leadership is multiplied by two factors: how many vassals you have, and how long they have been sworn to you, with the emphasis on the number of vassals you have.
-            // The effect of Leadership on pass-up caps at around 165 effective Leadership, or 83 base Leadership before the modifier.
-            // The end result of this is that if you have two active vassals and you can get 10 mules sworn underneath you for an average of 5 in-game days,
-            // you never need to raise your Leadership beyond 83. Again, take into account level 7 enchantments and you can see why few people even bother training the skill. It's just too easy to reach the cap. 
-
-            // Post-patch:
-            // - Leadership and Loyalty are not based on Self attribute
-            // - Effective Loyalty is still modified by the time you have spent sworn to your patron
-            // - Effective Leadership is still modified by number of vassals and average time that they have been sworn to you,
-            //   but the emphasis is on the "time sworn" side and not on the "number of vassals" side. In fact, the vassals
-            //   required to achieve the maximum benefit has been decreased from 12 to 4. This is to reduce the incentive of having non-playing vassals.
-            // - For both Loyalty and Leadership, the time sworn modifier will now be a factor of both in-game time and real time.
-            // - Most importantly, Leadership and Loyalty no longer "cap"
-
-            // XP pass-up:
-            // - New minimums and maximums
-            // - Vassal-to-patron pass-up will have a minimum of 25% of earned XP, and a maximum of 90% of earned XP.
-            //   Under the old system, the minimum was about 9% of earned XP, and the effective maximum was somewhere near 44% of earned XP.
-            // - Patron-to-grandpatron pass-up will have a minimum of 0% of XP passed-up by the patron's vassal, and a maximum of 10% of passed-up XP.
-            //   Under the old system, the minimum was about 30% and the maximum was about 94%.
-
-            // Original system: up to January 12, 2004
-            // Follow-up: all XP instead of just kill XP: October 2009
-
-            // Formulas:
-            // http://asheron.wikia.com/wiki/XP_Passup
-
-            // Thanks for Xerxes of Thistledown, who verified accuracy over four months of testing and research!
-
-            // Generated % - Percentage of XP passed to the patron through the vassal's earned XP (hunting and most quests).
-            // Received % - Percentage of XP that patron will receive from his vassal's Generated XP.
-            // Passup % -  Percentage of XP actually received by patron from vassal's earned XP (hunting and most quests).
-
-            // Generated % = 50.0 + 22.5 * (loyalty / 291) * (1.0 + (RT/730) * (IG/720))
-            // Received % = 50.0 + 22.5 * (leadership / 291) * (1.0 + V * (RT2/730) * (IG2/720))
-            // Passup % = Generated% * Received% / 100.0
-
-            // Where:
-            // Loyalty = Buffed Loyalty (291 max)
-            // Leadership = Buffed Leadership (291 max)
-            // RT = actual real time sworn to patron in days (730 max)
-            // IG = actual in-game time sworn to patron in hours (720 max)
-            // RT2 = average real time sworn to patron for all vassals in days (730 max)
-            // IG2 = average in-game time sworn to patron for all vassals in hours (720 max)
-            // V = vassal factor(1 = 0.25, 2 = 0.50, 3 = 0.75, 4 + = 1.00) (1.0 max)
+            // CONQUEST: Simplified XP/Luminance passup system
+            // - Direct patron (level 1): receives 25% of earned XP/Lum
+            // - Each subsequent level (2-3): receives 25% of what was passed to previous level (75% reduction)
+            // - Levels 4+: receives 1% of what was passed to previous level
 
             var patronNode = vassalNode.Patron;
             if (patronNode == null)
@@ -271,47 +223,32 @@ namespace ACE.Server.Managers
                 return;
             }
 
-            var loyalty = Math.Min(vassal.GetCurrentLoyalty(), SkillCap);
-            var leadership = Math.Min(patron.GetCurrentLeadership(), SkillCap);
+            // Calculate passup percentage based on depth
+            double passupPercentage;
+            if (depth <= 3)
+            {
+                // Levels 1-3: 25% passup
+                passupPercentage = 0.25;
+            }
+            else
+            {
+                // Levels 4+: 1% passup
+                passupPercentage = 0.01;
+            }
 
-            var timeReal = Math.Min(RealCap, RealCap);
-            var timeGame = Math.Min(GameCap, GameCap);
+            var generatedAmount = (uint)(amount * passupPercentage);
+            var passupAmount = generatedAmount;
 
-            var timeRealAvg = Math.Min(RealCap, RealCap);
-            var timeGameAvg = Math.Min(GameCap, GameCap);
-
-            var vassalFactor = Math.Min(0.25f * patronNode.TotalVassals, 1.0f);
-
-            var factor1 = direct ? 50.0f : 16.0f;
-            var factor2 = direct ? 22.5f : 8.0f;
-
-            var generated = (factor1 + factor2 * (loyalty / SkillCap) * (1.0f + (timeReal / RealCap) * (timeGame / GameCap))) * 0.01f;
-            var received = (factor1 + factor2 * (leadership / SkillCap) * (1.0f + vassalFactor * (timeRealAvg / RealCap) * (timeGameAvg / GameCap))) * 0.01f;
-            var passup = generated * received;
-
-            var generatedAmount = (uint)(amount * generated);
-            var passupAmount = (uint)(amount * passup);
-
-
+            // DEBUG: Log passup calculation
+            Console.WriteLine($"[PASSUP] Depth: {depth}, Vassal: {vassal.Name}, Patron: {patron.Name}, Amount In: {amount}, Percentage: {passupPercentage}, Amount Out: {passupAmount}, Luminance: {luminance}");
 
             if (luminance)
             {
-                var lumMult = PropertyManager.GetDouble("lum_passup_mult", 0.5);
+                // Apply luminance multiplier if configured
+                var lumMult = PropertyManager.GetDouble("lum_passup_mult", 1.0); // Default to 1.0 (no reduction) for new system
                 generatedAmount = (uint)(generatedAmount * lumMult);
                 passupAmount = (uint)(passupAmount * lumMult);
             }
-
-            /*Console.WriteLine("---");
-            Console.WriteLine("AllegianceManager.PassXP(" + amount + ")");
-            Console.WriteLine("Vassal: " + vassal.Name);
-            Console.WriteLine("Patron: " + patron.Name);
-
-            Console.WriteLine("Generated: " + Math.Round(generated * 100, 2) + "%");
-            Console.WriteLine("Received: " + Math.Round(received * 100, 2) + "%");
-            Console.WriteLine("Passup: " + Math.Round(passup * 100, 2) + "%");
-
-            Console.WriteLine("Generated amount: " + generatedAmount);
-            Console.WriteLine("Passup amount: " + passupAmount);*/
 
             if (passupAmount > 0 && luminance == true)
             {
@@ -323,16 +260,12 @@ namespace ACE.Server.Managers
                 {
                     onlinePatron.AddAllegianceLum();
                 }
-                // call recursively
-                DoPassXP(patronNode, passupAmount, false, luminance);
+                // call recursively with incremented depth
+                DoPassXP(patronNode, passupAmount, false, luminance, depth + 1);
             }
 
             if (passupAmount > 0 && luminance == false)
             {
-                //vassal.CPTithed += generatedAmount;
-                //patron.CPCached += passupAmount;
-                //patron.CPPoolToUnload += passupAmount;
-
                 vassal.AllegianceXPGenerated += generatedAmount;
 
                 if (PropertyManager.GetBool("offline_xp_passup_limit"))
@@ -344,8 +277,8 @@ namespace ACE.Server.Managers
                 if (onlinePatron != null)
                     onlinePatron.AddAllegianceXP();
 
-                // call recursively
-                DoPassXP(patronNode, passupAmount, false, luminance);
+                // call recursively with incremented depth
+                DoPassXP(patronNode, passupAmount, false, luminance, depth + 1);
             }
         }
 

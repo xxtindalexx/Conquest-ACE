@@ -2,10 +2,13 @@ using ACE.Common;
 using ACE.Database;
 using ACE.Entity;
 using ACE.Database.Models.World;
+using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Entity;
 using ACE.Server.Factories;
+using ACE.Server.Managers;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
 using ACE.Server.WorldObjects.Managers;
 using System;
@@ -13,7 +16,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using static ACE.Server.Entity.Confirmation_Custom;
-using ACE.Server.Network;
 
 namespace ACE.Server.Managers
 {
@@ -60,13 +62,8 @@ namespace ACE.Server.Managers
             ActiveRolls.TryAdd(rollId, rollInstance);
 
             // Send confirmation dialogs to all eligible members
+            // ConfirmationManager handles 30-second timeouts internally for each player
             SendRollConfirmations(rollInstance);
-
-            // Schedule timeout check
-            var actionChain = new ActionChain();
-            actionChain.AddDelaySeconds(30.0);
-            actionChain.AddAction(WorldManager.DelayManager, ActionType.FellowshipRollManager_ProcessTimeout, () => ProcessRollTimeout(rollId));
-            actionChain.EnqueueChain();
 
             return rollId;
         }
@@ -75,8 +72,8 @@ namespace ACE.Server.Managers
         {
             var eligiblePlayers = new List<Player>();
 
-            // Get fellowship members within range
-            var fellowsInRange = fellowship.WithinRange(killer);
+            // Get fellowship members within range (includeSelf: true to include the killer)
+            var fellowsInRange = fellowship.WithinRange(killer, includeSelf: true);
 
             foreach (var fellow in fellowsInRange)
             {
@@ -99,6 +96,7 @@ namespace ACE.Server.Managers
 
             foreach (var player in rollInstance.EligiblePlayers)
             {
+                // Send confirmation directly - ConfirmationManager handles timeout internally
                 var confirmation = new Confirmation_FellowshipRoll(player.Guid, rollInstance.RollId, itemName);
                 player.ConfirmationManager.EnqueueSend(confirmation, $"Do you want to roll for {itemName}?");
             }
@@ -182,9 +180,13 @@ namespace ACE.Server.Managers
                 if (fallbackWinner != null)
                 {
                     fellowship?.BroadcastToFellow($"All players passed on {itemName}. Attempting to award to {fallbackWinner.Name} by default.");
-                    
 
-                    if (!AwardItemToPlayer(fallbackWinner, rollInstance.ItemWcid))
+                    if (AwardItemToPlayer(fallbackWinner, rollInstance.ItemWcid))
+                    {
+                        // Successfully awarded - broadcast globally
+                        PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{fallbackWinner.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
+                    }
+                    else
                     {
                         fellowship?.BroadcastToFellow($"{fallbackWinner.Name}'s inventory was full. {itemName} was not awarded.");
                     }
@@ -192,27 +194,102 @@ namespace ACE.Server.Managers
             }
             else
             {
-                // Try to award to rollers in order from highest to lowest
+                // Get highest roll value
+                var highestRoll = rollers.First().RollValue;
+
+                // Find all players with the highest roll (to handle ties)
+                var topRollers = rollers.Where(r => r.RollValue == highestRoll).ToList();
+
+                // If there's a tie, randomly select winner
+                bool wasTie = topRollers.Count > 1;
+                RollResponse winner;
+
+                if (wasTie)
+                {
+                    var tiedNames = string.Join(", ", topRollers.Select(r => r.Player.Name));
+                    fellowship?.BroadcastToFellow($"Tie detected! {tiedNames} all rolled {highestRoll}. Randomly selecting winner...");
+
+                    // Randomly select from tied players
+                    var randomIndex = ThreadSafeRandom.Next(0, topRollers.Count - 1);
+                    winner = topRollers[randomIndex];
+
+                    fellowship?.BroadcastToFellow($"{winner.Player.Name} won the tiebreaker!");
+                }
+                else
+                {
+                    winner = topRollers.First();
+                }
+
+                // Award to winner
                 bool awarded = false;
 
-                foreach (var roller in rollers)
-                {
-                    var player = roller.Player;
+                // Try winner first
+                fellowship?.BroadcastToFellow($"{winner.Player.Name} won {itemName} with a roll of {winner.RollValue}!");
 
+                if (AwardItemToPlayer(winner.Player, rollInstance.ItemWcid))
+                {
+                    // Successfully awarded - broadcast globally
+                    PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{winner.Player.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
+                    awarded = true;
+                }
+                else
+                {
+                    // Winner's inventory was full
+                    fellowship?.BroadcastToFellow($"{winner.Player.Name}'s inventory was full.");
+
+                    // If there was a tie, try other tied players first
+                    if (wasTie)
+                    {
+                        var otherTiedPlayers = topRollers.Where(r => r != winner).ToList();
+
+                        foreach (var tiedPlayer in otherTiedPlayers)
+                        {
+                            if (!awarded)
+                            {
+                                fellowship?.BroadcastToFellow($"Passing to {tiedPlayer.Player.Name} (also rolled {highestRoll})...");
+
+                                if (AwardItemToPlayer(tiedPlayer.Player, rollInstance.ItemWcid))
+                                {
+                                    // Successfully awarded - broadcast globally
+                                    PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{tiedPlayer.Player.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
+                                    awarded = true;
+                                }
+                                else
+                                {
+                                    fellowship?.BroadcastToFellow($"{tiedPlayer.Player.Name}'s inventory was also full.");
+                                }
+                            }
+                        }
+
+                        // If all tied players had full inventories, notify
+                        if (!awarded)
+                        {
+                            fellowship?.BroadcastToFellow($"All tied players had full inventories. Passing to next highest roller...");
+                        }
+                    }
+
+                    // Try remaining rollers (lower rolls) if not awarded yet
                     if (!awarded)
                     {
-                        // This is the current highest roller who hasn't been tried yet
-                        fellowship?.BroadcastToFellow($"{player.Name} won {itemName} with a roll of {roller.RollValue}!");
+                        var lowerRollers = rollers.Where(r => r.RollValue < highestRoll).ToList();
 
-                        if (AwardItemToPlayer(player, rollInstance.ItemWcid))
+                        foreach (var roller in lowerRollers)
                         {
-                            // Successfully awarded
-                            awarded = true;
-                        }
-                        else
-                        {
-                            // Inventory was full, notify and try next
-                            fellowship?.BroadcastToFellow($"{player.Name}'s inventory was full. Passing to next highest roller...");
+                            if (!awarded)
+                            {
+                                fellowship?.BroadcastToFellow($"Attempting to award to {roller.Player.Name} (rolled {roller.RollValue})...");
+
+                                if (AwardItemToPlayer(roller.Player, rollInstance.ItemWcid))
+                                {
+                                    // Successfully awarded - broadcast globally
+                                    PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{roller.Player.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
+                                    awarded = true;
+                                }
+                                else
+                                {
+                                    fellowship?.BroadcastToFellow($"{roller.Player.Name}'s inventory was full. Passing to next highest roller...");
+                                }
+                            }
                         }
                     }
                 }

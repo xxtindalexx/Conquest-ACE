@@ -836,5 +836,53 @@ namespace ACE.Database
                 return 0;
             }
         }
+
+        /// <summary>
+        /// Gets all fellowship roll drops across all creatures
+        /// </summary>
+        public List<FellowshipRollDrop> GetAllFellowshipRollDrops()
+        {
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+                    var drops = new List<FellowshipRollDrop>();
+
+                    // Get all Death emotes with FellowshipRoll actions
+                    var emotes = context.WeeniePropertiesEmote
+                        .Include(e => e.WeeniePropertiesEmoteAction)
+                        .Where(e => e.Category == 3) // Death emotes
+                        .ToList()
+                        .Where(e => e.WeeniePropertiesEmoteAction.Any(a => a.Type == 133)) // FellowshipRoll
+                        .ToList();
+
+                    foreach (var emote in emotes)
+                    {
+                        var fellowshipActions = emote.WeeniePropertiesEmoteAction
+                            .Where(a => a.Type == 133 && a.WeenieClassId.HasValue)
+                            .ToList();
+
+                        foreach (var action in fellowshipActions)
+                        {
+                            drops.Add(new FellowshipRollDrop
+                            {
+                                MobWcid = emote.ObjectId,
+                                PetWcid = action.WeenieClassId.Value,
+                                Probability = emote.Probability
+                            });
+                        }
+                    }
+
+                    return drops;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error getting all fellowship roll drops: {ex.Message}");
+                return new List<FellowshipRollDrop>();
+            }
+        }
     }
 }

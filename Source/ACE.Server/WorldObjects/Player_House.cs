@@ -73,7 +73,8 @@ namespace ACE.Server.WorldObjects
 
             if (slumlord.AllegianceMinLevel != null)
             {
-                var allegianceMinLevel = PropertyManager.GetLong("mansion_min_rank", -1);
+                // CONQUEST: Default mansion rank requirement is 4
+                var allegianceMinLevel = PropertyManager.GetLong("mansion_min_rank", 4);
                 if (allegianceMinLevel == -1)
                     allegianceMinLevel = slumlord.AllegianceMinLevel.Value;
 

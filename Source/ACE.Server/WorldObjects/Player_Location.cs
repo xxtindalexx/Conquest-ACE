@@ -797,38 +797,79 @@ namespace ACE.Server.WorldObjects
             CheckMonsters();
             CheckHouse();
 
-            // CONQUEST: Marketplace character limit enforcement - boot excess characters from same IP outside exempt landblocks
-            int nonexemptCount = 0;
             var endpoint = this.Session.EndPoint;
             var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(endpoint.Address.ToString());
-            var maxAllowed = ConfigManager.Config.Server.Network.MaximumCharactersOutsideMarketplace;
             // CONQUEST: Check if this account is exempt from multibox restrictions
             var accountExempt = DatabaseManager.Authentication.IsAccountMultiboxExempt(Account.AccountId);
 
-            // -1 means unlimited, so skip the check entirely
-            if (!ipAllowsUnlimited && !accountExempt && maxAllowed != -1)
+            // CONQUEST: Overall connection limit enforcement - limit total connections per IP (anywhere in the world)
+            // Regular accounts: 3 connections total
+            // Exempt accounts (households): 6 connections total (doubled)
+            var maxTotalConnections = ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress;
+            if (!ipAllowsUnlimited && maxTotalConnections != -1)
             {
                 var players = PlayerManager.GetAllOnline();
-                foreach (var p in players.Where(x => x.Session.EndPoint.Address.Equals(endpoint.Address)))
+                var playersFromIP = players.Where(x => x.Session.EndPoint.Address.Equals(endpoint.Address) && !x.IsPlussed).ToList();
+
+                // Check if ANY account on this IP is exempt - if so, use higher limits for the entire IP
+                var anyAccountExempt = playersFromIP.Any(p => DatabaseManager.Authentication.IsAccountMultiboxExempt(p.Account.AccountId));
+
+                // If any account is exempt, double the limits for the entire IP
+                var effectiveMaxTotal = anyAccountExempt ? maxTotalConnections * 2 : maxTotalConnections;
+
+                // Count total non-admin connections from this IP
+                var totalConnectionsFromIP = playersFromIP.Count;
+
+                // DEBUG: Log connection limit check
+                log.Info($"[CONNECTION LIMIT] Player: {Name}, IP: {endpoint.Address}, Total from IP: {totalConnectionsFromIP}, Effective Max: {effectiveMaxTotal}, Any Exempt: {anyAccountExempt}, Max Config: {maxTotalConnections}");
+                log.Info($"[CONNECTION LIMIT] Players from IP: {string.Join(", ", playersFromIP.Select(p => $"{p.Name}(Account:{p.Account.AccountId})"))}");
+
+                // If over the limit, kick this character
+                if (totalConnectionsFromIP > effectiveMaxTotal)
+                {
+                    SendMessage($"Maximum of {effectiveMaxTotal} connection{(effectiveMaxTotal == 1 ? "" : "s")} per IP allowed. Please log off another character.");
+                    Session.LogOffPlayer();
+                    return; // Don't process further checks
+                }
+            }
+
+            // CONQUEST: Marketplace character limit enforcement - boot excess characters from same IP outside exempt landblocks
+            // Regular accounts: 1 outside marketplace
+            // Exempt accounts (households): 2 outside marketplace (doubled)
+            var maxAllowed = ConfigManager.Config.Server.Network.MaximumCharactersOutsideMarketplace;
+
+            // -1 means unlimited, so skip the check entirely
+            if (!ipAllowsUnlimited && maxAllowed != -1)
+            {
+                var players = PlayerManager.GetAllOnline();
+                var playersFromIP = players.Where(x => x.Session.EndPoint.Address.Equals(endpoint.Address) && !x.IsPlussed).ToList();
+
+                // Check if ANY account on this IP is exempt - if so, use higher limits for the entire IP
+                var anyAccountExempt = playersFromIP.Any(p => DatabaseManager.Authentication.IsAccountMultiboxExempt(p.Account.AccountId));
+
+                // If any account is exempt, double the "outside marketplace" limit for the entire IP
+                var effectiveMaxOutside = anyAccountExempt ? maxAllowed * 2 : maxAllowed;
+
+                // Count characters outside exempt landblocks from this IP
+                var outsideMarketplaceCount = 0;
+                foreach (var p in playersFromIP)
                 {
                     // Skip players in exempt landblocks (marketplace + apartments)
                     if (p.CurrentLandblock != null && Landblock.connectionExemptLandblocks.Contains(p.CurrentLandblock.Id.Landblock))
                         continue;
 
-                    // Skip admin characters (IsPlussed)
-                    if (p.IsPlussed)
-                        continue;
+                    outsideMarketplaceCount++;
+                }
 
-                    // CONQUEST: Skip accounts that are exempt from multibox restrictions
-                    if (DatabaseManager.Authentication.IsAccountMultiboxExempt(p.Account.AccountId))
-                        continue;
+                // DEBUG: Log marketplace limit check
+                log.Info($"[MARKETPLACE LIMIT] Player: {Name}, IP: {endpoint.Address}, Current Landblock: 0x{CurrentLandblock?.Id.Landblock:X8}, Outside Count: {outsideMarketplaceCount}, Effective Max Outside: {effectiveMaxOutside}, Any Exempt: {anyAccountExempt}, Max Config: {maxAllowed}");
 
-                    // If exceeding the limit, log off the older connection
-                    if (++nonexemptCount > maxAllowed)
-                    {
-                        p.SendMessage($"Only {maxAllowed} character{(maxAllowed == 1 ? "" : "s")} per IP allowed outside Marketplace. Please return to Marketplace to switch characters.");
-                        p.Session.LogOffPlayer();
-                    }
+                // If exceeding the limit, log off this character
+                if (outsideMarketplaceCount > effectiveMaxOutside)
+                {
+                    SendMessage($"Only {effectiveMaxOutside} character{(effectiveMaxOutside == 1 ? "" : "s")} per IP allowed outside Marketplace. Please return to Marketplace to switch characters.");
+                    Session.LogOffPlayer();
+                    return;
                 }
             }
 

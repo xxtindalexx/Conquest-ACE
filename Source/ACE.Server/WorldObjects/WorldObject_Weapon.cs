@@ -381,7 +381,19 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public static float GetCasterElementalDamageModifier(WorldObject weapon, Creature wielder, Creature target, DamageType damageType)
         {
-            if (wielder == null || !(weapon is Caster) || weapon.W_DamageType != damageType)
+            if (wielder == null || weapon == null)
+                return 1.0f;
+
+            // CONQUEST: Allow non-Caster weapons (melee/missile) with ElementalDamageMod to boost proc spell damage
+            // For Caster weapons, require damage type match (traditional wand behavior)
+            // For non-Caster weapons, apply ElementalDamageMod regardless of W_DamageType (for proc spells)
+            var isCaster = weapon is Caster;
+
+            if (isCaster && weapon.W_DamageType != damageType)
+                return 1.0f;
+
+            // If weapon doesn't have ElementalDamageMod property, no bonus
+            if (weapon.ElementalDamageMod == null)
                 return 1.0f;
 
             var elementalDamageMod = weapon.ElementalDamageMod ?? 1.0f;
@@ -396,7 +408,7 @@ namespace ACE.Server.WorldObjects
 
             if (modifier > 1.0f && target is Player)
                 modifier = 1.0f + (modifier - 1.0f) * ElementalDamageBonusPvPReduction;
-
+            
             return modifier;
         }
 

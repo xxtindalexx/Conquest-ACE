@@ -249,7 +249,7 @@ namespace ACE.Server.Entity
             public string ItemName;
 
             public Confirmation_FellowshipRoll(ObjectGuid playerGuid, string rollId, string itemName)
-                : base(playerGuid, ConfirmationType.FellowshipRoll)
+                : base(playerGuid, ConfirmationType.Yes_No)  // Use Yes_No so client recognizes it
             {
                 RollId = rollId;
                 ItemName = itemName;
@@ -259,9 +259,6 @@ namespace ACE.Server.Entity
             {
                 var player = Player;
                 if (player == null) return;
-
-                var fellowship = player.Fellowship;
-                if (fellowship == null) return;
 
                 // Register the player's response (Pass or Roll)
                 Managers.FellowshipRollManager.RegisterResponse(RollId, player, response, timeout);

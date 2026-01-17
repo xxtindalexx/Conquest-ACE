@@ -162,7 +162,8 @@ namespace ACE.Server.WorldObjects
             if (AllegianceMinLevel == null)
                 return true;
 
-            var allegianceMinLevel = PropertyManager.GetLong("mansion_min_rank", -1);
+            // CONQUEST: Default mansion rank requirement is 4
+            var allegianceMinLevel = PropertyManager.GetLong("mansion_min_rank", 4);
             if (allegianceMinLevel == -1)
                 allegianceMinLevel = AllegianceMinLevel.Value;
 

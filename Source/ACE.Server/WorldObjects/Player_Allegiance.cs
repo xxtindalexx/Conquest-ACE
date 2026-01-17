@@ -1,6 +1,4 @@
-using System;
-using System.Linq;
-
+using ACE.Database;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -10,6 +8,8 @@ using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Structure;
+using System;
+using System.Linq;
 
 namespace ACE.Server.WorldObjects
 {
@@ -102,6 +102,26 @@ namespace ACE.Server.WorldObjects
                 return;
 
             if (!IsPledgable(patron)) return;
+
+            // Prevent swearing to own characters (same IP address)
+            // Skip check if ANY account on the IP has multibox exemption (for legitimate households with multiple players)
+            if (Session?.EndPoint?.Address != null && patron.Session?.EndPoint?.Address != null)
+            {
+                if (Session.EndPoint.Address.Equals(patron.Session.EndPoint.Address))
+                {
+                    // Check if ANY account on this IP has multibox exemption
+                    var players = PlayerManager.GetAllOnline();
+                    var playersFromIP = players.Where(x => x.Session.EndPoint.Address.Equals(Session.EndPoint.Address) && !x.IsPlussed).ToList();
+                    var anyAccountExempt = playersFromIP.Any(p => DatabaseManager.Authentication.IsAccountMultiboxExempt(p.Account.AccountId));
+
+                    if (!anyAccountExempt)
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot swear allegiance to your own characters.", ChatMessageType.Broadcast));
+                        log.InfoFormat("[ALLEGIANCE] {0} ({1}) attempted to swear allegiance to {2} ({3}) - same IP address blocked", Name, Level, patron.Name, patron.Level);
+                        return;
+                    }
+                }
+            }
 
             if (!confirmed)
             {
