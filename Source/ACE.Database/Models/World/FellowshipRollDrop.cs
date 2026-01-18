@@ -7,6 +7,7 @@ namespace ACE.Database.Models.World
     {
         public uint MobWcid { get; set; }
         public uint PetWcid { get; set; }
+        public string Rarity { get; set; }  // common, rare, legendary, mythic, or direct
         public float Probability { get; set; }
     }
 }

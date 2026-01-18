@@ -32,10 +32,14 @@ namespace ACE.Server.Managers
             return roll;
         }
 
-        public static string InitiateRoll(Creature creature, uint itemWcid, Player killer, Fellowship fellowship)
+        public static string InitiateRoll(Creature creature, uint itemWcid, string rarity, Player killer, Fellowship fellowship)
         {
             // Generate unique roll ID
             var rollId = Guid.NewGuid().ToString();
+
+            // Default to "direct" if rarity is null or empty
+            if (string.IsNullOrEmpty(rarity))
+                rarity = "direct";
 
             // Get all fellowship members within range who contributed damage
             var eligibleMembers = GetEligibleMembers(creature, killer, fellowship);
@@ -43,7 +47,7 @@ namespace ACE.Server.Managers
             if (eligibleMembers.Count == 0)
             {
                 // No eligible members, give to killer
-                AwardItemToPlayer(killer, itemWcid);
+                AwardItemToPlayer(killer, itemWcid, rarity);
                 return null;
             }
 
@@ -52,6 +56,7 @@ namespace ACE.Server.Managers
             {
                 RollId = rollId,
                 ItemWcid = itemWcid,
+                Rarity = rarity,
                 CreatureName = creature.Name,
                 EligiblePlayers = eligibleMembers,
                 Responses = new ConcurrentDictionary<uint, RollResponse>(),
@@ -181,7 +186,7 @@ namespace ACE.Server.Managers
                 {
                     fellowship?.BroadcastToFellow($"All players passed on {itemName}. Attempting to award to {fallbackWinner.Name} by default.");
 
-                    if (AwardItemToPlayer(fallbackWinner, rollInstance.ItemWcid))
+                    if (AwardItemToPlayer(fallbackWinner, rollInstance.ItemWcid, rollInstance.Rarity))
                     {
                         // Successfully awarded - broadcast globally
                         PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{fallbackWinner.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
@@ -226,7 +231,7 @@ namespace ACE.Server.Managers
                 // Try winner first
                 fellowship?.BroadcastToFellow($"{winner.Player.Name} won {itemName} with a roll of {winner.RollValue}!");
 
-                if (AwardItemToPlayer(winner.Player, rollInstance.ItemWcid))
+                if (AwardItemToPlayer(winner.Player, rollInstance.ItemWcid, rollInstance.Rarity))
                 {
                     // Successfully awarded - broadcast globally
                     PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{winner.Player.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
@@ -248,7 +253,7 @@ namespace ACE.Server.Managers
                             {
                                 fellowship?.BroadcastToFellow($"Passing to {tiedPlayer.Player.Name} (also rolled {highestRoll})...");
 
-                                if (AwardItemToPlayer(tiedPlayer.Player, rollInstance.ItemWcid))
+                                if (AwardItemToPlayer(tiedPlayer.Player, rollInstance.ItemWcid, rollInstance.Rarity))
                                 {
                                     // Successfully awarded - broadcast globally
                                     PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{tiedPlayer.Player.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
@@ -279,7 +284,7 @@ namespace ACE.Server.Managers
                             {
                                 fellowship?.BroadcastToFellow($"Attempting to award to {roller.Player.Name} (rolled {roller.RollValue})...");
 
-                                if (AwardItemToPlayer(roller.Player, rollInstance.ItemWcid))
+                                if (AwardItemToPlayer(roller.Player, rollInstance.ItemWcid, rollInstance.Rarity))
                                 {
                                     // Successfully awarded - broadcast globally
                                     PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{roller.Player.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
@@ -302,7 +307,7 @@ namespace ACE.Server.Managers
             }
         }
 
-        private static bool AwardItemToPlayer(Player player, uint itemWcid)
+        private static bool AwardItemToPlayer(Player player, uint itemWcid, string rarity)
         {
             var wo = WorldObjectFactory.CreateNewWorldObject(itemWcid);
             if (wo == null)
@@ -311,10 +316,26 @@ namespace ACE.Server.Managers
                 return false;
             }
 
+            // If this is an egg (not direct), set the EggRarity property
+            if (rarity != "direct")
+            {
+                int rarityValue = rarity.ToLower() switch
+                {
+                    "common" => 1,
+                    "rare" => 2,
+                    "legendary" => 3,
+                    "mythic" => 4,
+                    _ => 1  // Default to common if unknown
+                };
+
+                wo.SetProperty(PropertyInt.EggRarity, rarityValue);
+            }
+
             // Try to add to inventory
             if (player.TryCreateInInventoryWithNetworking(wo))
             {
-                player.SendMessage($"You received {wo.Name}!");
+                var itemType = (rarity == "direct") ? "pet" : "mystery egg";
+                player.SendMessage($"You received {wo.Name} ({itemType})!");
                 return true;
             }
             else
@@ -346,6 +367,7 @@ namespace ACE.Server.Managers
     {
         public string RollId { get; set; }
         public uint ItemWcid { get; set; }
+        public string Rarity { get; set; }  // common, rare, legendary, mythic, or direct
         public string CreatureName { get; set; }
         public List<Player> EligiblePlayers { get; set; }
         public ConcurrentDictionary<uint, RollResponse> Responses { get; set; }

@@ -240,7 +240,7 @@ namespace ACE.Server.Managers
             var passupAmount = generatedAmount;
 
             // DEBUG: Log passup calculation
-            Console.WriteLine($"[PASSUP] Depth: {depth}, Vassal: {vassal.Name}, Patron: {patron.Name}, Amount In: {amount}, Percentage: {passupPercentage}, Amount Out: {passupAmount}, Luminance: {luminance}");
+            //Console.WriteLine($"[PASSUP] Depth: {depth}, Vassal: {vassal.Name}, Patron: {patron.Name}, Amount In: {amount}, Percentage: {passupPercentage}, Amount Out: {passupAmount}, Luminance: {luminance}");
 
             if (luminance)
             {

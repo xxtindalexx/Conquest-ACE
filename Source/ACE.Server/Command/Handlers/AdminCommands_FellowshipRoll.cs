@@ -15,13 +15,18 @@ namespace ACE.Server.Command.Handlers
         /// </summary>
         [CommandHandler("fellowshiprollmob", AccessLevel.Admin, CommandHandlerFlag.None, 0,
             "Manages fellowship roll item drops for creatures",
-            "/fellowshiprollmob add <mobWcid> <petWcid> <probability>\n" +
-            "/fellowshiprollmob remove <mobWcid> <petWcid>\n" +
-            "/fellowshiprollmob list <mobWcid>\n" +
+            "/fellowshiprollmob add <mobWcid> <itemWcid> <rarity> <probability>\n" +
+            "/fellowshiprollmob remove <mobWcid> <itemWcid>\n" +
+            "/fellowshiprollmob list\n" +
             "/fellowshiprollmob clear <mobWcid>\n\n" +
+            "Rarity: common, rare, legendary, mythic, or direct\n" +
+            "For direct: itemWcid = pet weenie. For egg rarities: itemWcid = egg weenie.\n\n" +
             "Examples:\n" +
-            "/fellowshiprollmob add 12345 5084 0.15  (15% chance to drop pet 5084 from mob 12345)\n" +
-            "/fellowshiprollmob list 12345  (shows all fellowship roll drops for mob 12345)")]
+            "/fellowshiprollmob add 12345 2123456 common 0.15  (15% common egg WCID 2123456)\n" +
+            "/fellowshiprollmob add 12345 2123458 legendary 0.01  (1% legendary egg WCID 2123458)\n" +
+            "/fellowshiprollmob add 12345 2123459 mythic 0.001  (0.1% mythic egg WCID 2123459)\n" +
+            "/fellowshiprollmob add 12345 5099 direct 0.05  (5% direct drop of pet 5099, no egg)\n" +
+            "/fellowshiprollmob list  (shows all fellowship roll drops)")]
         public static void HandleFellowshipRollMob(Session session, params string[] parameters)
         {
             if (parameters.Length < 1)
@@ -35,9 +40,11 @@ namespace ACE.Server.Command.Handlers
             switch (action)
             {
                 case "add":
-                    if (parameters.Length < 4)
+                    if (parameters.Length < 5)
                     {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm add <mobWcid> <petWcid> <probability>", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm add <mobWcid> <itemWcid> <rarity> <probability>", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Rarity: common, rare, legendary, mythic, or direct", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat("For direct: itemWcid = pet. For egg rarities: itemWcid = egg.", ChatMessageType.Broadcast));
                         return;
                     }
                     if (!uint.TryParse(parameters[1], out var addMobWcid))
@@ -50,7 +57,7 @@ namespace ACE.Server.Command.Handlers
                 case "remove":
                     if (parameters.Length < 3)
                     {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm remove <mobWcid> <petWcid>", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm remove <mobWcid> <itemWcid>", ChatMessageType.Broadcast));
                         return;
                     }
                     if (!uint.TryParse(parameters[1], out var removeMobWcid))
@@ -92,19 +99,28 @@ namespace ACE.Server.Command.Handlers
 
         private static void HandleAdd(Session session, uint mobWcid, string[] parameters)
         {
-            if (parameters.Length < 4)
+            if (parameters.Length < 5)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm add <mobWcid> <petWcid> <probability>", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm add <mobWcid> <itemWcid> <rarity> <probability>", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Rarity: common, rare, legendary, mythic, or direct", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("For direct: itemWcid = pet. For egg rarities: itemWcid = egg.", ChatMessageType.Broadcast));
                 return;
             }
 
-            if (!uint.TryParse(parameters[2], out var petWcid))
+            if (!uint.TryParse(parameters[2], out var itemWcid))
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Invalid pet WCID.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Invalid item WCID (pet or egg).", ChatMessageType.Broadcast));
                 return;
             }
 
-            if (!float.TryParse(parameters[3], out var probability) || probability < 0 || probability > 1)
+            var rarity = parameters[3].ToLower();
+            if (rarity != "common" && rarity != "rare" && rarity != "legendary" && rarity != "mythic" && rarity != "direct")
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Invalid rarity. Must be: common, rare, legendary, mythic, or direct", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (!float.TryParse(parameters[4], out var probability) || probability < 0 || probability > 1)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("Invalid probability. Must be between 0 and 1 (e.g., 0.15 for 15%).", ChatMessageType.Broadcast));
                 return;
@@ -118,15 +134,15 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            var petWeenie = DatabaseManager.World.GetCachedWeenie(petWcid);
-            if (petWeenie == null)
+            var itemWeenie = DatabaseManager.World.GetCachedWeenie(itemWcid);
+            if (itemWeenie == null)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Pet weenie {petWcid} not found in database.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Item weenie {itemWcid} not found in database.", ChatMessageType.Broadcast));
                 return;
             }
 
             // Add the emote to the world database
-            var success = DatabaseManager.World.AddFellowshipRollDrop(mobWcid, petWcid, probability);
+            var success = DatabaseManager.World.AddFellowshipRollDrop(mobWcid, itemWcid, rarity, probability);
 
             if (success)
             {
@@ -134,10 +150,11 @@ namespace ACE.Server.Command.Handlers
                 DatabaseManager.World.ClearCachedWeenie(mobWcid);
 
                 var mobName = mobWeenie.GetName() ?? $"Mob {mobWcid}";
-                var petName = petWeenie.GetName() ?? $"Pet {petWcid}";
+                var itemName = itemWeenie.GetName() ?? $"Item {itemWcid}";
+                var itemType = (rarity == "direct") ? "pet" : "egg";
 
                 session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"Added fellowship roll drop: {petName} ({petWcid}) from {mobName} ({mobWcid}) with {probability * 100:F1}% chance.",
+                    $"Added fellowship roll drop: {itemName} ({itemWcid}) {itemType} from {mobName} ({mobWcid}) - Rarity: {rarity}, Chance: {probability * 100:F1}%",
                     ChatMessageType.Broadcast));
 
                 session.Network.EnqueueSend(new GameMessageSystemChat(
@@ -156,24 +173,24 @@ namespace ACE.Server.Command.Handlers
         {
             if (parameters.Length < 3)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm remove <mobWcid> <petWcid>", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm remove <mobWcid> <itemWcid>", ChatMessageType.Broadcast));
                 return;
             }
 
-            if (!uint.TryParse(parameters[2], out var petWcid))
+            if (!uint.TryParse(parameters[2], out var itemWcid))
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Invalid pet WCID.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Invalid item WCID.", ChatMessageType.Broadcast));
                 return;
             }
 
-            var success = DatabaseManager.World.RemoveFellowshipRollDrop(mobWcid, petWcid);
+            var success = DatabaseManager.World.RemoveFellowshipRollDrop(mobWcid, itemWcid);
 
             if (success)
             {
                 DatabaseManager.World.ClearCachedWeenie(mobWcid);
 
                 session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"Removed fellowship roll drop: Pet {petWcid} from Mob {mobWcid}.",
+                    $"Removed fellowship roll drop: Item {itemWcid} from Mob {mobWcid}.",
                     ChatMessageType.Broadcast));
             }
             else
@@ -211,11 +228,12 @@ namespace ACE.Server.Command.Handlers
 
                 foreach (var drop in mobGroup)
                 {
-                    var petWeenie = DatabaseManager.World.GetCachedWeenie(drop.PetWcid);
-                    var petName = petWeenie?.GetName() ?? $"Unknown";
+                    var itemWeenie = DatabaseManager.World.GetCachedWeenie(drop.PetWcid);
+                    var itemName = itemWeenie?.GetName() ?? $"Unknown";
+                    var itemType = (drop.Rarity == "direct") ? "[Pet]" : "[Egg]";
 
                     session.Network.EnqueueSend(new GameMessageSystemChat(
-                        $"  - {petName} ({drop.PetWcid}): {drop.Probability * 100:F1}% chance",
+                        $"  - {itemName} ({drop.PetWcid}) {itemType}: {drop.Rarity} - {drop.Probability * 100:F1}% chance",
                         ChatMessageType.Broadcast));
                 }
             }

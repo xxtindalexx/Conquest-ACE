@@ -1,15 +1,17 @@
-using System;
-
 using ACE.Common;
+using ACE.Database;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Factories;
+using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Physics;
+using System;
+using System.Linq;
 
 namespace ACE.Server.WorldObjects
 {
@@ -136,6 +138,14 @@ namespace ACE.Server.WorldObjects
             {
                 //player.SendWeenieError(WeenieError.ObjectGone);   // results in 'Unable to move object!' transient error
                 player.SendTransientError($"Cannot find the {Name}");   // custom message
+                return;
+            }
+
+            // Handle Mystery Egg hatching
+            var eggRarity = GetProperty(PropertyInt.EggRarity);
+            if (eggRarity != null)
+            {
+                HatchMysteryEgg(player, eggRarity.Value);
                 return;
             }
 
@@ -311,6 +321,74 @@ namespace ACE.Server.WorldObjects
             }
 
             base.OnActivate(activator);
+        }
+
+        private void HatchMysteryEgg(Player player, int eggRarityValue)
+        {
+            // Check if 7 days have passed since creation
+            var creationTime = GetProperty(PropertyInt.CreationTimestamp) ?? 0;
+            var currentTime = (int)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds;
+            var daysElapsed = (currentTime - creationTime) / 86400.0; // 86400 seconds in a day
+            var daysRemaining = 7.0 - daysElapsed;
+
+            if (daysRemaining > 0)
+            {
+                player.SendMessage($"This egg is not ready to hatch yet. It needs {daysRemaining:F1} more days to mature.");
+                return;
+            }
+
+            // Get all pet WCIDs with matching rarity (FAST - only queries one table!)
+            var eligiblePetWcids = DatabaseManager.World.GetPetsByRarity(eggRarityValue);
+
+            if (eligiblePetWcids.Count == 0)
+            {
+                player.SendMessage($"No pets found for this rarity tier. Please contact an administrator.");
+                return;
+            }
+
+            // Randomly select a pet WCID
+            var randomIndex = ThreadSafeRandom.Next(0, eligiblePetWcids.Count - 1);
+            var selectedPetWcid = eligiblePetWcids[randomIndex];
+
+            // Create the pet and give to player
+            var pet = WorldObjectFactory.CreateNewWorldObject(selectedPetWcid);
+            if (pet == null)
+            {
+                player.SendMessage($"Error creating pet (WCID: {selectedPetWcid}). Please contact an administrator.");
+                return;
+            }
+
+            // Try to add to inventory
+            if (player.TryCreateInInventoryWithNetworking(pet))
+            {
+                var rarityName = eggRarityValue switch
+                {
+                    1 => "Common",
+                    2 => "Rare",
+                    3 => "Legendary",
+                    4 => "Mythic",
+                    _ => "Unknown"
+                };
+
+                player.SendMessage($"Your {rarityName} Mystery Egg hatched into {pet.Name}!");
+
+                // Global broadcast for Legendary and Mythic
+                if (eggRarityValue >= 3)
+                {
+                    var broadcastMsg = $"{player.Name}'s {rarityName} Mystery Egg hatched into {pet.Name}!";
+                    PlayerManager.BroadcastToAll(new GameMessageSystemChat(broadcastMsg, ChatMessageType.Broadcast));
+                }
+
+                // Consume the egg (only on successful hatch)
+                player.TryConsumeFromInventoryWithNetworking(this, 1);
+            }
+            else
+            {
+                // Inventory full - don't consume egg, let player try again
+                player.SendMessage($"Your inventory is full! Make space before hatching this egg.");
+                pet.Destroy();
+                // Note: Egg is NOT consumed, player can try again when they have space
+            }
         }
     }
 }

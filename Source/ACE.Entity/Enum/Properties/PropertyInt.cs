@@ -675,6 +675,10 @@ namespace ACE.Entity.Enum.Properties
         EnrageLeapKnockbackEffect = 9208,
         [AssessmentProperty]
         SplitArrowCount = 9031,
+
+        // Custom properties for mystery egg system
+        PetRarity = 9300,  // 1 = Common, 2 = Rare, 3 = Legendary, 4 = Mythic
+        EggRarity = 9301,  // Stores the rarity tier on mystery egg items
     }
 
     public static class PropertyIntExtensions

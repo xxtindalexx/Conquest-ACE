@@ -820,10 +820,6 @@ namespace ACE.Server.WorldObjects
                 // Count total non-admin connections from this IP
                 var totalConnectionsFromIP = playersFromIP.Count;
 
-                // DEBUG: Log connection limit check
-                log.Info($"[CONNECTION LIMIT] Player: {Name}, IP: {endpoint.Address}, Total from IP: {totalConnectionsFromIP}, Effective Max: {effectiveMaxTotal}, Any Exempt: {anyAccountExempt}, Max Config: {maxTotalConnections}");
-                log.Info($"[CONNECTION LIMIT] Players from IP: {string.Join(", ", playersFromIP.Select(p => $"{p.Name}(Account:{p.Account.AccountId})"))}");
-
                 // If over the limit, kick this character
                 if (totalConnectionsFromIP > effectiveMaxTotal)
                 {
@@ -861,9 +857,6 @@ namespace ACE.Server.WorldObjects
                     outsideMarketplaceCount++;
                 }
 
-                // DEBUG: Log marketplace limit check
-                log.Info($"[MARKETPLACE LIMIT] Player: {Name}, IP: {endpoint.Address}, Current Landblock: 0x{CurrentLandblock?.Id.Landblock:X8}, Outside Count: {outsideMarketplaceCount}, Effective Max Outside: {effectiveMaxOutside}, Any Exempt: {anyAccountExempt}, Max Config: {maxAllowed}");
-
                 // If exceeding the limit, log off this character
                 if (outsideMarketplaceCount > effectiveMaxOutside)
                 {
@@ -872,6 +865,10 @@ namespace ACE.Server.WorldObjects
                     return;
                 }
             }
+
+            // CONQUEST: Auto-grant free tinkering skills (specialized) at character creation
+            // Check for all 4 tinkering skills and add them if missing
+            GrantFreeTinkeringSkills();
 
             EnqueueBroadcastPhysicsState();
 

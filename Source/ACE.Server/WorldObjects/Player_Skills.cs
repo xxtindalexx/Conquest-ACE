@@ -328,6 +328,66 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// CONQUEST: Grants free specialized tinkering skills to players
+        /// Called during OnTeleportComplete to ensure both new and existing characters have these skills
+        /// Skills granted: Armor/Weapon/Item/MagicItem Tinkering (specialized, no credit cost)
+        /// These skills are in AlwaysTrained list, so they cannot be untrained for credit refunds
+        /// </summary>
+        public void GrantFreeTinkeringSkills()
+        {
+            var tinkeringSkills = new List<Skill>
+            {
+                Skill.ArmorTinkering,
+                Skill.WeaponTinkering,
+                Skill.ItemTinkering,
+                Skill.MagicItemTinkering
+            };
+
+            var updatedSkills = new List<CreatureSkill>();
+
+            foreach (var skill in tinkeringSkills)
+            {
+                var creatureSkill = GetCreatureSkill(skill);
+
+                // Skip if already specialized
+                if (creatureSkill.AdvancementClass == SkillAdvancementClass.Specialized)
+                    continue;
+
+                // If untrained, train it first (with 0 credits)
+                if (creatureSkill.AdvancementClass == SkillAdvancementClass.Untrained)
+                {
+                    creatureSkill.AdvancementClass = SkillAdvancementClass.Trained;
+                    creatureSkill.Ranks = 0;
+                    creatureSkill.InitLevel = 0;
+                    creatureSkill.ExperienceSpent = 0;
+                    // No skill credits spent (free training)
+                }
+
+                // Now specialize it (with 0 credits)
+                if (creatureSkill.AdvancementClass == SkillAdvancementClass.Trained)
+                {
+                    creatureSkill.AdvancementClass = SkillAdvancementClass.Specialized;
+                    creatureSkill.InitLevel = 10;
+                    creatureSkill.Ranks = 0;
+                    creatureSkill.ExperienceSpent = 0;
+                    // No skill credits spent (free specialization)
+
+                    updatedSkills.Add(creatureSkill);
+                }
+            }
+
+            // Send network updates to refresh skills on client
+            if (updatedSkills.Any() && Session != null)
+            {
+                foreach (var skill in updatedSkills)
+                {
+                    Session.Network.EnqueueSend(new GameMessagePrivateUpdateSkill(this, skill));
+                }
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You have been granted free specialized tinkering skills!", ChatMessageType.Advancement));
+            }
+        }
+
+        /// <summary>
         /// Increases a skill by some amount of points
         /// </summary>
         public void AwardSkillPoints(Skill skill, uint amount)
@@ -611,11 +671,15 @@ namespace ACE.Server.WorldObjects
         public static List<Skill> AlwaysTrained = new List<Skill>()
         {
             Skill.ArcaneLore,
+            Skill.ArmorTinkering,
+            Skill.ItemTinkering,
             Skill.Jump,
             Skill.Loyalty,
             Skill.MagicDefense,
+            Skill.MagicItemTinkering,
             Skill.Run,
-            Skill.Salvaging
+            Skill.Salvaging,
+            Skill.WeaponTinkering
         };
 
         public static List<Skill> AugSpecSkills = new List<Skill>()

@@ -627,7 +627,7 @@ namespace ACE.Database
         /// <summary>
         /// Adds a fellowship roll drop to a creature weenie by creating a Death emote with FellowshipRoll action
         /// </summary>
-        public bool AddFellowshipRollDrop(uint mobWcid, uint petWcid, float probability)
+        public bool AddFellowshipRollDrop(uint mobWcid, uint petWcid, string rarity, float probability)
         {
             try
             {
@@ -674,7 +674,8 @@ namespace ACE.Database
                         Type = 133, // FellowshipRoll
                         Delay = 0,
                         Extent = 1,
-                        WeenieClassId = petWcid
+                        WeenieClassId = petWcid,
+                        Message = rarity  // Store rarity (common/rare/legendary/direct) in Message field
                     };
 
                     context.WeeniePropertiesEmoteAction.Add(newAction);
@@ -770,6 +771,7 @@ namespace ACE.Database
                             {
                                 MobWcid = mobWcid,
                                 PetWcid = action.WeenieClassId.Value,
+                                Rarity = action.Message ?? "direct",  // Default to "direct" if not set
                                 Probability = emote.Probability
                             });
                         }
@@ -870,6 +872,7 @@ namespace ACE.Database
                             {
                                 MobWcid = emote.ObjectId,
                                 PetWcid = action.WeenieClassId.Value,
+                                Rarity = action.Message ?? "direct",  // Default to "direct" if not set
                                 Probability = emote.Probability
                             });
                         }
@@ -882,6 +885,34 @@ namespace ACE.Database
             {
                 log.Error($"Error getting all fellowship roll drops: {ex.Message}");
                 return new List<FellowshipRollDrop>();
+            }
+        }
+
+        /// <summary>
+        /// Gets all pet WCIDs with a specific PetRarity value (for mystery egg hatching)
+        /// This is FAST - only queries weenie_properties_int table with indexed lookup
+        /// </summary>
+        public List<uint> GetPetsByRarity(int rarityValue)
+        {
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+                    // Query only weenies that have PetRarity property matching the rarity
+                    var petWcids = context.WeeniePropertiesInt
+                        .Where(p => p.Type == 9300 && p.Value == rarityValue)  // Type 9300 = PropertyInt.PetRarity
+                        .Select(p => p.ObjectId)
+                        .ToList();
+
+                    return petWcids;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error getting pets by rarity {rarityValue}: {ex.Message}");
+                return new List<uint>();
             }
         }
     }

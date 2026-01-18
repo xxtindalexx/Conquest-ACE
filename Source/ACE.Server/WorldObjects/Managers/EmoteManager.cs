@@ -1791,8 +1791,9 @@ namespace ACE.Server.WorldObjects.Managers
                         // Check if in fellowship with ShareLoot enabled
                         if (fellowship != null && fellowship.ShareLoot)
                         {
-                            // Initiate fellowship roll
-                            ACE.Server.Managers.FellowshipRollManager.InitiateRoll(creatures, emote.WeenieClassId.Value, killer, fellowship);
+                            // Initiate fellowship roll (pass rarity from emote.Message)
+                            var rarity = emote.Message ?? "direct";
+                            ACE.Server.Managers.FellowshipRollManager.InitiateRoll(creatures, emote.WeenieClassId.Value, rarity, killer, fellowship);
                         }
                         else
                         {
