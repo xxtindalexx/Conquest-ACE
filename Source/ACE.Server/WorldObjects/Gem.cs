@@ -11,6 +11,7 @@ using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Physics;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace ACE.Server.WorldObjects
@@ -358,6 +359,9 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // Randomize pet rating bonuses based on rarity (Rare/Legendary/Mythic only)
+            AssignRandomPetRatings(pet, eggRarityValue);
+
             // Try to add to inventory
             if (player.TryCreateInInventoryWithNetworking(pet))
             {
@@ -388,6 +392,56 @@ namespace ACE.Server.WorldObjects
                 player.SendMessage($"Your inventory is full! Make space before hatching this egg.");
                 pet.Destroy();
                 // Note: Egg is NOT consumed, player can try again when they have space
+            }
+        }
+
+        /// <summary>
+        /// Randomly assigns rating bonuses to a pet based on its rarity tier
+        /// Rare: +1 to one random rating
+        /// Legendary/Mythic: 50% chance for +2 to one rating, 50% chance for +1 to two different ratings
+        /// </summary>
+        private void AssignRandomPetRatings(WorldObject pet, int rarity)
+        {
+            // Common pets get no rating bonuses
+            if (rarity == 1)
+                return;
+
+            // Available ratings to choose from
+            var availableRatings = new List<PropertyInt>
+            {
+                PropertyInt.PetBonusDamageRating,
+                PropertyInt.PetBonusDamageReductionRating,
+                PropertyInt.PetBonusCritDamageRating,
+                PropertyInt.PetBonusCritDamageReductionRating
+            };
+
+            if (rarity == 2) // Rare: +1 to one random rating
+            {
+                var chosenRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                pet.SetProperty(chosenRating, 1);
+            }
+            else if (rarity == 3 || rarity == 4) // Legendary or Mythic
+            {
+                // 50/50 chance: +2 to one rating OR +1 to two different ratings
+                var option = ThreadSafeRandom.Next(0, 1); // 0 or 1
+
+                if (option == 0) // +2 to one rating
+                {
+                    var chosenRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                    pet.SetProperty(chosenRating, 2);
+                }
+                else // +1 to two different ratings
+                {
+                    // Pick first rating
+                    var firstIndex = ThreadSafeRandom.Next(0, availableRatings.Count - 1);
+                    var firstRating = availableRatings[firstIndex];
+                    pet.SetProperty(firstRating, 1);
+
+                    // Remove first rating from list and pick second
+                    availableRatings.RemoveAt(firstIndex);
+                    var secondRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                    pet.SetProperty(secondRating, 1);
+                }
             }
         }
     }

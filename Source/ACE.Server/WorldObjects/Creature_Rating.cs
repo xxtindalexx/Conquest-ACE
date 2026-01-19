@@ -12,6 +12,28 @@ namespace ACE.Server.WorldObjects
         // Ratings:
         // http://asheron.wikia.com/wiki/Rating
 
+        /// <summary>
+        /// Returns the specific rating bonus from the player's active pet.
+        /// Pets have randomized rating bonuses stored in PropertyInt 9320-9323.
+        /// Returns 0 if pet bonuses are disabled in PvP and player has active PK timer.
+        /// </summary>
+        public int GetPetRatingBonus(PropertyInt ratingType)
+        {
+            if (!(this is Player player))
+                return 0;
+
+            // Check if pet bonuses disabled during PvP
+            if (PropertyManager.GetBool("pet_rating_bonuses_disabled_in_pvp") && player.PKTimerActive)
+                return 0;
+
+            // Check if player has an active pet
+            if (player.CurrentActivePet == null)
+                return 0;
+
+            // Get the specific rating bonus from the pet
+            return player.CurrentActivePet.GetProperty(ratingType) ?? 0;
+        }
+
         private static float GetRatingMod(int rating)
         {
             if (rating == 0) return 1.0f;
@@ -217,6 +239,7 @@ namespace ACE.Server.WorldObjects
             var augBonus = 0;
             var lumAugBonus = 0;
             var enlightenmentBonus = 0;
+            var petBonus = 0;
 
             if (this is Player player)
             {
@@ -226,10 +249,13 @@ namespace ACE.Server.WorldObjects
                 // CONQUEST: Add enlightenment damage rating bonus (+1 per 25 ENL)
                 if (player.Enlightenment > 0)
                     enlightenmentBonus = ACE.Server.Entity.Enlightenment.GetEnlightenmentRatingBonus(player.Enlightenment);
+
+                // Pet damage rating bonus
+                petBonus = GetPetRatingBonus(PropertyInt.PetBonusDamageRating);
             }
 
             // heritage / weapon type bonus factored in elsewhere?
-            return damageRating + equipment + enchantments - weaknessRating + augBonus + lumAugBonus + enlightenmentBonus;
+            return damageRating + equipment + enchantments - weaknessRating + augBonus + lumAugBonus + enlightenmentBonus + petBonus;
         }
 
         public int GetDamageResistRating(CombatType? combatType = null, bool directDamage = true)
@@ -251,6 +277,7 @@ namespace ACE.Server.WorldObjects
             var lumAugBonus = 0;
             var specBonus = 0;
             var enlightenmentBonus = 0;
+            var petBonus = 0;
 
             if (this is Player player)
             {
@@ -261,9 +288,12 @@ namespace ACE.Server.WorldObjects
                 // CONQUEST: Add enlightenment damage resistance rating bonus (+1 per 25 ENL)
                 if (player.Enlightenment > 0)
                     enlightenmentBonus = ACE.Server.Entity.Enlightenment.GetEnlightenmentRatingBonus(player.Enlightenment);
+
+                // Pet damage reduction rating bonus
+                petBonus = GetPetRatingBonus(PropertyInt.PetBonusDamageReductionRating);
             }
 
-            return damageResistRating + equipment + enchantments - netherDotDamageRating + augBonus + lumAugBonus + specBonus + enlightenmentBonus;
+            return damageResistRating + equipment + enchantments - netherDotDamageRating + augBonus + lumAugBonus + specBonus + enlightenmentBonus + petBonus;
         }
 
         public float GetDamageResistRatingMod(CombatType? combatType = null, bool directDamage = true)
@@ -338,14 +368,18 @@ namespace ACE.Server.WorldObjects
             // augmentations
             var augBonus = 0;
             var lumAugBonus = 0;
+            var petBonus = 0;
 
             if (this is Player player)
             {
                 augBonus = player.AugmentationCriticalPower * 3;
                 lumAugBonus = player.LumAugCritDamageRating;
+
+                // Pet crit damage rating bonus
+                petBonus = GetPetRatingBonus(PropertyInt.PetBonusCritDamageRating);
             }
 
-            return critDamageRating + equipment + enchantments + augBonus + lumAugBonus;
+            return critDamageRating + equipment + enchantments + augBonus + lumAugBonus + petBonus;
         }
 
         public int GetCritResistRating()
@@ -377,10 +411,17 @@ namespace ACE.Server.WorldObjects
             var equipment = GetEquippedItemsRatingSum(PropertyInt.GearCritDamageResist);
 
             var lumAugBonus = 0;
+            var petBonus = 0;
+
             if (this is Player player)
+            {
                 lumAugBonus = player.LumAugCritReductionRating;
 
-            return critDamageResistRating + equipment + enchantments + lumAugBonus;
+                // Pet crit damage reduction rating bonus
+                petBonus = GetPetRatingBonus(PropertyInt.PetBonusCritDamageReductionRating);
+            }
+
+            return critDamageResistRating + equipment + enchantments + lumAugBonus + petBonus;
         }
 
         public int GetHealingBoostRating()
@@ -395,6 +436,7 @@ namespace ACE.Server.WorldObjects
             var equipment = GetEquippedItemsRatingSum(PropertyInt.GearHealingBoost);
 
             var lumAugBonus = 0;
+
             if (this is Player player)
                 lumAugBonus = player.LumAugHealingRating;
 

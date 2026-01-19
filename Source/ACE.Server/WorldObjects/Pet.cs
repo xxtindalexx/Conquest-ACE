@@ -28,6 +28,10 @@ namespace ACE.Server.WorldObjects
 
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
+        // Mythic pet spell casting cooldowns
+        private double lastHealCastTime = 0;
+        private double lastStaminaCastTime = 0;
+
         public uint? PetDevice
         {
             get => GetProperty(PropertyInstanceId.PetDevice);
@@ -218,8 +222,89 @@ namespace ACE.Server.WorldObjects
             if (dist > MaxDistance)
                 Destroy();
 
+            // Mythic pet spell casting logic
+            TryMythicPetSpellCasting(currentUnixTime);
+
             if (!IsMoving && dist > MinDistance)
                 StartFollow();
+        }
+
+        /// <summary>
+        /// Checks if this is a Mythic pet and attempts to cast healing/stamina spells on owner
+        /// </summary>
+        private void TryMythicPetSpellCasting(double currentUnixTime)
+        {
+            // Only Mythic pets (rarity 4) can cast spells
+            var petRarity = GetProperty(PropertyInt.PetRarity);
+            if (petRarity == null || petRarity.Value != 4)
+                return;
+
+            // Don't cast if owner is null or dead
+            if (P_PetOwner == null || P_PetOwner.IsDead)
+                return;
+
+            // Don't cast during PvP combat if configured
+            if (PropertyManager.GetBool("pet_rating_bonuses_disabled_in_pvp") && P_PetOwner.PKTimerActive)
+                return;
+
+            var cooldownSeconds = PropertyManager.GetLong("pet_mythic_spell_cooldown");
+
+            // Check if we should cast Heal Other
+            var healthPercent = (float)P_PetOwner.Health.Current / (float)P_PetOwner.Health.MaxValue;
+            if (healthPercent <= 0.5f) // 50% health threshold
+            {
+                var timeSinceLastHeal = currentUnixTime - lastHealCastTime;
+                if (timeSinceLastHeal >= cooldownSeconds)
+                {
+                    CastHealOtherOnOwner();
+                    lastHealCastTime = currentUnixTime;
+                    return; // Only cast one spell per tick
+                }
+            }
+
+            // Check if we should cast Stamina to Health Other
+            var staminaPercent = (float)P_PetOwner.Stamina.Current / (float)P_PetOwner.Stamina.MaxValue;
+            if (staminaPercent <= 0.5f) // 50% stamina threshold
+            {
+                var timeSinceLastStamina = currentUnixTime - lastStaminaCastTime;
+                if (timeSinceLastStamina >= cooldownSeconds)
+                {
+                    CastStaminaOtherOnOwner();
+                    lastStaminaCastTime = currentUnixTime;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Casts Heal spell on the pet's owner (Spell ID 1163)
+        /// </summary>
+        private void CastHealOtherOnOwner()
+        {
+            var spell = new Server.Entity.Spell(1163);
+
+            // Cast the spell
+            TryCastSpell(spell, P_PetOwner, this, tryResist: false);
+
+            // Send message to owner
+            P_PetOwner.Session.Network.EnqueueSend(new ACE.Server.Network.GameMessages.Messages.GameMessageSystemChat(
+                $"{Name} casts {spell.Name} on you!",
+                ChatMessageType.Magic));
+        }
+
+        /// <summary>
+        /// Casts Stamina spell on the pet's owner (Spell ID 1185)
+        /// </summary>
+        private void CastStaminaOtherOnOwner()
+        {
+            var spell = new Server.Entity.Spell(1185);
+
+            // Cast the spell
+            TryCastSpell(spell, P_PetOwner, this, tryResist: false);
+
+            // Send message to owner
+            P_PetOwner.Session.Network.EnqueueSend(new ACE.Server.Network.GameMessages.Messages.GameMessageSystemChat(
+                $"{Name} casts {spell.Name} on you!",
+                ChatMessageType.Magic));
         }
 
         // if the passive pet is between min-max distance to owner,

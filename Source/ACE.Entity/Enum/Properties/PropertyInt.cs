@@ -679,6 +679,11 @@ namespace ACE.Entity.Enum.Properties
         // Custom properties for mystery egg system
         PetRarity = 9300,  // 1 = Common, 2 = Rare, 3 = Legendary, 4 = Mythic
         EggRarity = 9301,  // Stores the rarity tier on mystery egg items
+        // Pet rating bonuses (randomly assigned on creation based on rarity)
+        PetBonusDamageRating = 9320,              // Damage rating bonus from this pet
+        PetBonusDamageReductionRating = 9321,     // Damage reduction rating bonus from this pet
+        PetBonusCritDamageRating = 9322,          // Crit damage rating bonus from this pet
+        PetBonusCritDamageReductionRating = 9323, // Crit damage reduction rating bonus from this pet
     }
 
     public static class PropertyIntExtensions
