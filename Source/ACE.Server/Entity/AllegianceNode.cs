@@ -105,7 +105,7 @@ namespace ACE.Server.Entity
                 vassal.ShowInfo(depth + 1);
         }
 
-        public void OnLevelUp()
+        /*public void OnLevelUp()
         {
             // patron = self node
             var patronLevel = Player.Level ?? 1;
@@ -119,6 +119,6 @@ namespace ACE.Server.Entity
                 if (patronLevel >= vassalLevel)
                     vassal.Player.ExistedBeforeAllegianceXpChanges = true;
             }
-        }
+        }*/
     }
 }

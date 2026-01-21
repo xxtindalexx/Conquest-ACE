@@ -684,6 +684,9 @@ namespace ACE.Entity.Enum.Properties
         PetBonusDamageReductionRating = 9321,     // Damage reduction rating bonus from this pet
         PetBonusCritDamageRating = 9322,          // Crit damage rating bonus from this pet
         PetBonusCritDamageReductionRating = 9323, // Crit damage reduction rating bonus from this pet
+        // CONQUEST: Morph gem weapon element randomization
+        WeenieSwapClassId = 19001, // Tracks the weenie class ID when weapon element has been swapped
+        AppearanceWeenieClassId = 19002, // Tracks the visual appearance WCID for tailored/morphed weapons
     }
 
     public static class PropertyIntExtensions

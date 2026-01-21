@@ -888,9 +888,9 @@ namespace ACE.Database
             }
         }
 
-        /// <summary>
-        /// Gets all pet WCIDs with a specific PetRarity value (for mystery egg hatching)
+        /// Gets all Pet Device WCIDs with a specific PetRarity value (for mystery egg hatching)
         /// This is FAST - only queries weenie_properties_int table with indexed lookup
+        /// IMPORTANT: Only returns Pet Devices (type 70), not Pet creatures (type 71)
         /// </summary>
         public List<uint> GetPetsByRarity(int rarityValue)
         {
@@ -900,18 +900,24 @@ namespace ACE.Database
                 {
                     context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-                    // Query only weenies that have PetRarity property matching the rarity
-                    var petWcids = context.WeeniePropertiesInt
+                    // Query only PET DEVICES (type 70) that have PetRarity property matching the rarity
+                    // This prevents returning pet creatures (type 71) which can't be added to inventory
+                    var petDeviceWcids = context.WeeniePropertiesInt
                         .Where(p => p.Type == 9300 && p.Value == rarityValue)  // Type 9300 = PropertyInt.PetRarity
-                        .Select(p => p.ObjectId)
+                        .Join(context.Weenie,
+                              prop => prop.ObjectId,
+                              weenie => weenie.ClassId,
+                              (prop, weenie) => new { prop.ObjectId, weenie.Type })
+                        .Where(w => w.Type == 70)  // 70 = Pet Device
+                        .Select(w => w.ObjectId)
                         .ToList();
 
-                    return petWcids;
+                    return petDeviceWcids;
                 }
             }
             catch (Exception ex)
             {
-                log.Error($"Error getting pets by rarity {rarityValue}: {ex.Message}");
+                log.Error($"Error getting pet devices by rarity {rarityValue}: {ex.Message}");
                 return new List<uint>();
             }
         }

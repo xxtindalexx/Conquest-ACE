@@ -361,16 +361,6 @@ namespace ACE.Server.WorldObjects
                     creatureSkill.InitLevel = 0;
                     creatureSkill.ExperienceSpent = 0;
                     // No skill credits spent (free training)
-                }
-
-                // Now specialize it (with 0 credits)
-                if (creatureSkill.AdvancementClass == SkillAdvancementClass.Trained)
-                {
-                    creatureSkill.AdvancementClass = SkillAdvancementClass.Specialized;
-                    creatureSkill.InitLevel = 10;
-                    creatureSkill.Ranks = 0;
-                    creatureSkill.ExperienceSpent = 0;
-                    // No skill credits spent (free specialization)
 
                     updatedSkills.Add(creatureSkill);
                 }
@@ -383,7 +373,7 @@ namespace ACE.Server.WorldObjects
                 {
                     Session.Network.EnqueueSend(new GameMessagePrivateUpdateSkill(this, skill));
                 }
-                Session.Network.EnqueueSend(new GameMessageSystemChat("You have been granted free specialized tinkering skills!", ChatMessageType.Advancement));
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You have been granted free trained tinkering skills!", ChatMessageType.Advancement));
             }
         }
 

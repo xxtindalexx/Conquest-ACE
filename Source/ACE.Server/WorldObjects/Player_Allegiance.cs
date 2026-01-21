@@ -140,7 +140,8 @@ namespace ACE.Server.WorldObjects
 
             UpdateProperty(PropertyInstanceId.Monarch, monarchGuid, true);
 
-            ExistedBeforeAllegianceXpChanges = (patron.Level ?? 1) >= (Level ?? 1);
+            // CONQUEST: Allow XP/Luminance passup regardless of level difference
+            ExistedBeforeAllegianceXpChanges = true;
 
             // handle special case: monarch swearing into another allegiance
             if (Allegiance != null && Allegiance.MonarchId == Guid.Full)

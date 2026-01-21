@@ -111,6 +111,29 @@ namespace ACE.Server.WorldObjects
             PetDevice = petDevice.Guid.Full;
             P_PetDevice = petDevice;
 
+            // Copy pet rarity and rating bonuses from device to creature
+            // This ensures GetPetRatingBonus() can read from CurrentActivePet (the creature)
+            var deviceRarity = petDevice.GetProperty(PropertyInt.PetRarity);
+            if (deviceRarity != null)
+                SetProperty(PropertyInt.PetRarity, deviceRarity.Value);
+
+            var damageRating = petDevice.GetProperty(PropertyInt.PetBonusDamageRating);
+            if (damageRating != null)
+                SetProperty(PropertyInt.PetBonusDamageRating, damageRating.Value);
+
+            var damageReductionRating = petDevice.GetProperty(PropertyInt.PetBonusDamageReductionRating);
+            if (damageReductionRating != null)
+                SetProperty(PropertyInt.PetBonusDamageReductionRating, damageReductionRating.Value);
+
+            var critDamageRating = petDevice.GetProperty(PropertyInt.PetBonusCritDamageRating);
+            if (critDamageRating != null)
+                SetProperty(PropertyInt.PetBonusCritDamageRating, critDamageRating.Value);
+
+            var critDamageReductionRating = petDevice.GetProperty(PropertyInt.PetBonusCritDamageReductionRating);
+            if (critDamageReductionRating != null)
+                SetProperty(PropertyInt.PetBonusCritDamageReductionRating, critDamageReductionRating.Value);
+
+
             if (IsPassivePet)
                 nextSlowTickTime = Time.GetUnixTime();
 
@@ -284,11 +307,6 @@ namespace ACE.Server.WorldObjects
 
             // Cast the spell
             TryCastSpell(spell, P_PetOwner, this, tryResist: false);
-
-            // Send message to owner
-            P_PetOwner.Session.Network.EnqueueSend(new ACE.Server.Network.GameMessages.Messages.GameMessageSystemChat(
-                $"{Name} casts {spell.Name} on you!",
-                ChatMessageType.Magic));
         }
 
         /// <summary>
@@ -300,11 +318,6 @@ namespace ACE.Server.WorldObjects
 
             // Cast the spell
             TryCastSpell(spell, P_PetOwner, this, tryResist: false);
-
-            // Send message to owner
-            P_PetOwner.Session.Network.EnqueueSend(new ACE.Server.Network.GameMessages.Messages.GameMessageSystemChat(
-                $"{Name} casts {spell.Name} on you!",
-                ChatMessageType.Magic));
         }
 
         // if the passive pet is between min-max distance to owner,

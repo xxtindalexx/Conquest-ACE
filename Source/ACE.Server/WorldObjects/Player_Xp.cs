@@ -466,8 +466,9 @@ namespace ACE.Server.WorldObjects
                 if (Fellowship != null)
                     Fellowship.OnFellowLevelUp(this);
 
-                if (AllegianceNode != null)
-                    AllegianceNode.OnLevelUp();
+                // CONQUEST: Removed OnLevelUp call - no longer needed since we allow XP passup regardless of level
+                //if (AllegianceNode != null)
+                //    AllegianceNode.OnLevelUp();
 
                 Session.Network.EnqueueSend(levelUp);
 

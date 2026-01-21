@@ -272,6 +272,13 @@ namespace ACE.Server.WorldObjects
 
         public override void HandleActionUseOnTarget(Player player, WorldObject target)
         {
+            // CONQUEST: Check for morph gems first
+            if (MorphGem.IsMorphGem(WeenieClassId))
+            {
+                Tailoring.UseObjectOnTarget(player, this, target);
+                return;
+            }
+
             // should tailoring kit / aetheria be subtyped?
             if (Tailoring.IsTailoringKit(WeenieClassId))
             {

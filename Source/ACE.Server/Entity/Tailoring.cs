@@ -68,6 +68,13 @@ namespace ACE.Server.Entity
         {
             //Console.WriteLine($"Tailoring.UseObjectOnTarget({player.Name}, {source.Name}, {target.Name})");
 
+            // CONQUEST: Check if source is a morph gem - handle separately
+            if (MorphGem.IsMorphGem(source.WeenieClassId))
+            {
+                MorphGem.Apply(player, source, target);
+                return;
+            }
+
             // verify use requirements
             var useError = VerifyUseRequirements(player, source, target);
             if (useError != WeenieError.None)
@@ -521,13 +528,43 @@ namespace ACE.Server.Entity
             switch (source.TargetType)
             {
                 case ItemType.MeleeWeapon:
+                    // CONQUEST: Allow cross-weapon-type tailoring (mace to sword, etc.)
+                    // Restrictions:
+                    // - Element must match (fire to fire, cold to cold)
+                    // - Two-handed must stay two-handed
+                    // - Unarmed must stay unarmed
 
-                    if (source.W_WeaponType != target.W_WeaponType ||
-                        source.W_DamageType != target.W_DamageType)
+                    // Check element matching
+                    if (source.W_DamageType != target.W_DamageType)
                     {
                         player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
                         return;
                     }
+
+                    // Check two-handed restriction
+                    if (source.W_WeaponType == WeaponType.TwoHanded && target.W_WeaponType != WeaponType.TwoHanded)
+                    {
+                        player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                        return;
+                    }
+                    if (source.W_WeaponType != WeaponType.TwoHanded && target.W_WeaponType == WeaponType.TwoHanded)
+                    {
+                        player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                        return;
+                    }
+
+                    // Check unarmed restriction
+                    if (source.W_WeaponType == WeaponType.Unarmed && target.W_WeaponType != WeaponType.Unarmed)
+                    {
+                        player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                        return;
+                    }
+                    if (source.W_WeaponType != WeaponType.Unarmed && target.W_WeaponType == WeaponType.Unarmed)
+                    {
+                        player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                        return;
+                    }
+
                     break;
 
                 case ItemType.MissileWeapon:
@@ -558,6 +595,10 @@ namespace ACE.Server.Entity
 
             // Update all of the relevant properties
             UpdateWeaponProps(player, source, target);
+
+            // CONQUEST: Track the appearance WCID for morph gem compatibility
+            player.UpdateProperty(target, PropertyInt.AppearanceWeenieClassId, (int)source.WeenieClassId);
+
 
             // Send UpdateObject, mostly for the client to register the new name.
             player.Session.Network.EnqueueSend(new GameMessageUpdateObject(target));
@@ -621,6 +662,16 @@ namespace ACE.Server.Entity
 
             player.UpdateProperty(target, PropertyInt.HookType, source.HookType);
             player.UpdateProperty(target, PropertyInt.HookPlacement, source.HookPlacement);
+
+            // CONQUEST: Copy animation and combat properties to fix visual quirks with cross-weapon-type tailoring
+            // W_WeaponType: Controls animation set (how the weapon swings)
+            // DefaultCombatStyle: Controls combat style
+            // W_AttackType: NOT copied - keep target's actual attack type for damage calculations
+            if (source.TargetType == ItemType.MeleeWeapon)
+            {
+                player.UpdateProperty(target, PropertyInt.WeaponType, (int?)source.W_WeaponType);
+                player.UpdateProperty(target, PropertyInt.DefaultCombatStyle, (int?)source.DefaultCombatStyle);
+            }
         }
 
         public static uint? GetArmorWCID(EquipMask validLocations)

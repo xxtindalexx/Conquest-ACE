@@ -41980,5 +41980,6 @@ namespace ACE.Server.Factories.Enum
         conquest_netheryag = 63370087,
         conquest_netheryumi = 63370088,
         conquest_netherbowwar = 63370089,
+        conquest_netherhammer = 63370097,   
     }
 }
