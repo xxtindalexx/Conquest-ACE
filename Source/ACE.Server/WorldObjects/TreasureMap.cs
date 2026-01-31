@@ -4,6 +4,7 @@ using ACE.DatLoader;
 using ACE.DatLoader.FileTypes;
 using ACE.Entity;
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
@@ -153,68 +154,129 @@ namespace ACE.Server.WorldObjects
             return player.QuestManager.GetCurrentSolves("WieldingShovel") >= 1;
         }
 
-        // Method to give random loot to player
+        /// <summary>
+        /// Checks if player can use another treasure map (2 per 24 hours limit)
+        /// Resets counter if 24 hours have passed
+        /// </summary>
+        private static bool CheckDailyLimit(Player player)
+        {
+            var currentTime = (long)Time.GetUnixTime();
+            var lastResetTime = player.GetProperty(PropertyInt64.LastTreasureMapResetTime) ?? 0;
+            var mapsUsedToday = player.GetProperty(PropertyInt.TreasureMapsUsedToday) ?? 0;
+
+            // Check if 24 hours have passed since last reset
+            var timeSinceReset = currentTime - lastResetTime;
+            if (timeSinceReset >= 86400) // 86400 seconds = 24 hours
+            {
+                // Reset counter
+                player.SetProperty(PropertyInt.TreasureMapsUsedToday, 0);
+                player.SetProperty(PropertyInt64.LastTreasureMapResetTime, currentTime);
+                mapsUsedToday = 0;
+            }
+
+            // Check if player has reached daily limit
+            if (mapsUsedToday >= 2)
+            {
+                var hoursRemaining = (86400 - timeSinceReset) / 3600.0;
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"You have already used 2 treasure maps today. You can use another in {hoursRemaining:F1} hours.",
+                    ChatMessageType.System));
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Increments the daily treasure map usage counter
+        /// </summary>
+        private static void IncrementDailyCounter(Player player)
+        {
+            var mapsUsedToday = player.GetProperty(PropertyInt.TreasureMapsUsedToday) ?? 0;
+            player.SetProperty(PropertyInt.TreasureMapsUsedToday, mapsUsedToday + 1);
+        }
+
+        /// <summary>
+        /// Gives treasure map rewards to player based on probability table
+        /// 100% 5 conquest coins, 100% 3 MMDs, then probability rolls for optional rewards
+        /// Min 3 reward types, Max 5 reward types
+        /// </summary>
         private void GiveLootToPlayer(Player player)
         {
-            //Console.WriteLine("[DEBUG] Giving loot to player...");
+            var rewardsGiven = new List<(uint wcid, int quantity, string name)>();
 
-            // List of possible loot items to drop along with their quantities (Tuple: Item ID, Quantity)
-            var lootItems = new List<(uint, int)>
-    {
-        (13370001, 5),  // Conqquest Coin
-        (13370002, 5), // Dragon Coin
-        (13370003, 5), // Soul Fragment
-        (13370022, 5), // Enlightenment Shard
-    };
+            // GUARANTEED REWARDS (100% chance)
+            rewardsGiven.Add((13370001, 5, "Conquest Coins"));      // 100% 5 conquest coins
+            rewardsGiven.Add((20630, 3, "Trade Notes (250,000)")); // 100% 3 MMDs
 
-            // Check if the lootItems list is not empty
-            if (lootItems.Count == 0)
+            // OPTIONAL REWARDS (probability-based)
+            var optionalRewards = new List<(uint wcid, int quantity, string name, int chance)>
             {
-               // Console.WriteLine("[DEBUG] Loot items list is empty, no loot to give.");
-                return;
-            }
+                (13370003, 3, "Soul Fragments", 25),           // 25% 3 soul fragments
+                (29295, 1, "Blank Augmentation Gem", 15),      // 15% 1 xp aug gem
+                (43901, 25, "Promissory Notes", 15),           // 15% 25 prom notes
+                (7299, 10, "Diamond Scarabs", 15),             // 15% 10 diamond scarabs
+                (46423, 1, "Stipend", 5),                      // 5% 1 stipend
+                (13370001, 50, "Conquest Coins (Bonus)", 1)    // 1% 50 conquest coins (separate from guaranteed)
+            };
 
-            // Select a random loot item from the list (We use Next(min, max) to pick the random item)
-            var randomIndex = ThreadSafeRandom.Next(0, lootItems.Count - 1);  // Get a random index
-            //Console.WriteLine("[DEBUG] Random index: " + randomIndex);
-
-            if (randomIndex < 0 || randomIndex >= lootItems.Count)
+            // Roll for each optional reward
+            foreach (var reward in optionalRewards)
             {
-                //Console.WriteLine("[DEBUG] Random index out of range. Loot items list size: " + lootItems.Count);
-                return;
-            }
-
-            var selectedLoot = lootItems[randomIndex];  // Get the selected loot item and quantity
-            uint lootItemID = selectedLoot.Item1;
-            int quantity = selectedLoot.Item2;
-
-            // Attempt to create the loot in the player's inventory
-            WorldObject loot = WorldObjectFactory.CreateNewWorldObject(lootItemID);
-
-            if (loot != null)
-            {
-                // Set the loot quantity if needed (assuming the loot supports quantity)
-                loot.SetStackSize(quantity);  // This assumes that the WorldObject has a method to set the quantity
-
-                // Try adding the loot to the player's inventory
-                if (!player.TryCreateInInventoryWithNetworking(loot))  // Pass quantity as argument
+                var roll = ThreadSafeRandom.Next(1, 100); // 1-100
+                if (roll <= reward.chance)
                 {
-                    //Console.WriteLine("[DEBUG] Failed to add loot to player's inventory.");
-                    loot.Destroy();
-                }
-                else
-                {
-                    // Send a message to the player confirming the loot received
-                    var lootName = loot.Name ?? "Unknown Item";  // Fallback if the item name is null
-                    var lootMessage = $"You have received ({quantity}){lootName}";
-                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(lootMessage, ChatMessageType.System));
-
-                    //Console.WriteLine("[DEBUG] Loot successfully added to player's inventory.");
+                    rewardsGiven.Add((reward.wcid, reward.quantity, reward.name));
                 }
             }
-            else
+
+            // Enforce min/max reward type constraints
+            if (rewardsGiven.Count < 3)
             {
-                //Console.WriteLine("[DEBUG] Failed to create loot object.");
+                // Need to add more rewards to reach minimum of 3 types
+                var remainingRewards = optionalRewards
+                    .Where(opt => !rewardsGiven.Any(r => r.wcid == opt.wcid && r.quantity == opt.quantity))
+                    .ToList();
+
+                while (rewardsGiven.Count < 3 && remainingRewards.Count > 0)
+                {
+                    var randomIndex = ThreadSafeRandom.Next(0, remainingRewards.Count - 1);
+                    var bonusReward = remainingRewards[randomIndex];
+                    rewardsGiven.Add((bonusReward.wcid, bonusReward.quantity, bonusReward.name));
+                    remainingRewards.RemoveAt(randomIndex);
+                }
+            }
+            else if (rewardsGiven.Count > 5)
+            {
+                // Cap at 5 reward types - remove lowest priority items (keep guaranteed + highest % rolls)
+                // Remove from the end (lowest % chances) until we have 5
+                while (rewardsGiven.Count > 5)
+                {
+                    rewardsGiven.RemoveAt(rewardsGiven.Count - 1);
+                }
+            }
+
+            // Give all rewards to player
+            foreach (var reward in rewardsGiven)
+            {
+                var loot = WorldObjectFactory.CreateNewWorldObject(reward.wcid);
+                if (loot != null)
+                {
+                    if (loot is Stackable)
+                        loot.SetStackSize(reward.quantity);
+
+                    if (player.TryCreateInInventoryWithNetworking(loot))
+                    {
+                        var quantityText = reward.quantity > 1 ? $"({reward.quantity}) " : "";
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"You have received {quantityText}{reward.name}!",
+                            ChatMessageType.System));
+                    }
+                    else
+                    {
+                        loot.Destroy();
+                    }
+                }
             }
         }
 
@@ -223,6 +285,10 @@ namespace ACE.Server.WorldObjects
         {
             //Console.WriteLine($"[DEBUG] ActOnUse called for {this.Name} by {activator.Name}");
             if (!(activator is Player player))
+                return;
+
+            // Prevent spam-clicking during treasure digging
+            if (player.IsBusy)
                 return;
 
             // Check if player is wielding a shovel before proceeding
@@ -249,7 +315,11 @@ namespace ACE.Server.WorldObjects
                 //Console.WriteLine("[DEBUG] Distance is greater than 5000, starting animation...");
                 var animTime = DatManager.PortalDat.ReadFromDat<MotionTable>(player.MotionTableId).GetAnimationLength(MotionCommand.Reading);
                 var actionChain = new ActionChain();
-                actionChain.AddAction(player, ActionType.TreasureMap_ReadingAnimation, () => player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance, MotionCommand.Reading)));
+                actionChain.AddAction(player, ActionType.TreasureMap_ReadingAnimation, () =>
+                {
+                    player.IsBusy = true;
+                    player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance, MotionCommand.Reading));
+                });
                 actionChain.AddDelaySeconds(animTime + 1);
                 actionChain.AddAction(player, ActionType.TreasureMap_ShowLocation, () =>
                 {
@@ -271,6 +341,7 @@ namespace ACE.Server.WorldObjects
                     player.Session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.System));
 
                     player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance));
+                    player.IsBusy = false;
                 });
                 actionChain.EnqueueChain();
             }
@@ -283,7 +354,11 @@ namespace ACE.Server.WorldObjects
                     //Console.WriteLine("[DEBUG] DamageMod is null or distance > 2, triggering scan horizon animation...");
                     var animTime = DatManager.PortalDat.ReadFromDat<MotionTable>(player.MotionTableId).GetAnimationLength(MotionCommand.ScanHorizon);
                     var actionChain = new ActionChain();
-                    actionChain.AddAction(player, ActionType.TreasureMap_ScanHorizon, () => player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance, MotionCommand.ScanHorizon)));
+                    actionChain.AddAction(player, ActionType.TreasureMap_ScanHorizon, () =>
+                    {
+                        player.IsBusy = true;
+                        player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance, MotionCommand.ScanHorizon));
+                    });
                     actionChain.AddDelaySeconds(animTime);
                     actionChain.AddAction(player, ActionType.TreasureMap_ShowDirection, () =>
                     {
@@ -302,6 +377,8 @@ namespace ACE.Server.WorldObjects
                         }
                         else
                             DamageMod = null;
+
+                        player.IsBusy = false;
                     });
                     actionChain.EnqueueChain();
                 }
@@ -329,7 +406,11 @@ namespace ACE.Server.WorldObjects
 
                         var animTime = DatManager.PortalDat.ReadFromDat<MotionTable>(player.MotionTableId).GetAnimationLength(MotionCommand.Pickup);
                         var actionChain = new ActionChain();
-                        actionChain.AddAction(player, ActionType.TreasureMap_Digging, () => player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance, MotionCommand.PointDown)));
+                        actionChain.AddAction(player, ActionType.TreasureMap_Digging, () =>
+                        {
+                            player.IsBusy = true;
+                            player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance, MotionCommand.PointDown));
+                        });
                         actionChain.AddDelaySeconds(animTime);
                         actionChain.AddAction(player, ActionType.TreasureMap_Digging, () =>
                         {
@@ -342,6 +423,8 @@ namespace ACE.Server.WorldObjects
                                 if (!creature.IsDead && !creature.IsAwake)
                                     player.AlertMonster(creature);
                             }
+
+                            player.IsBusy = false;
                         });
                         actionChain.EnqueueChain();
                     }
@@ -349,15 +432,31 @@ namespace ACE.Server.WorldObjects
                     {
                         //Console.WriteLine("[DEBUG] Damage counter has reached 7, creating treasure chest...");
 
+                        // Check daily limit before completing the treasure map
+                        if (!CheckDailyLimit(player))
+                        {
+                            player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                                "You have reached your daily treasure map limit. The map remains in your inventory.",
+                                ChatMessageType.System));
+                            return;
+                        }
+
                         var animTime = DatManager.PortalDat.ReadFromDat<MotionTable>(player.MotionTableId).GetAnimationLength(MotionCommand.Pickup);
                         var actionChain = new ActionChain();
-                        actionChain.AddAction(player, ActionType.TreasureMap_FoundTreasure, () => player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance, MotionCommand.Pickup)));
+                        actionChain.AddAction(player, ActionType.TreasureMap_FoundTreasure, () =>
+                        {
+                            player.IsBusy = true;
+                            player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance, MotionCommand.Pickup));
+                        });
                         actionChain.AddDelaySeconds(animTime);
                         actionChain.AddAction(player, ActionType.TreasureMap_FoundTreasure, () =>
                         {
                             player.EnqueueBroadcast(new GameMessageSound(player.Guid, Sound.HitPlate1, 1.0f));
                             player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance));
                             player.EnqueueBroadcast(new GameMessageSystemChat("You found the buried treasure!", ChatMessageType.System));
+
+                            // Increment daily counter (player successfully completed a treasure map)
+                            IncrementDailyCounter(player);
 
                             // After the message is shown, give loot to the player
                             GiveLootToPlayer(player);  // Call to give loot directly to the player's inventory
@@ -371,6 +470,8 @@ namespace ACE.Server.WorldObjects
                             {
                                // Console.WriteLine("[DEBUG] Treasure map successfully removed from player's inventory.");
                             }
+
+                            player.IsBusy = false;
                         });
                         actionChain.EnqueueChain();
                     }

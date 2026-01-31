@@ -89,5 +89,7 @@ namespace ACE.Entity.Enum.Properties
         LuminanceTransferredToday = 9050,  // Amount of luminance transferred today
         LuminanceReceivedToday = 9051,     // Amount of luminance received today
         LastLuminanceResetTime = 9052,     // Unix timestamp of last daily reset (midnight EST)
+        // CONQUEST: Treasure Map Daily Limit (2 maps per 24 hours)
+        LastTreasureMapResetTime = 9053,   // Unix timestamp of last 24-hour reset
     }
 }

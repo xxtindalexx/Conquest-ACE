@@ -291,6 +291,9 @@ namespace ACE.Server.Entity
 
             target.TargetType = source.ItemType;
 
+            // CONQUEST: Store the original weapon's WCID for morph gem compatibility
+            target.SetProperty(PropertyInt.AppearanceWeenieClassId, (int)source.WeenieClassId);
+
             target.HookType = source.HookType;
             target.HookPlacement = source.HookPlacement;
 
@@ -597,8 +600,9 @@ namespace ACE.Server.Entity
             UpdateWeaponProps(player, source, target);
 
             // CONQUEST: Track the appearance WCID for morph gem compatibility
-            player.UpdateProperty(target, PropertyInt.AppearanceWeenieClassId, (int)source.WeenieClassId);
-
+            // The intermediate gem (source) has the original weapon's WCID stored in AppearanceWeenieClassId
+            var originalWeaponWcid = source.GetProperty(PropertyInt.AppearanceWeenieClassId) ?? (int)source.WeenieClassId;
+            player.UpdateProperty(target, PropertyInt.AppearanceWeenieClassId, originalWeaponWcid);
 
             // Send UpdateObject, mostly for the client to register the new name.
             player.Session.Network.EnqueueSend(new GameMessageUpdateObject(target));

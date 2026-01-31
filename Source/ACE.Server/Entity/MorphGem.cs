@@ -335,6 +335,7 @@ namespace ACE.Server.Entity
         /// </summary>
         private static uint? FindNewAppearanceWcid(int currentAppearanceWcid, int newElementWcid, Skill weaponSkill)
         {
+            log.Info($"[MORPHGEM] FindNewAppearanceWcid - CurrentAppearance: {currentAppearanceWcid}, NewElement: {newElementWcid}, Skill: {weaponSkill}");
             // Map skills to their matrices
             var matrices = weaponSkill switch
             {
@@ -348,7 +349,10 @@ namespace ACE.Server.Entity
             };
 
             if (matrices == null)
+            {
+                log.Warn($"[MORPHGEM] No matrix found for skill: {weaponSkill}");
                 return null;
+            }
 
             // Step 1: Find which column (element) the new element WCID is in
             int? targetColumn = null;
@@ -360,6 +364,7 @@ namespace ACE.Server.Entity
                     if (row[colIndex] == newElementWcid)
                     {
                         targetColumn = colIndex;
+                        log.Info($"[MORPHGEM] Found newElementWcid {newElementWcid} at row {rowIndex}, column {colIndex}");
                         break;
                     }
                 }
@@ -369,7 +374,7 @@ namespace ACE.Server.Entity
 
             if (!targetColumn.HasValue)
             {
-                // Couldn't find new element in matrix, return it as fallback
+                log.Warn($"[MORPHGEM] Couldn't find newElementWcid {newElementWcid} in matrix, using fallback");
                 return (uint)newElementWcid;
             }
 
@@ -384,13 +389,16 @@ namespace ACE.Server.Entity
                     // Return the WCID from this row at the target element column
                     if (targetColumn.Value < row.Length)
                     {
-                        return (uint)row[targetColumn.Value];
+                        var resultWcid = (uint)row[targetColumn.Value];
+                        log.Info($"[MORPHGEM] Found currentAppearanceWcid {currentAppearanceWcid} at row {rowIndex}, returning WCID {resultWcid} (row {rowIndex}, column {targetColumn.Value})");
+                        return resultWcid;
                     }
+                    log.Warn($"[MORPHGEM] Column {targetColumn.Value} out of bounds for row {rowIndex} (length {row.Length})");
                     break;
                 }
             }
 
-            // If appearance not found in matrix, return the new element WCID as fallback
+            log.Warn($"[MORPHGEM] Appearance WCID {currentAppearanceWcid} not found in matrix, using fallback {newElementWcid}");
             return (uint)newElementWcid;
         }
 
