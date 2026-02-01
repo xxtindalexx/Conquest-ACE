@@ -89,10 +89,11 @@ namespace ACE.Server.WorldObjects.Managers
             }
 
             // Calculate cumulative cost for the specified number of augmentations
-            // CONQUEST: Simplified linear cost scaling: baseCost * (1 + currentCount * 0.01) per augmentation
+            // CONQUEST: Linear cost scaling using weenie-configured percent: baseCost * (1 + currentCount * percent) per augmentation
+            var percentMultiplier = (emote.Percent ?? 1.0) / 100.0; // Convert from percentage to decimal (e.g., 0.3625% -> 0.003625)
             for (int i = 0; i < augCount; i++)
             {
-                var costMultiplier = 1.0 + ((currentAugCount + i) * 0.01);
+                var costMultiplier = 1.0 + ((currentAugCount + i) * percentMultiplier);
                 totalCost += baseCost * costMultiplier;
             }
 

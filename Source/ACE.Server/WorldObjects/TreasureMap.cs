@@ -101,6 +101,10 @@ namespace ACE.Server.WorldObjects
             wo.EWCoordinates = randomLongitude;
             wo.NSCoordinates = randomLatitude;
 
+            // Store the creature type for quest stamp on pickup
+            if (creature.CreatureType.HasValue)
+                wo.SetProperty(PropertyInt.CreatureType, (int)creature.CreatureType.Value);
+
             return wo;
         }
 

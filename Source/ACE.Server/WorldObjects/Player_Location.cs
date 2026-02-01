@@ -655,7 +655,9 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void Teleport(Position _newPosition, bool fromPortal = false)
         {
+            log.Info($"[TELEPORT VARIANT DEBUG] {Name} - Received _newPosition variation: {_newPosition?.Variation?.ToString() ?? "null"}");
             var newPosition = new Position(_newPosition);
+            log.Info($"[TELEPORT VARIANT DEBUG] {Name} - After creating newPosition, variation: {newPosition.Variation?.ToString() ?? "null"}");
             //newPosition.PositionZ += 0.005f;
             newPosition.PositionZ += 0.005f * (ObjScale ?? 1.0f);
 
@@ -715,6 +717,7 @@ namespace ACE.Server.WorldObjects
                 LifestoneProtectionDispel();
 
             HandlePreTeleportVisibility(newPosition);
+            log.Info($"[TELEPORT VARIANT DEBUG] {Name} - Before UpdatePlayerPosition, newPosition variation: {newPosition.Variation?.ToString() ?? "null"}");
 
             UpdatePlayerPosition(new Position(newPosition), true);
         }

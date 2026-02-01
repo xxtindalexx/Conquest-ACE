@@ -91,5 +91,6 @@ namespace ACE.Entity.Enum.Properties
         LastLuminanceResetTime = 9052,     // Unix timestamp of last daily reset (midnight EST)
         // CONQUEST: Treasure Map Daily Limit (2 maps per 24 hours)
         LastTreasureMapResetTime = 9053,   // Unix timestamp of last 24-hour reset
+        LastTreasureMapLootResetTime = 9054, // Unix timestamp of last 24-hour reset (for looting)
     }
 }

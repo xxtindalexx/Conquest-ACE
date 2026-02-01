@@ -1,12 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading;
-
 using ACE.Database;
 using ACE.DatLoader;
 using ACE.DatLoader.FileTypes;
+using ACE.Common;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -18,6 +13,11 @@ using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading;
 
 namespace ACE.Server.WorldObjects
 {
@@ -108,6 +108,20 @@ namespace ACE.Server.WorldObjects
 
             if (item.WeenieType == WeenieType.Coin || item.WeenieType == WeenieType.Container)
                 UpdateCoinValue();
+
+            // Award quest stamp when picking up a treasure map based on creature type
+            if (item is TreasureMap treasureMap)
+            {
+                var creatureType = treasureMap.GetProperty(PropertyInt.CreatureType);
+                if (creatureType != null)
+                {
+                    // Get the creature type name (e.g., "Banderling", "Mosswart", etc.)
+                    var creatureTypeName = ((ACE.Entity.Enum.CreatureType)creatureType.Value).ToString();
+                    var questStamp = $"{creatureTypeName}TreasureMapFound";
+
+                    QuestManager.Stamp(questStamp);
+                }
+            }
 
             item.SaveBiotaToDatabase();
 
@@ -1360,6 +1374,55 @@ namespace ACE.Server.WorldObjects
             var prevContainer = item.Container;
 
             OnPutItemInContainer(item.Guid.Full, container.Guid.Full, placement);
+
+            // Only check when looting from external sources (corpses/world), not when moving within own inventory
+            if (itemRootOwner != this && containerRootOwner == this && item is TreasureMap treasureMap)
+            {
+                // Check daily loot limit (2 maps per 24 hours)
+                var currentTime = (long)Time.GetUnixTime();
+                var lastLootResetTime = GetProperty(PropertyInt64.LastTreasureMapLootResetTime) ?? 0;
+                var mapsLootedToday = GetProperty(PropertyInt.TreasureMapsLootedToday) ?? 0;
+
+                // Check if 24 hours have passed since last reset
+                var timeSinceLootReset = currentTime - lastLootResetTime;
+                if (timeSinceLootReset >= 86400) // 86400 seconds = 24 hours
+                {
+                    // Reset counter
+                    SetProperty(PropertyInt.TreasureMapsLootedToday, 0);
+                    SetProperty(PropertyInt64.LastTreasureMapLootResetTime, currentTime);
+                    mapsLootedToday = 0;
+                }
+
+                // Check if player has reached daily loot limit
+                if (mapsLootedToday >= 2)
+                {
+                    var timeRemaining = 86400 - timeSinceLootReset;
+                    var hours = (int)(timeRemaining / 3600);
+                    var minutes = (int)((timeRemaining % 3600) / 60);
+                    var seconds = (int)(timeRemaining % 60);
+                    Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"You have already looted 2 treasure maps today. You can loot another in {hours}h {minutes}m {seconds}s.",
+                        ChatMessageType.System));
+
+                    // Return false to prevent looting
+                    Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
+                    return false;
+                }
+
+                // Increment loot counter
+                SetProperty(PropertyInt.TreasureMapsLootedToday, mapsLootedToday + 1);
+
+                // Award quest stamp based on creature type
+                var creatureType = treasureMap.GetProperty(PropertyInt.CreatureType);
+                if (creatureType != null)
+                {
+                    // Get the creature type name (e.g., "Banderling", "Mosswart", etc.)
+                    var creatureTypeName = ((ACE.Entity.Enum.CreatureType)creatureType.Value).ToString();
+                    var questStamp = $"{creatureTypeName}TreasureMapFound";
+
+                    QuestManager.Stamp(questStamp);
+                }
+            }
 
             if (item.CurrentLandblock != null) // Movement is an item pickup off the landblock
             {
@@ -3091,13 +3154,16 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            // Check IP quest restrictions when picking up stackable items from world/containers
-            //Console.WriteLine($"[IPQuest][StackMerge] Merge attempt: source={sourceStack.Name}, sourceRootOwner={sourceStackRootOwner?.Name ?? "null"}, targetRootOwner={targetStackRootOwner?.Name ?? "null"}, this={this.Name}");
-            //Console.WriteLine($"[IPQuest][StackMerge] Condition check: (sourceStackRootOwner != this) = {sourceStackRootOwner != this}, (targetStackRootOwner == this) = {targetStackRootOwner == this}");
+            // Check quest and IP quest restrictions when picking up stackable items from world/containers
+            var questSolveOnMerge = false;
 
             if (sourceStackRootOwner != this && targetStackRootOwner == this)
             {
-                //Console.WriteLine($"[IPQuest][StackMerge] Condition passed, calling HandleIPQuestItem...");
+                if (!VerifyQuest(sourceStack, sourceStackRootOwner, out questSolveOnMerge, out _))
+                {
+                    Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, mergeFromGuid));
+                    return;
+                }
                 if (!HandleIPQuestItem(sourceStack, sourceStackRootOwner, targetStackRootOwner, mergeFromGuid))
                 {
                     //Console.WriteLine($"[IPQuest][StackMerge] HandleIPQuestItem returned false, blocking stack merge");
@@ -3212,6 +3278,10 @@ namespace ACE.Server.WorldObjects
                                 EnqueueBroadcast(new GameMessageSound(Guid, Sound.DropItem));
                             else if (targetStackRootOwner == this)
                                 EnqueueBroadcast(new GameMessageSound(Guid, Sound.PickUpItem));
+
+
+                            if (questSolveOnMerge)
+                                sourceStack.EmoteManager.OnQuest(this);
                         }
                         EnqueuePickupDone(pickupMotion);
                     });

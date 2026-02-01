@@ -571,17 +571,15 @@ namespace ACE.Server.Entity
 
             //Console.WriteLine($"AttackHeight: {AttackHeight}, Quadrant: {quadrant & FrontBack}{quadrant & LeftRight}, AttackPart: {bodyPart}");
 
-            defender.Biota.PropertiesBodyPart.TryGetValue(bodyPart, out var value);
-            PropertiesBodyPart = new KeyValuePair<CombatBodyPart, PropertiesBodyPart>(bodyPart, value);
+            if (!defender.Biota.PropertiesBodyPart.TryGetValue(bodyPart, out var value))
 
-            // select random body part @ current attack height
-            /*BiotaPropertiesBodyPart = BodyParts.GetBodyPart(defender, attackHeight);
-
-            if (BiotaPropertiesBodyPart == null)
             {
+                log.DebugFormat("DamageEvent.GetBodyPart({0} ({1}) ) - couldn't find body part {2} in biota for wcid {3}", defender?.Name, defender?.Guid, bodyPart, defender.WeenieClassId);
                 Evaded = true;
                 return;
-            }*/
+            }
+
+            PropertiesBodyPart = new KeyValuePair<CombatBodyPart, PropertiesBodyPart>(bodyPart, value);
 
             CreaturePart = new Creature_BodyPart(defender, PropertiesBodyPart);
         }

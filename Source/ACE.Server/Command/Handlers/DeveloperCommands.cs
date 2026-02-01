@@ -1,15 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Numerics;
-
-using log4net;
-
 using ACE.Common;
 using ACE.Common.Extensions;
 using ACE.Database;
+using ACE.Database.Models.Auth;
 using ACE.Database.Models.Shard;
 using ACE.Database.Models.World;
 using ACE.DatLoader;
@@ -31,8 +23,13 @@ using ACE.Server.Physics.Extensions;
 using ACE.Server.Physics.Managers;
 using ACE.Server.WorldObjects;
 using ACE.Server.WorldObjects.Entity;
-
-
+using log4net;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Numerics;
+using System.Threading.Tasks;
 using Position = ACE.Entity.Position;
 using Spell = ACE.Server.Entity.Spell;
 
@@ -1061,7 +1058,22 @@ namespace ACE.Server.Command.Handlers
         {
             HashSet<uint> weenieIds = new HashSet<uint> { 273, 20630 };
 
+            // Build log info before creating
+            var logParts = new List<string>();
+            foreach (uint weenieId in weenieIds)
+            {
+                var tempObj = WorldObjectFactory.CreateNewWorldObject(weenieId);
+                if (tempObj != null)
+                {
+                    logParts.Add($"{tempObj.MaxStackSize:N0} {tempObj.Name}");
+                    tempObj.Destroy(); // clean up temp object
+                }
+            }
+
             AddWeeniesToInventory(session, weenieIds);
+
+            PlayerManager.BroadcastToAuditChannel(session.Player,
+                $"{session.Player.Name} created {string.Join(", ", logParts)} in their inventory.");
         }
 
         [CommandHandler("cirand", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1, "Creates random objects in your inventory.", "type (string or number) <num to create> defaults to 10 if omitted, max 50")]

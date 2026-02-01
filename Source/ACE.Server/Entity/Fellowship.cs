@@ -604,15 +604,15 @@ namespace ACE.Server.Entity
                 case 9:
                     return .32;
                 case 10:
-                    return .29;
+                    return .3;
                 case 11:
-                    return .268;
+                    return .3;
                 case 12:
-                    return .248;
+                    return .3;
                 case 13:
-                    return .232;
+                    return .3;
                 case 14:
-                    return .218;
+                    return .3;
                     // TODO: handle fellowship mods with > 9 players?
             }
             return 1.0;

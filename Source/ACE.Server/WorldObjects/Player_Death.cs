@@ -259,9 +259,14 @@ namespace ACE.Server.WorldObjects
         public void ThreadSafeTeleportOnDeath()
         {
             // teleport to sanctuary or best location
-            var newPosition = new Position(Sanctuary ?? Instantiation ?? Location);
-            // CONQUEST: Reset to base variant (null) when respawning
-            newPosition.Variation = null;
+            var sanctuaryPosition = Sanctuary ?? Instantiation ?? Location;
+            log.Info($"[DEATH VARIANT DEBUG] {Name} - Sanctuary variation: {sanctuaryPosition?.Variation?.ToString() ?? "null"}");
+
+            var newPosition = new Position(sanctuaryPosition);
+            log.Info($"[DEATH VARIANT DEBUG] {Name} - newPosition variation after copy: {newPosition.Variation?.ToString() ?? "null"}");
+
+            // CONQUEST: Preserve variant from lifestone - if lifestone is on variant, respawn on that variant
+            // If lifestone has no variant, Variation will be null by default
 
             WorldManager.ThreadSafeTeleport(this, newPosition, new ActionEventDelegate(ActionType.PlayerDeath_EnqueueTeleport, () =>
             {
