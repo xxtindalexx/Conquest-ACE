@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Server.Network.GameMessages.Messages;
 
 namespace ACE.Server.WorldObjects
@@ -57,6 +58,15 @@ namespace ACE.Server.WorldObjects
             // delete items when RemainingLifespan <= 0
             foreach (var expireItem in expireItems)
             {
+                // CONQUEST: Auto-hatch mystery eggs instead of deleting them
+                // Check for EggRarity property since MysteryEgg class may not be used
+                var eggRarity = expireItem.GetProperty(PropertyInt.EggRarity);
+                if (eggRarity != null && rootOwner is Player eggOwner)
+                {
+                    MysteryEgg.TryAutoHatch(expireItem, eggOwner);
+                    continue;
+                }
+
                 expireItem.DeleteObject(rootOwner);
 
                 if (rootOwner is Player player)

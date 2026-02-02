@@ -687,6 +687,13 @@ namespace ACE.Entity.Enum.Properties
         // CONQUEST: Treasure Map Daily Limit (2 maps per 24 hours)
         TreasureMapsUsedToday = 9324,  // Number of treasure maps used today (max 2)
         TreasureMapsLootedToday = 9325, // Number of treasure maps looted today (max 2)
+        // CONQUEST: Mystery Egg Weekly Limit (2 eggs per week)
+        MysteryEggsObtainedThisWeek = 9326,  // Number of mystery eggs obtained this week (max 2)
+        // CONQUEST: Enlightenment Milestone Bonuses
+        EnlightenmentCleaveBonus = 9327,        // +1 cleave targets at ENL 10
+        EnlightenmentSplitArrowBonus = 9328,    // +1 split arrows at ENL 25
+        EnlightenmentAetheriaSurgeBonus = 9329, // +1 aetheria level at ENL 50
+        EnlightenmentSpellChainBonus = 9330,    // +1 spell chain at ENL 75 (war magic chains to nearby target)
         // CONQUEST: Morph gem weapon element randomization
         WeenieSwapClassId = 19001, // Tracks the weenie class ID when weapon element has been swapped
         AppearanceWeenieClassId = 19002, // Tracks the visual appearance WCID for tailored/morphed weapons

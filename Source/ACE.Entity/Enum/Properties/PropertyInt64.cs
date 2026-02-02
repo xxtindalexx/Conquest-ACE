@@ -92,5 +92,7 @@ namespace ACE.Entity.Enum.Properties
         // CONQUEST: Treasure Map Daily Limit (2 maps per 24 hours)
         LastTreasureMapResetTime = 9053,   // Unix timestamp of last 24-hour reset
         LastTreasureMapLootResetTime = 9054, // Unix timestamp of last 24-hour reset (for looting)
+        // CONQUEST: Mystery Egg Weekly Limit (2 eggs per week)
+        LastMysteryEggWeeklyResetTime = 9055,  // Unix timestamp of last weekly reset
     }
 }

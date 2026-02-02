@@ -42,12 +42,25 @@ namespace ACE.Server.Managers
                 rarity = "direct";
 
             // Get all fellowship members within range who contributed damage
-            var eligibleMembers = GetEligibleMembers(creature, killer, fellowship);
+            // Pass rarity to filter out players at mystery egg weekly limit
+            var eligibleMembers = GetEligibleMembers(creature, killer, fellowship, rarity);
 
             if (eligibleMembers.Count == 0)
             {
                 // No eligible members, give to killer
                 AwardItemToPlayer(killer, itemWcid, rarity);
+                return null;
+            }
+
+            // CONQUEST: If only 1 eligible player, skip the roll popup and award directly
+            if (eligibleMembers.Count == 1)
+            {
+                var soloWinner = eligibleMembers.First();
+                if (AwardItemToPlayer(soloWinner, itemWcid, rarity))
+                {
+                    var itemName = GetItemName(itemWcid);
+                    PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{soloWinner.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
+                }
                 return null;
             }
 
@@ -73,7 +86,7 @@ namespace ACE.Server.Managers
             return rollId;
         }
 
-        private static List<Player> GetEligibleMembers(Creature creature, Player killer, Fellowship fellowship)
+        private static List<Player> GetEligibleMembers(Creature creature, Player killer, Fellowship fellowship, string rarity = "direct")
         {
             var eligiblePlayers = new List<Player>();
 
@@ -87,6 +100,16 @@ namespace ACE.Server.Managers
                 {
                     if (damageInfo.TotalDamage > 0)
                     {
+                        // CONQUEST: For mystery eggs (non-direct), check weekly limit BEFORE allowing roll
+                        if (rarity != "direct")
+                        {
+                            if (!CheckWeeklyMysteryEggLimit(fellow, out var limitMessage))
+                            {
+                                fellow.SendMessage(limitMessage);
+                                continue; // Skip this player - they're at their weekly limit
+                            }
+                        }
+
                         eligiblePlayers.Add(fellow);
                     }
                 }
@@ -307,8 +330,82 @@ namespace ACE.Server.Managers
             }
         }
 
+        /// <summary>
+        /// Checks if player can obtain another mystery egg (2 per week limit)
+        /// Resets counter if 7 days have passed
+        /// </summary>
+        private static bool CheckWeeklyMysteryEggLimit(Player player, out string message)
+        {
+            message = null;
+            var currentTime = (long)Time.GetUnixTime();
+            var lastResetTime = player.GetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime) ?? 0;
+            var eggsObtainedThisWeek = player.GetProperty(PropertyInt.MysteryEggsObtainedThisWeek) ?? 0;
+
+            // Check if 7 days have passed since last reset
+            var timeSinceReset = currentTime - lastResetTime;
+            if (timeSinceReset >= 604800) // 604800 seconds = 7 days
+            {
+                // Reset counter
+                player.SetProperty(PropertyInt.MysteryEggsObtainedThisWeek, 0);
+                player.SetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime, currentTime);
+                player.SaveBiotaToDatabase();
+                player.SendMessage("Your weekly Mystery Egg limit has been reset!");
+                eggsObtainedThisWeek = 0;
+            }
+
+            // Check if player has reached weekly limit
+            if (eggsObtainedThisWeek >= 2)
+            {
+                var secondsRemaining = 604800 - timeSinceReset;
+                var days = secondsRemaining / 86400;
+                var hours = (secondsRemaining % 86400) / 3600;
+                var minutes = (secondsRemaining % 3600) / 60;
+                var seconds = secondsRemaining % 60;
+
+                message = $"You have already obtained 2 Mystery Eggs this week. You can obtain another in {days}d {hours}h {minutes}m {seconds}s.";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Increments the weekly mystery egg counter
+        /// </summary>
+        private static void IncrementMysteryEggCounter(Player player)
+        {
+            var eggsObtained = player.GetProperty(PropertyInt.MysteryEggsObtainedThisWeek) ?? 0;
+            var newCount = eggsObtained + 1;
+            player.SetProperty(PropertyInt.MysteryEggsObtainedThisWeek, newCount);
+
+            // Initialize reset time if not set
+            var lastReset = player.GetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime) ?? 0;
+            if (lastReset == 0)
+                player.SetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime, (long)Time.GetUnixTime());
+
+            // Save to database to persist the counter
+            player.SaveBiotaToDatabase();
+
+            // Inform player of their weekly progress
+            var remaining = 2 - newCount;
+            if (remaining > 0)
+                player.SendMessage($"Mystery Eggs obtained this week: {newCount}/2 ({remaining} remaining)");
+            else
+                player.SendMessage($"Mystery Eggs obtained this week: {newCount}/2 (weekly limit reached)");
+        }
+
         private static bool AwardItemToPlayer(Player player, uint itemWcid, string rarity)
         {
+            // Check weekly mystery egg limit (only for eggs, not direct pet drops)
+            if (rarity != "direct")
+            {
+                if (!CheckWeeklyMysteryEggLimit(player, out var limitMessage))
+                {
+                    player.SendMessage(limitMessage);
+                    return false; // Skip this player, pass to next roller
+                }
+            }
+
             var wo = WorldObjectFactory.CreateNewWorldObject(itemWcid);
             if (wo == null)
             {
@@ -336,17 +433,45 @@ namespace ACE.Server.Managers
             {
                 var itemType = (rarity == "direct") ? "pet" : "mystery egg";
                 player.SendMessage($"You received {wo.Name} ({itemType})!");
+
+                // Increment weekly counter for mystery eggs
+                if (rarity != "direct")
+                {
+                    IncrementMysteryEggCounter(player);
+                }
+
                 return true;
             }
             else
             {
-                // Inventory full - item will pass to next highest roller
-                player.SendMessage($"You won {wo.Name} but your inventory was full. Item passed to next highest roller.");
+                // Inventory full
+                player.SendMessage($"You won {wo.Name} but your inventory was full. Item was not awarded.");
 
                 // Destroy the created object since we couldn't give it to the player
                 wo.Destroy();
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Public method for awarding items directly (when not in fellowship)
+        /// Still applies weekly mystery egg limits
+        /// </summary>
+        public static bool AwardItemToPlayerDirect(Player player, uint itemWcid, string rarity)
+        {
+            // Default to "direct" if rarity is null or empty
+            if (string.IsNullOrEmpty(rarity))
+                rarity = "direct";
+
+            if (AwardItemToPlayer(player, itemWcid, rarity))
+            {
+                // Successfully awarded - broadcast globally
+                var itemName = GetItemName(itemWcid);
+                PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{player.Name} has obtained {itemName}!", ChatMessageType.Broadcast));
+                return true;
+            }
+
+            return false;
         }
 
         private static string GetItemName(uint wcid)

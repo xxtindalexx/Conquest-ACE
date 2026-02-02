@@ -19,13 +19,13 @@ namespace ACE.Server.Command.Handlers
             "/fellowshiprollmob remove <mobWcid> <itemWcid>\n" +
             "/fellowshiprollmob list\n" +
             "/fellowshiprollmob clear <mobWcid>\n\n" +
-            "Rarity: common, rare, legendary, mythic, or direct\n" +
-            "For direct: itemWcid = pet weenie. For egg rarities: itemWcid = egg weenie.\n\n" +
+            "Rarity: 1=Common, 2=Rare, 3=Legendary, 4=Mythic, 0=Direct\n" +
+            "For direct (0): itemWcid = pet weenie. For egg rarities (1-4): itemWcid = egg weenie.\n\n" +
             "Examples:\n" +
-            "/fellowshiprollmob add 12345 2123456 common 0.15  (15% common egg WCID 2123456)\n" +
-            "/fellowshiprollmob add 12345 2123458 legendary 0.01  (1% legendary egg WCID 2123458)\n" +
-            "/fellowshiprollmob add 12345 2123459 mythic 0.001  (0.1% mythic egg WCID 2123459)\n" +
-            "/fellowshiprollmob add 12345 5099 direct 0.05  (5% direct drop of pet 5099, no egg)\n" +
+            "/fellowshiprollmob add 12345 2123456 1 0.15  (15% common egg WCID 2123456)\n" +
+            "/fellowshiprollmob add 12345 2123458 3 0.01  (1% legendary egg WCID 2123458)\n" +
+            "/fellowshiprollmob add 12345 2123459 4 0.001  (0.1% mythic egg WCID 2123459)\n" +
+            "/fellowshiprollmob add 12345 5099 0 0.05  (5% direct drop of pet 5099, no egg)\n" +
             "/fellowshiprollmob list  (shows all fellowship roll drops)")]
         public static void HandleFellowshipRollMob(Session session, params string[] parameters)
         {
@@ -43,8 +43,8 @@ namespace ACE.Server.Command.Handlers
                     if (parameters.Length < 5)
                     {
                         session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm add <mobWcid> <itemWcid> <rarity> <probability>", ChatMessageType.Broadcast));
-                        session.Network.EnqueueSend(new GameMessageSystemChat("Rarity: common, rare, legendary, mythic, or direct", ChatMessageType.Broadcast));
-                        session.Network.EnqueueSend(new GameMessageSystemChat("For direct: itemWcid = pet. For egg rarities: itemWcid = egg.", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Rarity: 0=Direct, 1=Common, 2=Rare, 3=Legendary, 4=Mythic", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat("For direct (0): itemWcid = pet. For egg rarities (1-4): itemWcid = egg.", ChatMessageType.Broadcast));
                         return;
                     }
                     if (!uint.TryParse(parameters[1], out var addMobWcid))
@@ -97,13 +97,26 @@ namespace ACE.Server.Command.Handlers
             HandleFellowshipRollMob(session, parameters);
         }
 
+        private static string RarityNumberToString(int rarity)
+        {
+            return rarity switch
+            {
+                0 => "direct",
+                1 => "common",
+                2 => "rare",
+                3 => "legendary",
+                4 => "mythic",
+                _ => null
+            };
+        }
+
         private static void HandleAdd(Session session, uint mobWcid, string[] parameters)
         {
             if (parameters.Length < 5)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /frm add <mobWcid> <itemWcid> <rarity> <probability>", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat("Rarity: common, rare, legendary, mythic, or direct", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat("For direct: itemWcid = pet. For egg rarities: itemWcid = egg.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Rarity: 0=Direct, 1=Common, 2=Rare, 3=Legendary, 4=Mythic", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("For direct (0): itemWcid = pet. For egg rarities (1-4): itemWcid = egg.", ChatMessageType.Broadcast));
                 return;
             }
 
@@ -113,12 +126,13 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            var rarity = parameters[3].ToLower();
-            if (rarity != "common" && rarity != "rare" && rarity != "legendary" && rarity != "mythic" && rarity != "direct")
+            if (!int.TryParse(parameters[3], out var rarityNum) || rarityNum < 0 || rarityNum > 4)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Invalid rarity. Must be: common, rare, legendary, mythic, or direct", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Invalid rarity. Must be: 0=Direct, 1=Common, 2=Rare, 3=Legendary, 4=Mythic", ChatMessageType.Broadcast));
                 return;
             }
+
+            var rarity = RarityNumberToString(rarityNum);
 
             if (!float.TryParse(parameters[4], out var probability) || probability < 0 || probability > 1)
             {

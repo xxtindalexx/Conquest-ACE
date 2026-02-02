@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 using ACE.Common;
@@ -8,6 +10,7 @@ using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Factories;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
@@ -36,6 +39,17 @@ namespace ACE.Server.WorldObjects
         /// make sure there is no attempt to re-proc again when the spell projectile hits
         /// </summary>
         public bool FromProc { get; set; }
+
+        /// <summary>
+        /// CONQUEST: If true, this is a chain spell from enlightenment bonus
+        /// Chain spells should not chain again
+        /// </summary>
+        public bool IsChainSpell { get; set; }
+
+        /// <summary>
+        /// CONQUEST: Damage multiplier for chain spells (e.g., 0.3 for 30% damage)
+        /// </summary>
+        public float ChainDamageMultiplier { get; set; } = 1.0f;
 
         public int DebugVelocity;
 
@@ -357,6 +371,26 @@ namespace ACE.Server.WorldObjects
                         // But, to keep it simple, we will just ignore it and not bother with TryProcEquippedItems for this particular impact.
                     }
                 }
+
+                // CONQUEST: Enlightenment Spell Chain - war magic chains to nearby target for 30% damage
+                // Only for war magic, only for players, not for chain spells (prevent infinite chains), not for PvP
+                // Only single-target spells (Bolt, Streak, Arc) - exclude AoE spells (Ring, Blast, Volley, Wall, Strike)
+                if (player != null && !IsChainSpell && targetPlayer == null && Spell.School == MagicSchool.WarMagic)
+                {
+                    // Only chain single-target projectile types
+                    var canChain = SpellType == ProjectileSpellType.Bolt ||
+                                   SpellType == ProjectileSpellType.Streak ||
+                                   SpellType == ProjectileSpellType.Arc;
+
+                    if (canChain)
+                    {
+                        var spellChainBonus = player.GetProperty(PropertyInt.EnlightenmentSpellChainBonus) ?? 0;
+                        if (spellChainBonus > 0)
+                        {
+                            TryCreateSpellChain(player, creatureTarget, damage.Value);
+                        }
+                    }
+                }
             }
 
             // also called on resist
@@ -490,83 +524,99 @@ namespace ACE.Server.WorldObjects
             // war/void magic projectiles
             else
             {
-                if (criticalHit)
+                // CONQUEST: Chain spells use pre-calculated damage (30% of original)
+                // Skip normal damage calculation for chain spells
+                if (IsChainSpell)
                 {
-                    // Original:
-                    // http://acpedia.org/wiki/Announcements_-_2002/08_-_Atonement#Letter_to_the_Players
+                    // LifeProjectileDamage contains the pre-calculated chain damage
+                    finalDamage = LifeProjectileDamage;
 
-                    // Critical Strikes: In addition to the skill-based damage bonus, each projectile spell has a 2% chance of causing a critical hit on the target and doing increased damage.
-                    // A magical critical hit is similar in some respects to melee critical hits (although the damage calculation is handled differently).
-                    // While a melee critical hit automatically does twice the maximum damage of the weapon, a magical critical hit will do an additional half the minimum damage of the spell.
-                    // For instance, a magical critical hit from a level 7 spell, which does 110-180 points of damage, would add an additional 55 points of damage to the spell.
+                    // Still apply resistance and absorb mods
+                    weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType);
+                    resistanceMod = (float)Math.Max(0.0f, target.GetResistanceMod(resistanceType, this, null, weaponResistanceMod));
 
-                    // Later updated for PvE only:
-
-                    // http://acpedia.org/wiki/Announcements_-_2004/07_-_Treaties_in_Stone#Letter_to_the_Players
-
-                    // Currently when a War Magic spell scores a critical hit, it adds a multiple of the base damage of the spell to a normal damage roll.
-                    // Starting in July, War Magic critical hits will instead add a multiple of the maximum damage of the spell.
-                    // No more crits that do less damage than non-crits!
-
-                    if (isPVP) // PvP: 50% of the MIN damage added to normal damage roll
-                        critDamageBonus = Spell.MinDamage * 0.5f;
-                    else   // PvE: 50% of the MAX damage added to normal damage roll
-                        critDamageBonus = Spell.MaxDamage * 0.5f;
-
-                    // verify: CriticalMultiplier only applied to the additional crit damage,
-                    // whereas CD/CDR applied to the total damage (base damage + additional crit damage)
-                    weaponCritDamageMod = GetWeaponCritDamageMod(weapon, sourceCreature, attackSkill, target);
-
-                    critDamageBonus *= weaponCritDamageMod;
+                    finalDamage *= resistanceMod * absorbMod;
                 }
-
-                /* War Magic skill-based damage bonus
-                 * http://acpedia.org/wiki/Announcements_-_2002/08_-_Atonement#Letter_to_the_Players
-                 */
-                if (sourcePlayer != null)
+                else
                 {
-                    var magicSkill = sourcePlayer.GetCreatureSkill(Spell.School).Current;
-
-                    if (magicSkill > Spell.Power)
+                    if (criticalHit)
                     {
-                        var percentageBonus = (magicSkill - Spell.Power) / 1000.0f;
+                        // Original:
+                        // http://acpedia.org/wiki/Announcements_-_2002/08_-_Atonement#Letter_to_the_Players
 
-                        skillBonus = Spell.MinDamage * percentageBonus;
+                        // Critical Strikes: In addition to the skill-based damage bonus, each projectile spell has a 2% chance of causing a critical hit on the target and doing increased damage.
+                        // A magical critical hit is similar in some respects to melee critical hits (although the damage calculation is handled differently).
+                        // While a melee critical hit automatically does twice the maximum damage of the weapon, a magical critical hit will do an additional half the minimum damage of the spell.
+                        // For instance, a magical critical hit from a level 7 spell, which does 110-180 points of damage, would add an additional 55 points of damage to the spell.
+
+                        // Later updated for PvE only:
+
+                        // http://acpedia.org/wiki/Announcements_-_2004/07_-_Treaties_in_Stone#Letter_to_the_Players
+
+                        // Currently when a War Magic spell scores a critical hit, it adds a multiple of the base damage of the spell to a normal damage roll.
+                        // Starting in July, War Magic critical hits will instead add a multiple of the maximum damage of the spell.
+                        // No more crits that do less damage than non-crits!
+
+                        if (isPVP) // PvP: 50% of the MIN damage added to normal damage roll
+                            critDamageBonus = Spell.MinDamage * 0.5f;
+                        else   // PvE: 50% of the MAX damage added to normal damage roll
+                            critDamageBonus = Spell.MaxDamage * 0.5f;
+
+                        // verify: CriticalMultiplier only applied to the additional crit damage,
+                        // whereas CD/CDR applied to the total damage (base damage + additional crit damage)
+                        weaponCritDamageMod = GetWeaponCritDamageMod(weapon, sourceCreature, attackSkill, target);
+
+                        critDamageBonus *= weaponCritDamageMod;
                     }
-                }
-                baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
 
-                weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType);
-
-                // if attacker/weapon has IgnoreMagicResist directly, do not transfer to spell projectile
-                // only pass if SpellProjectile has it directly, such as 2637 - Invoking Aun Tanua
-
-                resistanceMod = (float)Math.Max(0.0f, target.GetResistanceMod(resistanceType, this, null, weaponResistanceMod));
-
-                if (sourcePlayer != null && targetPlayer != null && Spell.DamageType == DamageType.Nether)
-                {
-                    // for direct damage from void spells in pvp,
-                    // apply void_pvp_modifier *on top of* the player's natural resistance to nether
-
-                    // this supposedly brings the direct damage from void spells in pvp closer to retail
-                    resistanceMod *= (float)PropertyManager.GetDouble("void_pvp_modifier");
-                }
-
-                finalDamage = baseDamage + critDamageBonus + skillBonus;
-
-                // CONQUEST: War augmentation damage bonus
-                // Each war aug adds 0.5% damage bonus to war magic spells
-                if (sourcePlayer != null && Spell.School == ACE.Entity.Enum.MagicSchool.WarMagic)
-                {
-                    var warAugCount = sourcePlayer.LuminanceAugmentWarCount ?? 0;
-                    if (warAugCount > 0)
+                    /* War Magic skill-based damage bonus
+                     * http://acpedia.org/wiki/Announcements_-_2002/08_-_Atonement#Letter_to_the_Players
+                     */
+                    if (sourcePlayer != null)
                     {
-                        var warAugMultiplier = 1.0f + (warAugCount * 0.005f);
-                        finalDamage *= warAugMultiplier;
-                    }
-                }
+                        var magicSkill = sourcePlayer.GetCreatureSkill(Spell.School).Current;
 
-                finalDamage *= elementalDamageMod * slayerMod * resistanceMod * absorbMod;
+                        if (magicSkill > Spell.Power)
+                        {
+                            var percentageBonus = (magicSkill - Spell.Power) / 1000.0f;
+
+                            skillBonus = Spell.MinDamage * percentageBonus;
+                        }
+                    }
+                    baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
+
+                    weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType);
+
+                    // if attacker/weapon has IgnoreMagicResist directly, do not transfer to spell projectile
+                    // only pass if SpellProjectile has it directly, such as 2637 - Invoking Aun Tanua
+
+                    resistanceMod = (float)Math.Max(0.0f, target.GetResistanceMod(resistanceType, this, null, weaponResistanceMod));
+
+                    if (sourcePlayer != null && targetPlayer != null && Spell.DamageType == DamageType.Nether)
+                    {
+                        // for direct damage from void spells in pvp,
+                        // apply void_pvp_modifier *on top of* the player's natural resistance to nether
+
+                        // this supposedly brings the direct damage from void spells in pvp closer to retail
+                        resistanceMod *= (float)PropertyManager.GetDouble("void_pvp_modifier");
+                    }
+
+                    finalDamage = baseDamage + critDamageBonus + skillBonus;
+
+                    // CONQUEST: War augmentation damage bonus
+                    // Each war aug adds 0.5% damage bonus to war magic spells
+                    if (sourcePlayer != null && Spell.School == ACE.Entity.Enum.MagicSchool.WarMagic)
+                    {
+                        var warAugCount = sourcePlayer.LuminanceAugmentWarCount ?? 0;
+                        if (warAugCount > 0)
+                        {
+                            var warAugMultiplier = 1.0f + (warAugCount * 0.005f);
+                            finalDamage *= warAugMultiplier;
+                        }
+                    }
+
+                    finalDamage *= elementalDamageMod * slayerMod * resistanceMod * absorbMod;
+                }
             }
 
             // show debug info
@@ -1036,6 +1086,160 @@ namespace ACE.Server.WorldObjects
             observer.Session.Network.EnqueueSend(new GameMessageSystemChat(observer.DebugDamageBuffer + info, ChatMessageType.Broadcast));
 
             observer.DebugDamageBuffer = null;
+        }
+
+        // CONQUEST: Spell Chain constants
+        private const float SpellChainRange = 10.0f;  // Range to find chain targets (meters)
+        private const float SpellChainDamageMultiplier = 0.30f;  // 30% of original damage
+
+        /// <summary>
+        /// CONQUEST: Attempts to create a chain spell that jumps from the primary target to a nearby secondary target
+        /// </summary>
+        private void TryCreateSpellChain(Player caster, Creature primaryTarget, float originalDamage)
+        {
+            // Find a valid chain target
+            var chainTarget = FindSpellChainTarget(caster, primaryTarget);
+            if (chainTarget == null)
+                return;
+
+            // Calculate chain damage (30% of original)
+            var chainDamage = originalDamage * SpellChainDamageMultiplier;
+
+            // Create visual effect - play lightning/energy effect from primary to secondary target
+            // Use the spell's target effect or a generic chain effect
+            primaryTarget.EnqueueBroadcast(new GameMessageScript(primaryTarget.Guid, PlayScript.PortalStorm, 0.5f));
+
+            // Create and launch a new chain projectile from primary target to secondary target
+            CreateChainProjectile(caster, primaryTarget, chainTarget, chainDamage);
+        }
+
+        /// <summary>
+        /// CONQUEST: Finds a valid target for spell chain
+        /// </summary>
+        private Creature FindSpellChainTarget(Player caster, Creature primaryTarget)
+        {
+            if (primaryTarget?.CurrentLandblock == null)
+                return null;
+
+            var primaryPos = primaryTarget.Location.ToGlobal(false);
+            Creature bestTarget = null;
+            float bestDistance = SpellChainRange;
+
+            // Search in the primary target's landblock and adjacent landblocks
+            var allNearbyObjects = primaryTarget.CurrentLandblock.GetWorldObjectsForPhysicsHandling().ToList();
+            foreach (var adjacentLb in primaryTarget.CurrentLandblock.Adjacents)
+            {
+                if (adjacentLb != null)
+                    allNearbyObjects.AddRange(adjacentLb.GetWorldObjectsForPhysicsHandling());
+            }
+
+            foreach (var obj in allNearbyObjects)
+            {
+                // Only target creatures
+                if (!(obj is Creature creature) || !creature.IsAlive)
+                    continue;
+
+                // Skip primary target and caster
+                if (creature == primaryTarget || creature == caster)
+                    continue;
+
+                // CONQUEST: Never chain to players (PvP protection)
+                if (creature is Player)
+                    continue;
+
+                // Check if caster can damage this target
+                if (!caster.CanDamage(creature))
+                    continue;
+
+                // Check PK status
+                if (caster.CheckPKStatusVsTarget(creature, Spell) != null)
+                    continue;
+
+                // Check distance from primary target
+                var objPos = creature.Location.ToGlobal(false);
+                var distance = Vector3.Distance(primaryPos, objPos);
+
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestTarget = creature;
+                }
+            }
+
+            return bestTarget;
+        }
+
+        /// <summary>
+        /// CONQUEST: Creates and launches a chain projectile from primary target to secondary target
+        /// </summary>
+        private void CreateChainProjectile(Player caster, Creature primaryTarget, Creature chainTarget, float chainDamage)
+        {
+            // Create a new spell projectile using the same spell
+            var spellType = GetProjectileSpellType(Spell.Id);
+            var sp = WorldObjectFactory.CreateNewWorldObject(Spell.Wcid) as SpellProjectile;
+
+            if (sp == null)
+                return;
+
+            sp.Setup(Spell, spellType, primaryTarget.Location.Variation);
+
+            // Mark as chain spell to prevent further chaining
+            sp.IsChainSpell = true;
+            sp.ChainDamageMultiplier = SpellChainDamageMultiplier;
+
+            // Store the pre-calculated chain damage
+            sp.LifeProjectileDamage = (uint)chainDamage;
+
+            // Set projectile source and target
+            sp.ProjectileSource = caster;
+            sp.ProjectileTarget = chainTarget;
+            sp.ProjectileLauncher = ProjectileLauncher;
+            sp.ProjectileAmmo = ProjectileAmmo;
+            sp.FromProc = true;  // Prevent proc chains
+
+            // Calculate spawn position at primary target
+            var originPos = new Position(primaryTarget.Location);
+            var originVec = originPos.Pos;
+            originVec.Z += primaryTarget.Height * 0.75f;  // Start at upper body
+            originPos.Pos = originVec;
+
+            // Get direction vector from primary to chain target
+            var offset = primaryTarget.PhysicsObj.Position.GetOffset(chainTarget.PhysicsObj.Position);
+            offset.Z = (chainTarget.Height / 2.0f) - (primaryTarget.Height * 0.75f);  // Adjust for height difference
+
+            var dir = Vector3.Normalize(offset);
+            var speed = 15.0f;  // Fixed speed for chain projectile
+            var velocity = dir * speed;
+
+            // Set position - use the rotation toward the target
+            sp.Location = new Position(originPos);
+
+            // Set velocity first
+            sp.PhysicsObj.Velocity = velocity;
+
+            // Set orientation based on velocity direction
+            sp.PhysicsObj.Position.Frame.set_vector_heading(dir);
+            sp.Location.Rotation = sp.PhysicsObj.Position.Frame.Orientation;
+
+            // Set physics state (no gravity for chain)
+            sp.SetProjectilePhysicsState(chainTarget, false);
+
+            // Store spawn position
+            sp.SpawnPos = new Position(sp.Location);
+
+            // Add to world
+            if (!LandblockManager.AddObject(sp))
+            {
+                sp.Destroy();
+                return;
+            }
+
+            // Check for immediate collision
+            if (sp.WorldEntryCollision)
+                return;
+
+            // Play launch effect - use the spell's projectile intensity
+            sp.EnqueueBroadcast(new GameMessageScript(sp.Guid, PlayScript.Launch, sp.GetProjectileScriptIntensity(spellType)));
         }
     }
 }

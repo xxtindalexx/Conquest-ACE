@@ -6995,5 +6995,92 @@ namespace ACE.Server.Command.Handlers
                 log.Error($"Error listing multibox exemptions: {ex}");
             }
         }
+
+
+        // CONQUEST: Mystery Egg Pet Cache Commands
+
+        [CommandHandler("addpet", AccessLevel.Developer, CommandHandlerFlag.None, 2,
+            "Add a pet weenie to the mystery egg hatch cache.",
+            "<weenieId> <rarity>\nRarity: 1=Common, 2=Rare, 3=Legendary, 4=Mythic")]
+        public static void HandleAddPet(Session session, params string[] parameters)
+        {
+            if (!uint.TryParse(parameters[0], out var weenieId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid weenie ID. Must be a number.");
+                return;
+            }
+
+            if (!int.TryParse(parameters[1], out var rarity) || rarity < 1 || rarity > 4)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid rarity. Must be 1 (Common), 2 (Rare), 3 (Legendary), or 4 (Mythic).");
+                return;
+            }
+
+            var rarityName = rarity switch
+            {
+                1 => "Common",
+                2 => "Rare",
+                3 => "Legendary",
+                4 => "Mythic",
+                _ => "Unknown"
+            };
+
+            if (MysteryEgg.AddPetToCache(weenieId, rarity))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Added pet weenie {weenieId} to {rarityName} cache.");
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Pet weenie {weenieId} already exists in {rarityName} cache.");
+            }
+        }
+
+        [CommandHandler("removepet", AccessLevel.Developer, CommandHandlerFlag.None, 2,
+            "Remove a pet weenie from the mystery egg hatch cache.",
+            "<weenieId> <rarity>\nRarity: 1=Common, 2=Rare, 3=Legendary, 4=Mythic")]
+        public static void HandleRemovePet(Session session, params string[] parameters)
+        {
+            if (!uint.TryParse(parameters[0], out var weenieId))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid weenie ID. Must be a number.");
+                return;
+            }
+
+            if (!int.TryParse(parameters[1], out var rarity) || rarity < 1 || rarity > 4)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid rarity. Must be 1 (Common), 2 (Rare), 3 (Legendary), or 4 (Mythic).");
+                return;
+            }
+
+            var rarityName = rarity switch
+            {
+                1 => "Common",
+                2 => "Rare",
+                3 => "Legendary",
+                4 => "Mythic",
+                _ => "Unknown"
+            };
+
+            if (MysteryEgg.RemovePetFromCache(weenieId, rarity))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Removed pet weenie {weenieId} from {rarityName} cache.");
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Pet weenie {weenieId} not found in {rarityName} cache.");
+            }
+        }
+
+        [CommandHandler("petcache", AccessLevel.Developer, CommandHandlerFlag.None, 0,
+            "Display mystery egg pet cache statistics.",
+            "")]
+        public static void HandlePetCache(Session session, params string[] parameters)
+        {
+            var stats = MysteryEgg.GetCacheStats();
+            foreach (var line in stats.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, line);
+            }
+        }
     }
 }

@@ -146,18 +146,21 @@ namespace ACE.Server.WorldObjects
             proj.EnqueueBroadcast(new GameMessagePublicUpdatePropertyInt(proj, PropertyInt.PlayerKillerStatus, (int)pkStatus));
             proj.EnqueueBroadcast(new GameMessageScript(proj.Guid, PlayScript.Launch, 0f));
 
-            // Create split arrows if weapon has split property
+            // Create split arrows if weapon has split property OR player has enlightenment bonus
             // CONQUEST: Split arrows do not work in PvP (when primary target is a player)
             if (weapon != null && !(target is Player))
             {
-                var hasSplitArrows = weapon.GetProperty(PropertyBool.SplitArrows);
-                if (hasSplitArrows == true)
+                var hasSplitArrows = weapon.GetProperty(PropertyBool.SplitArrows) == true;
+
+                // CONQUEST: Enlightenment ENL 25 bonus grants split arrows to ALL missile weapons
+                var enlSplitBonus = 0;
+                if (player != null)
+                    enlSplitBonus = player.GetProperty(PropertyInt.EnlightenmentSplitArrowBonus) ?? 0;
+
+                // Check if weapon has split arrows OR player has enlightenment split arrow bonus
+                if (hasSplitArrows || enlSplitBonus > 0)
                 {
-                    var splitCount = weapon.GetProperty(PropertyInt.SplitArrowCount) ?? DEFAULT_SPLIT_ARROW_COUNT;
-                    if (splitCount > 0)
-                    {
-                        CreateSplitArrows(weapon, ammo, target, origin, orientation);
-                    }
+                    CreateSplitArrows(weapon, ammo, target, origin, orientation);
                 }
             }
 
@@ -542,16 +545,28 @@ namespace ACE.Server.WorldObjects
                 }
 
                 // Cache weapon properties to avoid repeated property lookups
-                var splitCount = weapon.GetProperty(PropertyInt.SplitArrowCount) ?? DEFAULT_SPLIT_ARROW_COUNT;
+                // CONQUEST: Only use default split count if weapon actually has split arrows property
+                // For weapons without split arrows (but player has ENL 25), base count is 0
+                var hasSplitArrows = weapon.GetProperty(PropertyBool.SplitArrows) == true;
+                var splitCount = hasSplitArrows
+                    ? (weapon.GetProperty(PropertyInt.SplitArrowCount) ?? DEFAULT_SPLIT_ARROW_COUNT)
+                    : 0;
                 var splitRange = (float)(weapon.GetProperty(PropertyFloat.SplitArrowRange) ?? DEFAULT_SPLIT_ARROW_RANGE);
                 var damageMultiplier = (float)(weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER);
+
+                // CONQUEST: Enlightenment ENL 25 bonus: +1 split arrow target
+                var player = this as Player;
+                var enlSplitBonus = 0;
+                if (player != null)
+                {
+                    enlSplitBonus = player.GetProperty(PropertyInt.EnlightenmentSplitArrowBonus) ?? 0;
+                    splitCount += enlSplitBonus;
+                }
 
                 // Apply safety clamps to prevent invalid values
                 splitCount = Math.Clamp(splitCount, SPLIT_ARROW_COUNT_MIN, SPLIT_ARROW_COUNT_MAX);
                 splitRange = Math.Clamp(splitRange, SPLIT_ARROW_RANGE_MIN, SPLIT_ARROW_RANGE_MAX);
                 damageMultiplier = Math.Clamp(damageMultiplier, SPLIT_ARROW_DAMAGE_MULTIPLIER_MIN, SPLIT_ARROW_DAMAGE_MULTIPLIER_MAX);
-
-                // Removed verbose debug logging
 
                 var additionalArrowCount = splitCount; // SplitArrowCount now directly represents number of split arrows to create
 

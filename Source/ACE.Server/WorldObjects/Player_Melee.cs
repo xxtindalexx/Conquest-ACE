@@ -1,14 +1,14 @@
-using System;
-using System.Collections.Generic;
-
 using ACE.DatLoader.Entity.AnimationHooks;
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Physics;
 using ACE.Server.Physics.Animation;
+using System;
+using System.Collections.Generic;
 
 namespace ACE.Server.WorldObjects
 {
@@ -339,7 +339,9 @@ namespace ACE.Server.WorldObjects
                         targetProc = true;
                     }
 
-                    if (weapon != null && weapon.IsCleaving)
+                    // CONQUEST: Check for enlightenment cleave bonus in addition to weapon cleaving
+                    var enlCleaveBonus = GetProperty(PropertyInt.EnlightenmentCleaveBonus) ?? 0;
+                    if (weapon != null && (weapon.IsCleaving || enlCleaveBonus > 0))
                     {
                         var cleave = GetCleaveTarget(creature, weapon);
 

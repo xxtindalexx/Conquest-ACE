@@ -275,29 +275,38 @@ namespace ACE.Server.Entity
         public static float CalcProcRate(WorldObject aetheria, Creature wielder)
         {
             // ~1% base rate per level?
-            var procRate = (aetheria.ItemLevel ?? 0) * 0.01f;
+            var effectiveLevel = aetheria.ItemLevel ?? 0;
 
+            // CONQUEST: Enlightenment ENL 50 bonus: +1 effective aetheria level
             if (wielder is Player player)
             {
+                var enlAetheriaBonus = player.GetProperty(PropertyInt.EnlightenmentAetheriaSurgeBonus) ?? 0;
+                effectiveLevel += enlAetheriaBonus;
+            }
+
+            var procRate = effectiveLevel * 0.01f;
+
+            if (wielder is Player playerForAug)
+            {
                 // +0.1% per luminance aug?
-                var augBonus = player.LumAugSurgeChanceRating * 0.001f;
+                var augBonus = playerForAug.LumAugSurgeChanceRating * 0.001f;
                 procRate += augBonus;
             }
 
             // The proc rates depend on the attack type. Magic is best, then missile is slightly lower, then Melee is slightly lower than missile.
             switch (wielder.CombatMode)
-            {
-                case CombatMode.Magic:
-                    procRate *= 2.0f;
-                    break;
+                {
+                    case CombatMode.Magic:
+                        procRate *= 2.0f;
+                        break;
 
-                case CombatMode.Missile:
-                    procRate *= 1.5f;
-                    break;
+                    case CombatMode.Missile:
+                        procRate *= 1.5f;
+                        break;
+                }
+                // It is unconfirmed, but believed, that the act of being hit or attacked increases the chances of a surge triggering.
+                return procRate;
             }
-            // It is unconfirmed, but believed, that the act of being hit or attacked increases the chances of a surge triggering.
-            return procRate;
-        }
 
         /// <summary>
         /// Returns TRUE if wo is AetheriaManaStone

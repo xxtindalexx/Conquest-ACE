@@ -114,14 +114,24 @@ namespace ACE.Server.WorldObjects
         {
             var player = this as Player;
 
-            if (!weapon.IsCleaving) return null;
+            // CONQUEST: Enlightenment ENL 10 bonus grants cleave to ALL melee weapons
+            var enlCleaveBonus = 0;
+            if (player != null)
+                enlCleaveBonus = player.GetProperty(PropertyInt.EnlightenmentCleaveBonus) ?? 0;
+
+            // Check if weapon has cleaving OR player has enlightenment cleave bonus
+            if (!weapon.IsCleaving && enlCleaveBonus <= 0) return null;
 
             // sort visible objects by ascending distance
             var visible = PhysicsObj.ObjMaint.GetVisibleObjectsValuesWhere(o => o.WeenieObj.WorldObject != null);
             visible.Sort(DistanceComparator);
 
             var cleaveTargets = new List<Creature>();
-            var totalCleaves = weapon.CleaveTargets;
+            // Base cleave targets from weapon (0 if weapon doesn't have cleaving)
+            var totalCleaves = weapon.IsCleaving ? weapon.CleaveTargets : 0;
+
+            // Add enlightenment bonus
+            totalCleaves += enlCleaveBonus;
 
             foreach (var obj in visible)
             {
@@ -132,6 +142,10 @@ namespace ACE.Server.WorldObjects
                 // only cleave creatures
                 var creature = obj.WeenieObj.WorldObject as Creature;
                 if (creature == null || creature.Teleporting || creature.IsDead) continue;
+
+                // CONQUEST: Never cleave players (PvP protection)
+                if (creature is Player)
+                    continue;
 
                 if (player != null && player.CheckPKStatusVsTarget(creature, null) != null)
                     continue;

@@ -1,15 +1,16 @@
 using System;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
+using ACE.Common;
 using ACE.DatLoader;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
-using ACE.Server.WorldObjects;
+using ACE.Server.Entity.Actions;
+using ACE.Server.Factories;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
-using ACE.Common;
-using ACE.Server.Entity.Actions;
-using System.Runtime.CompilerServices;
+using ACE.Server.WorldObjects;
 
 namespace ACE.Server.Entity
 {
@@ -187,13 +188,13 @@ namespace ACE.Server.Entity
                 }
             }
 
-            // CONQUEST: Currency requirement - TODO: Replace placeholder weenie 999999999 with actual currency weenie
-            // Required amount scales with enlightenment level
-            int currencyRequired = targetEnlightenment; // 1 per enlightenment level, adjust as needed
-            var currencyCount = player.GetNumInventoryItemsOfWCID(13370022);
-            if (currencyCount < currencyRequired)
+            // CONQUEST: Currency requirement - 100 Conquest Coins per enlightenment level from bank
+            // ENL 1 = 100 coins, ENL 2 = 200 coins, etc.
+            long coinsRequired = targetEnlightenment * 100;
+            var bankedCoins = player.GetProperty(PropertyInt64.ConquestCoins) ?? 0;
+            if (bankedCoins < coinsRequired)
             {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {currencyRequired} Enlightenment Currency to reach enlightenment level {targetEnlightenment}. You have {currencyCount}.", ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {coinsRequired:N0} Conquest Coins to reach enlightenment level {targetEnlightenment}. You have {bankedCoins:N0} coins in your bank.", ChatMessageType.Broadcast));
                 return false;
             }
 
@@ -297,10 +298,22 @@ namespace ACE.Server.Entity
 
         public static bool RemoveEnlightenmentCurrency(Player player)
         {
-            // CONQUEST: Consume enlightenment currency
-            // TODO: Replace placeholder weenie 999999999 with actual currency weenie
-            int currencyRequired = player.Enlightenment + 1;
-            return player.TryConsumeFromInventoryWithNetworking(13370022, currencyRequired);
+            // CONQUEST: Deduct Conquest Coins from bank (PropertyInt64.ConquestCoins)
+            // Cost: 100 coins * target enlightenment level
+            var targetEnlightenment = player.Enlightenment + 1;
+            long coinsRequired = targetEnlightenment * 100;
+            var bankedCoins = player.GetProperty(PropertyInt64.ConquestCoins) ?? 0;
+
+            if (bankedCoins < coinsRequired)
+                return false;
+
+            // Deduct coins from bank
+            var newBalance = bankedCoins - coinsRequired;
+            player.SetProperty(PropertyInt64.ConquestCoins, newBalance);
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(player, PropertyInt64.ConquestCoins, newBalance));
+
+            player.SendMessage($"You have spent {coinsRequired:N0} Conquest Coins. Bank balance: {newBalance:N0} coins.", ChatMessageType.Broadcast);
+            return true;
         }
 
         public static bool SpendLuminance(Player player)
@@ -524,24 +537,69 @@ namespace ACE.Server.Entity
                 }
             }
             
-            // add title
+            // CONQUEST: Enlightenment Milestone Titles, Combat Bonuses, and Item Rewards
             switch (player.Enlightenment)
             {
                 case 1:
-                    player.AddTitle(CharacterTitle.Awakened);                   
-                    break;
-                case 2:
-                    player.AddTitle(CharacterTitle.Enlightened);
-                    break;
-                case 3:
-                    player.AddTitle(CharacterTitle.Illuminated);
-                    break;
-                case 4:
-                    player.AddTitle(CharacterTitle.Transcended);
+                    // Title: Wimp (retired)
+                    player.AddTitle(CharacterTitle.Wimp);
                     break;
                 case 5:
-                    player.AddTitle(CharacterTitle.CosmicConscious);
-                    break;                
+                    // Title: GIMP (retired)
+                    player.AddTitle(CharacterTitle.Gimp);
+                    break;
+                case 10:
+                    // +1 Cleave: Melee weapons hit an additional target (costs 10 base HP)
+                    player.SetProperty(PropertyInt.EnlightenmentCleaveBonus, 1);
+                    player.Vitals[PropertyAttribute2nd.MaxHealth].StartingValue -= 10;
+                    player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxHealth]));
+                    player.SendMessage("You have sacrificed 10 HP to gain +1 Cleave! Your melee weapons now hit an additional target.", ChatMessageType.Broadcast);
+                    break;
+                case 15:
+                    // Title: Lots of Vitae (retired)
+                    player.AddTitle(CharacterTitle.LotsofVitae);
+                    break;
+                case 25:
+                    // +1 Arrow Split: Missile weapons hit an additional target (costs 25 base HP)
+                    player.SetProperty(PropertyInt.EnlightenmentSplitArrowBonus, 1);
+                    player.Vitals[PropertyAttribute2nd.MaxHealth].StartingValue -= 25;
+                    player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxHealth]));
+                    player.SendMessage("You have sacrificed 25 HP to gain +1 Arrow Split! Your missile weapons now split to hit an additional target.", ChatMessageType.Broadcast);
+                    break;
+                case 35:
+                    // Title: Certified Ganksta (retired)
+                    player.AddTitle(CharacterTitle.CertifiedGanksta);
+                    break;
+                case 50:
+                    // +1 Aetheria Surge Level (costs 50 base HP) + Title + Item
+                    player.SetProperty(PropertyInt.EnlightenmentAetheriaSurgeBonus, 1);
+                    player.Vitals[PropertyAttribute2nd.MaxHealth].StartingValue -= 50;
+                    player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxHealth]));
+                    player.SendMessage("You have sacrificed 50 HP to gain +1 Aetheria Surge Level! Your aetheria now surge as if they were 1 level higher.", ChatMessageType.Broadcast);
+                    // Title: Defender of Dereth (retired)
+                    player.AddTitle(CharacterTitle.DefenderofDereth);
+                    // Item: Helm of 50th Journey
+                    AwardEnlightenmentItem(player, 53370013, "Helm of 50th Journey");
+                    break;
+                case 60:
+                    // Title: Blood Warrior (retired)
+                    player.AddTitle(CharacterTitle.BloodWarrior);
+                    break;
+                case 75:
+                    // +1 Spell Chain: War magic spells chain to a nearby target for 30% damage
+                    player.SetProperty(PropertyInt.EnlightenmentSpellChainBonus, 1);
+                    player.SendMessage("You have gained +1 Spell Chain! Your war magic spells now chain to a nearby target for 30% damage.", ChatMessageType.Broadcast);
+                    // Title: Guardian of Dereth + Item
+                    player.AddTitle(CharacterTitle.GuardianofDereth);
+                    // Item: Robe of 75th Rebirth (Envoy Robe Tailor)
+                    AwardEnlightenmentItem(player, 53370012, "Robe of 75th Rebirth");
+                    break;
+                case 100:
+                    // Title: Warlord of Dereth + Item
+                    player.AddTitle(CharacterTitle.WarlordofDereth);
+                    // Item: Shield of Enlightenment (Envoy Tailor Shield)
+                    AwardEnlightenmentItem(player, 53370011, "Shield of Enlightenment");
+                    break;
             }
 
             var msg = $"{player.Name} has achieved the {lvl} level of Enlightenment!";
@@ -551,6 +609,32 @@ namespace ACE.Server.Entity
 
             // CONQUEST: Enlightenment bonuses (+1% XP, +1 stats, +1 DR/DMG per 25) are applied dynamically
             // See comments at the top of AddPerks method for integration locations
+        }
+
+        /// <summary>
+        /// Awards an enlightenment milestone item to the player
+        /// </summary>
+        private static void AwardEnlightenmentItem(Player player, uint wcid, string itemName)
+        {
+            var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
+            if (wo == null)
+            {
+                player.SendMessage($"Error creating {itemName}. Please contact an administrator.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            if (player.TryCreateInInventoryWithNetworking(wo))
+            {
+                player.SendMessage($"You have been awarded: {wo.Name}!", ChatMessageType.Broadcast);
+                PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{player.Name} has earned the {wo.Name} for reaching Enlightenment {player.Enlightenment}!", ChatMessageType.WorldBroadcast));
+            }
+            else
+            {
+                // Inventory full - try to drop at player's feet
+                wo.Location = player.Location.InFrontOf(1.0f);
+                wo.EnterWorld();
+                player.SendMessage($"Your inventory was full. {wo.Name} has been placed at your feet.", ChatMessageType.Broadcast);
+            }
         }
     }
 }

@@ -1802,30 +1802,22 @@ namespace ACE.Server.WorldObjects.Managers
                         if (killer == null) break;
 
                         var fellowship = killer.Fellowship;
+                        var rarity = emote.Message ?? "direct";
 
-                        // Check if in fellowship with ShareLoot enabled
-                        if (fellowship != null && fellowship.ShareLoot)
+                        // CONQUEST: If in a fellowship, always do the roll (regardless of ShareLoot setting)
+                        // Eligible members: in range, did damage, not at weekly max
+                        if (fellowship != null)
                         {
-                            // Initiate fellowship roll (pass rarity from emote.Message)
-                            var rarity = emote.Message ?? "direct";
+                            // Initiate fellowship roll
                             ACE.Server.Managers.FellowshipRollManager.InitiateRoll(creatures, emote.WeenieClassId.Value, rarity, killer, fellowship);
                         }
                         else
                         {
-                            // Not in fellowship or ShareLoot disabled, give directly to killer
-                            var wo = WorldObjectFactory.CreateNewWorldObject(emote.WeenieClassId.Value);
-                            if (wo != null)
+                            // Not in fellowship - give directly to killer (still apply weekly limit)
+                            if (!ACE.Server.Managers.FellowshipRollManager.AwardItemToPlayerDirect(killer, emote.WeenieClassId.Value, rarity))
                             {
-                                if (killer.TryCreateInInventoryWithNetworking(wo))
-                                {
-                                    killer.SendMessage($"You received {wo.Name}!");
-                                }
-                                else
-                                {
-                                    // Inventory full, item not awarded
-                                    killer.SendMessage($"You received {wo.Name} but your inventory was full. Item was not awarded.");
-                                    wo.Destroy();
-                                }
+                                // Item was not awarded (weekly limit reached or inventory full)
+                                // Message already sent by AwardItemToPlayerDirect
                             }
                         }
                     }

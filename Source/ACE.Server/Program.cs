@@ -17,6 +17,7 @@ using ACE.Server.Command;
 using ACE.Server.Managers;
 using ACE.Server.Mods;
 using ACE.Server.Network.Managers;
+using ACE.Server.WorldObjects;
 
 namespace ACE.Server
 {
@@ -333,6 +334,9 @@ namespace ACE.Server
 
             log.Info("Initializing EventManager...");
             EventManager.Initialize();
+
+            log.Info("Initializing MysteryEgg pet cache...");
+            WorldObjects.MysteryEgg.InitializePetCache();
 
             // Free up memory before the server goes online. This can free up 6 GB+ on larger servers.
             log.Info("Forcing .net garbage collection...");

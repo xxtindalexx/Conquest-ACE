@@ -154,11 +154,11 @@ namespace ACE.Server.Factories
         // Elements: Slashing, Piercing, Blunt, Frost, Fire, Acid, Electric, Nether
         public static readonly int[][] ElementalMissileWeaponsMatrix =
         {
-            new int[] { 29244, 29243, 29239, 29242, 29241, 29238, 29240, 63370089 }, // War Bow
-            new int[] { 29251, 29250, 29246, 29249, 29248, 29245, 29247, 63370083 }, // Long Bow
-            new int[] { 29258, 29257, 29253, 29256, 29255, 29252, 29254, 63370080 }, // Crossbow Heavy
-            new int[] { 31812, 31818, 31814, 31817, 31816, 31813, 31815, 63370081 }, // Atlatl
-            new int[] { 31798, 31804, 31800, 31803, 31802, 31799, 31801, 63370082 }, // Royal Atlatl
+            new int[] { 29244, 29243, 29239, 29242, 29241, 29238, 29240, 63370083 }, // long Bow
+            new int[] { 29251, 29250, 29246, 29249, 29248, 29245, 29247, 63370080 }, // Long Bow (xbow heavy)
+            new int[] { 29258, 29257, 29253, 29256, 29255, 29252, 29254, 63370081 }, // Atlatl
+            new int[] { 31812, 31818, 31814, 31817, 31816, 31813, 31815, 63370082 }, // Atlatl (sling shot)
+            new int[] { 31798, 31804, 31800, 31803, 31802, 31799, 31801, 63370089 }, // War Bow  
             new int[] { 31805, 31811, 31807, 31810, 31809, 31806, 31808, 63370079 }  // Crossbow Light
         };
 
