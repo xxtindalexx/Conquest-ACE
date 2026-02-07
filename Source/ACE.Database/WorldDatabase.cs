@@ -921,5 +921,58 @@ namespace ACE.Database
                 return new List<uint>();
             }
         }
+
+        // =====================================
+        // CONQUEST: Pet Palette Options
+        // =====================================
+
+        /// <summary>
+        /// Gets all pet palette options from the database
+        /// Includes sub-palettes for custom color overrides
+        /// </summary>
+        public List<PetPaletteOption> GetAllPetPaletteOptions()
+        {
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+                    return context.PetPaletteOptions
+                        .Include(p => p.PetPaletteSubPalettes)
+                        .ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error getting pet palette options: {ex.Message}");
+                return new List<PetPaletteOption>();
+            }
+        }
+
+        /// <summary>
+        /// Gets pet palette options for a specific creature WCID
+        /// Returns options for that WCID plus any global options (pet_wcid = 0)
+        /// </summary>
+        public List<PetPaletteOption> GetPetPaletteOptions(uint petWcid)
+        {
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+                    return context.PetPaletteOptions
+                        .Include(p => p.PetPaletteSubPalettes)
+                        .Where(p => p.PetWcid == petWcid || p.PetWcid == 0)
+                        .ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error getting pet palette options for WCID {petWcid}: {ex.Message}");
+                return new List<PetPaletteOption>();
+            }
+        }
     }
 }

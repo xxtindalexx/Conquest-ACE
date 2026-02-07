@@ -378,5 +378,34 @@ namespace ACE.Database
                 callback?.Invoke(result);
             }, "AddCharacterInParallel: " + character.Id));
         }
+
+
+        #region Mystery Egg IP Tracking
+
+        /// <summary>
+        /// Gets the mystery egg tracking record for a specific IP address
+        /// </summary>
+        public MysteryEggIpTracking GetMysteryEggIpTracking(string ipAddress)
+        {
+            return BaseDatabase.GetMysteryEggIpTracking(ipAddress);
+        }
+
+        /// <summary>
+        /// Gets or creates a mystery egg IP tracking record
+        /// </summary>
+        public MysteryEggIpTracking GetOrCreateMysteryEggIpTracking(string ipAddress)
+        {
+            return BaseDatabase.GetOrCreateMysteryEggIpTracking(ipAddress);
+        }
+
+        /// <summary>
+        /// Increments the egg count for an IP address
+        /// </summary>
+        public void IncrementMysteryEggIpCount(string ipAddress)
+        {
+            BaseDatabase.IncrementMysteryEggIpCount(ipAddress);
+        }
+
+        #endregion
     }
 }

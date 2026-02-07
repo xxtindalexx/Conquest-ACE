@@ -331,38 +331,66 @@ namespace ACE.Server.Managers
         }
 
         /// <summary>
-        /// Checks if player can obtain another mystery egg (2 per week limit)
-        /// Resets counter if 7 days have passed
+        /// Checks if player can obtain another mystery egg
+        /// - Admins: No limit (exempt for testing)
+        /// - Exempt accounts: 4 per week per IP (double the normal limit)
+        /// - Non-exempt accounts: 2 per week per IP (shared across all accounts on that IP)
         /// </summary>
         private static bool CheckWeeklyMysteryEggLimit(Player player, out string message)
         {
             message = null;
-            var currentTime = (long)Time.GetUnixTime();
-            var lastResetTime = player.GetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime) ?? 0;
-            var eggsObtainedThisWeek = player.GetProperty(PropertyInt.MysteryEggsObtainedThisWeek) ?? 0;
 
-            // Check if 7 days have passed since last reset
-            var timeSinceReset = currentTime - lastResetTime;
-            if (timeSinceReset >= 604800) // 604800 seconds = 7 days
+            // CONQUEST: Admins are exempt from weekly limit for testing purposes
+            if (player.IsAdmin || player.IsArch || player.IsSentinel)
+                return true;
+
+            var currentTime = (long)Time.GetUnixTime();
+
+            // Check if this account is exempt from multibox restrictions
+            var isExempt = DatabaseManager.Authentication.IsAccountMultiboxExempt(player.Account.AccountId);
+
+            // Both exempt and non-exempt use IP-based tracking
+            // Exempt accounts get double the limit (4 instead of 2)
+            var weeklyLimit = isExempt ? 4 : 2;
+            return CheckIpMysteryEggLimit(player, currentTime, weeklyLimit, isExempt, out message);
+        }
+
+        /// <summary>
+        /// Per-IP mystery egg limit check
+        /// Non-exempt accounts: limit of 2 per week
+        /// Exempt accounts: limit of 4 per week
+        /// </summary>
+        private static bool CheckIpMysteryEggLimit(Player player, long currentTime, int weeklyLimit, bool isExempt, out string message)
+        {
+            message = null;
+
+            // Get player's IP address from session
+            var ipAddress = player.Session?.EndPoint?.Address?.ToString();
+
+            if (string.IsNullOrEmpty(ipAddress))
             {
-                // Reset counter
-                player.SetProperty(PropertyInt.MysteryEggsObtainedThisWeek, 0);
-                player.SetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime, currentTime);
-                player.SaveBiotaToDatabase();
-                player.SendMessage("Your weekly Mystery Egg limit has been reset!");
-                eggsObtainedThisWeek = 0;
+                // Can't determine IP - deny the egg to be safe
+                message = "Unable to verify IP address for mystery egg limit tracking.";
+                return false;
             }
 
-            // Check if player has reached weekly limit
-            if (eggsObtainedThisWeek >= 2)
+            // Get or create IP tracking record
+            var tracking = DatabaseManager.Shard.GetOrCreateMysteryEggIpTracking(ipAddress);
+
+            // Check if 7 days have passed (the GetOrCreate method handles the reset)
+            var timeSinceWeekStart = currentTime - tracking.WeekStartTime;
+
+            // Check if IP has reached weekly limit
+            if (tracking.EggsObtained >= weeklyLimit)
             {
-                var secondsRemaining = 604800 - timeSinceReset;
+                var secondsRemaining = 604800 - timeSinceWeekStart;
                 var days = secondsRemaining / 86400;
                 var hours = (secondsRemaining % 86400) / 3600;
                 var minutes = (secondsRemaining % 3600) / 60;
                 var seconds = secondsRemaining % 60;
 
-                message = $"You have already obtained 2 Mystery Eggs this week. You can obtain another in {days}d {hours}h {minutes}m {seconds}s.";
+                var exemptNote = isExempt ? " (Exempt account: 4/week limit)" : "";
+                message = $"Your IP has already obtained {weeklyLimit} Mystery Eggs this week. You can obtain another in {days}d {hours}h {minutes}m {seconds}s.{exemptNote}";
                 return false;
             }
 
@@ -371,27 +399,32 @@ namespace ACE.Server.Managers
 
         /// <summary>
         /// Increments the weekly mystery egg counter
+        /// Both exempt and non-exempt accounts use IP-based tracking
+        /// Exempt accounts have a limit of 4, non-exempt have a limit of 2
         /// </summary>
         private static void IncrementMysteryEggCounter(Player player)
         {
-            var eggsObtained = player.GetProperty(PropertyInt.MysteryEggsObtainedThisWeek) ?? 0;
-            var newCount = eggsObtained + 1;
-            player.SetProperty(PropertyInt.MysteryEggsObtainedThisWeek, newCount);
+            var ipAddress = player.Session?.EndPoint?.Address?.ToString();
+            if (string.IsNullOrEmpty(ipAddress))
+                return;
 
-            // Initialize reset time if not set
-            var lastReset = player.GetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime) ?? 0;
-            if (lastReset == 0)
-                player.SetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime, (long)Time.GetUnixTime());
+            // Check if this account is exempt from multibox restrictions
+            var isExempt = DatabaseManager.Authentication.IsAccountMultiboxExempt(player.Account.AccountId);
+            var weeklyLimit = isExempt ? 4 : 2;
 
-            // Save to database to persist the counter
-            player.SaveBiotaToDatabase();
+            // Increment IP-based counter
+            DatabaseManager.Shard.IncrementMysteryEggIpCount(ipAddress);
 
-            // Inform player of their weekly progress
-            var remaining = 2 - newCount;
+            // Get the updated count to inform the player
+            var tracking = DatabaseManager.Shard.GetMysteryEggIpTracking(ipAddress);
+            var newCount = tracking?.EggsObtained ?? 1;
+            var remaining = weeklyLimit - newCount;
+
+            var exemptNote = isExempt ? " [Exempt account]" : "";
             if (remaining > 0)
-                player.SendMessage($"Mystery Eggs obtained this week: {newCount}/2 ({remaining} remaining)");
+                player.SendMessage($"Mystery Eggs obtained this week (your IP): {newCount}/{weeklyLimit} ({remaining} remaining){exemptNote}");
             else
-                player.SendMessage($"Mystery Eggs obtained this week: {newCount}/2 (weekly limit reached)");
+                player.SendMessage($"Mystery Eggs obtained this week (your IP): {newCount}/{weeklyLimit} (limit reached){exemptNote}");
         }
 
         private static bool AwardItemToPlayer(Player player, uint itemWcid, string rarity)
@@ -427,6 +460,26 @@ namespace ACE.Server.Managers
 
                 wo.SetProperty(PropertyInt.EggRarity, rarityValue);
             }
+            else
+            {
+                // CONQUEST: For direct pet drops, read PetRarity from weenie and apply ratings/underlay
+                var petRarity = wo.GetProperty(PropertyInt.PetRarity);
+                if (petRarity != null && petRarity.Value >= 1 && petRarity.Value <= 4)
+                {
+                    // Set icon underlay based on rarity
+                    wo.IconUnderlayId = petRarity.Value switch
+                    {
+                        1 => 0x06003355, // Common
+                        2 => 0x06003353, // Rare
+                        3 => 0x06003356, // Legendary
+                        4 => 0x06003354, // Mythic
+                        _ => null
+                    };
+
+                    // Apply random rating bonuses based on rarity
+                    AssignRandomPetRatings(wo, petRarity.Value);
+                }
+            }
 
             // Try to add to inventory
             if (player.TryCreateInInventoryWithNetworking(wo))
@@ -434,7 +487,7 @@ namespace ACE.Server.Managers
                 var itemType = (rarity == "direct") ? "pet" : "mystery egg";
                 player.SendMessage($"You received {wo.Name} ({itemType})!");
 
-                // Increment weekly counter for mystery eggs
+                // Increment weekly counter for mystery eggs (not for direct drops)
                 if (rarity != "direct")
                 {
                     IncrementMysteryEggCounter(player);
@@ -450,6 +503,57 @@ namespace ACE.Server.Managers
                 // Destroy the created object since we couldn't give it to the player
                 wo.Destroy();
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Assigns random rating bonuses to a pet device based on its rarity tier
+        /// Common: No bonuses
+        /// Rare: +1 to one random rating
+        /// Legendary/Mythic: 50% chance for +2 to one rating, 50% chance for +1 to two different ratings
+        /// </summary>
+        private static void AssignRandomPetRatings(WorldObject pet, int rarity)
+        {
+            // Common pets get no rating bonuses
+            if (rarity == 1)
+                return;
+
+            // Available ratings to choose from
+            var availableRatings = new List<PropertyInt>
+            {
+                PropertyInt.PetBonusDamageRating,
+                PropertyInt.PetBonusDamageReductionRating,
+                PropertyInt.PetBonusCritDamageRating,
+                PropertyInt.PetBonusCritDamageReductionRating
+            };
+
+            if (rarity == 2) // Rare: +1 to one random rating
+            {
+                var chosenRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                pet.SetProperty(chosenRating, 1);
+            }
+            else if (rarity == 3 || rarity == 4) // Legendary or Mythic
+            {
+                // 50/50 chance: +2 to one rating OR +1 to two different ratings
+                var option = ThreadSafeRandom.Next(0, 1); // 0 or 1
+
+                if (option == 0) // +2 to one rating
+                {
+                    var chosenRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                    pet.SetProperty(chosenRating, 2);
+                }
+                else // +1 to two different ratings
+                {
+                    // Pick first rating
+                    var firstIndex = ThreadSafeRandom.Next(0, availableRatings.Count - 1);
+                    var firstRating = availableRatings[firstIndex];
+                    pet.SetProperty(firstRating, 1);
+
+                    // Remove first rating from list and pick second
+                    availableRatings.RemoveAt(firstIndex);
+                    var secondRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                    pet.SetProperty(secondRating, 1);
+                }
             }
         }
 

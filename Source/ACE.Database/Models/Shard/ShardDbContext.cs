@@ -104,6 +104,7 @@ public partial class ShardDbContext : DbContext
     public virtual DbSet<BankCommandBlacklist> BankCommandBlacklist { get; set; }
     public virtual DbSet<CharTracker> CharTracker { get; set; }
     public virtual DbSet<QuestIpTracking> QuestIpTracking { get; set; }
+    public virtual DbSet<MysteryEggIpTracking> MysteryEggIpTracking { get; set; }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -191,6 +192,35 @@ public partial class ShardDbContext : DbContext
                  // .HasForeignKey(e => e.QuestId)
                  // .OnDelete(DeleteBehavior.Cascade)
                   //.HasConstraintName("quest_ip_tracking_ibfk_1");
+        });
+
+        // CONQUEST: Mystery Egg IP Tracking for per-IP weekly limits
+        modelBuilder.Entity<MysteryEggIpTracking>(entity =>
+        {
+            entity.ToTable("mystery_egg_ip_tracking");
+
+            entity.HasKey(e => e.Id);
+
+            entity.HasIndex(e => e.IpAddress, "IX_mystery_egg_ip_tracking_IpAddress");
+
+            entity.Property(e => e.Id)
+                  .HasColumnName("id")
+                  .ValueGeneratedOnAdd();
+
+            entity.Property(e => e.IpAddress)
+                  .HasColumnName("ip_address")
+                  .HasMaxLength(45)
+                  .IsRequired();
+
+            entity.Property(e => e.EggsObtained)
+                  .HasColumnName("eggs_obtained")
+                  .HasDefaultValue(0);
+
+            entity.Property(e => e.WeekStartTime)
+                  .HasColumnName("week_start_time");
+
+            entity.Property(e => e.LastEggTime)
+                  .HasColumnName("last_egg_time");
         });
         modelBuilder
             .UseCollation("utf8mb4_0900_ai_ci")

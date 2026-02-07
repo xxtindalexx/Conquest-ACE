@@ -1203,5 +1203,104 @@ namespace ACE.Database
                 return (true, string.Empty);
             }
         }
+
+        #region Mystery Egg IP Tracking
+
+        /// <summary>
+        /// Gets the mystery egg tracking record for a specific IP address
+        /// </summary>
+        public MysteryEggIpTracking GetMysteryEggIpTracking(string ipAddress)
+        {
+            using (var context = new ShardDbContext())
+            {
+                return context.MysteryEggIpTracking
+                    .FirstOrDefault(m => m.IpAddress == ipAddress);
+            }
+        }
+
+        /// <summary>
+        /// Gets or creates a mystery egg IP tracking record
+        /// Resets the counter if 7 days have passed since week start
+        /// </summary>
+        public MysteryEggIpTracking GetOrCreateMysteryEggIpTracking(string ipAddress)
+        {
+            using (var context = new ShardDbContext())
+            {
+                var currentTime = (long)Time.GetUnixTime();
+                var tracking = context.MysteryEggIpTracking
+                    .FirstOrDefault(m => m.IpAddress == ipAddress);
+
+                if (tracking == null)
+                {
+                    tracking = new MysteryEggIpTracking
+                    {
+                        IpAddress = ipAddress,
+                        EggsObtained = 0,
+                        WeekStartTime = currentTime,
+                        LastEggTime = 0
+                    };
+                    context.MysteryEggIpTracking.Add(tracking);
+                    context.SaveChanges();
+                }
+                else
+                {
+                    // Check if 7 days have passed since week start
+                    var timeSinceWeekStart = currentTime - tracking.WeekStartTime;
+                    if (timeSinceWeekStart >= 604800) // 7 days in seconds
+                    {
+                        // Reset the counter
+                        tracking.EggsObtained = 0;
+                        tracking.WeekStartTime = currentTime;
+                        context.SaveChanges();
+                    }
+                }
+
+                return tracking;
+            }
+        }
+
+        /// <summary>
+        /// Increments the egg count for an IP address
+        /// </summary>
+        public void IncrementMysteryEggIpCount(string ipAddress)
+        {
+            using (var context = new ShardDbContext())
+            {
+                var currentTime = (long)Time.GetUnixTime();
+                var tracking = context.MysteryEggIpTracking
+                    .FirstOrDefault(m => m.IpAddress == ipAddress);
+
+                if (tracking == null)
+                {
+                    tracking = new MysteryEggIpTracking
+                    {
+                        IpAddress = ipAddress,
+                        EggsObtained = 1,
+                        WeekStartTime = currentTime,
+                        LastEggTime = currentTime
+                    };
+                    context.MysteryEggIpTracking.Add(tracking);
+                }
+                else
+                {
+                    // Check if 7 days have passed and reset if needed
+                    var timeSinceWeekStart = currentTime - tracking.WeekStartTime;
+                    if (timeSinceWeekStart >= 604800)
+                    {
+                        tracking.EggsObtained = 1;
+                        tracking.WeekStartTime = currentTime;
+                    }
+                    else
+                    {
+                        tracking.EggsObtained++;
+                    }
+                    tracking.LastEggTime = currentTime;
+                }
+
+                context.SaveChanges();
+            }
+        }
+
+        #endregion
     }
 }

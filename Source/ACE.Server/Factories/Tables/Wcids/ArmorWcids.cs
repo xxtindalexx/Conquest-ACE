@@ -148,10 +148,15 @@ namespace ACE.Server.Factories.Tables.Wcids
         // heritage low - aluvian
         private static ChanceTable<WeenieClassName> CeldonWcids = new ChanceTable<WeenieClassName>()
         {
-            ( WeenieClassName.girthceldon,       0.25f ),
-            ( WeenieClassName.breastplateceldon, 0.25f ),
-            ( WeenieClassName.leggingsceldon,    0.25f ),
-            ( WeenieClassName.sleevesceldon,     0.25f ),
+            ( WeenieClassName.girthceldon,              0.125f ),
+            ( WeenieClassName.breastplateceldon,        0.125f ),
+            ( WeenieClassName.leggingsceldon,           0.125f ),
+            ( WeenieClassName.sleevesceldon,            0.125f ),
+            // CONQUEST: Yoroi armor with Celdon textures
+            ( WeenieClassName.conquest_yoroigirth,       0.125f ),
+            ( WeenieClassName.conquest_yoroibreastplate, 0.125f ),
+            ( WeenieClassName.conquest_yoroileggings,    0.125f ),
+            ( WeenieClassName.conquest_yoroisleeves,     0.125f ),
         };
 
         // heritage low - gharu'ndim

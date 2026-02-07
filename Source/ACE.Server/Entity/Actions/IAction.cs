@@ -111,6 +111,7 @@ namespace ACE.Server.Entity.Actions
         PlayerLocation_TeleportToPKArena,
         PlayerLocation_TeleportToPKLArena,
         PlayerLocation_TeleToPosition,
+        PlayerLocation_RestorePet,
         PlayerInventory_AddObjectToLandblock,
         PlayerInventory_DoPickup,
         PlayerInventory_DropItem,
@@ -316,6 +317,10 @@ namespace ACE.Server.Entity.Actions
 
         // Fellowship roll system
         FellowshipRollManager_ProcessTimeout,
+
+        // Pet Tailoring Kit
+        PetTailoringKit_CaptureAppearance,
+        PetTailoringKit_ApplyAppearance,
     }
     public static class ActionTypeConverter
     {

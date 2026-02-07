@@ -222,6 +222,30 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // Set pet rarity on the device so it can be read when summoning
+            pet.SetProperty(PropertyInt.PetRarity, eggRarity.Value);
+
+            // Set icon underlay based on rarity
+            // Common: 0x06003355, Rare: 0x06003353, Legendary: 0x06003356, Mythic: 0x06003354
+            pet.IconUnderlayId = eggRarity.Value switch
+            {
+                1 => 0x06003355, // Common
+                2 => 0x06003353, // Rare
+                3 => 0x06003356, // Legendary
+                4 => 0x06003354, // Mythic
+                _ => null
+            };
+
+            // Assign random rating bonuses based on rarity
+            AssignRandomPetRatings(pet, eggRarity.Value);
+
+            // CONQUEST: Apply random palette to the pet device for visual variety
+            var petDevice = pet as PetDevice;
+            if (petDevice?.PetClass != null)
+            {
+                ACE.Server.Managers.PetPaletteManager.ApplyRandomPalette(pet, (uint)petDevice.PetClass.Value);
+            }
+
             // Try to add to inventory
             if (player.TryCreateInInventoryWithNetworking(pet))
             {
@@ -298,6 +322,30 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // Set pet rarity on the device so it can be read when summoning
+            pet.SetProperty(PropertyInt.PetRarity, eggRarity.Value);
+
+            // Set icon underlay based on rarity
+            // Common: 0x06003355, Rare: 0x06003353, Legendary: 0x06003356, Mythic: 0x06003354
+            pet.IconUnderlayId = eggRarity.Value switch
+            {
+                1 => 0x06003355, // Common
+                2 => 0x06003353, // Rare
+                3 => 0x06003356, // Legendary
+                4 => 0x06003354, // Mythic
+                _ => null
+            };
+
+            // Assign random rating bonuses based on rarity
+            AssignRandomPetRatings(pet, eggRarity.Value);
+
+            // CONQUEST: Apply random palette to the pet device for visual variety
+            var petDevice = pet as PetDevice;
+            if (petDevice?.PetClass != null)
+            {
+                ACE.Server.Managers.PetPaletteManager.ApplyRandomPalette(pet, (uint)petDevice.PetClass.Value);
+            }
+
             // Try to add to inventory
             if (player.TryCreateInInventoryWithNetworking(pet))
             {
@@ -331,6 +379,56 @@ namespace ACE.Server.WorldObjects
 
                 // Destroy the created pet since we couldn't give it
                 pet.Destroy();
+            }
+        }
+
+        /// <summary>
+        /// Randomly assigns rating bonuses to a pet based on its rarity tier
+        /// Rare: +1 to one random rating
+        /// Legendary/Mythic: 50% chance for +2 to one rating, 50% chance for +1 to two different ratings
+        /// </summary>
+        public static void AssignRandomPetRatings(WorldObject pet, int rarity)
+        {
+            // Common pets get no rating bonuses
+            if (rarity == 1)
+                return;
+
+            // Available ratings to choose from
+            var availableRatings = new List<PropertyInt>
+            {
+                PropertyInt.PetBonusDamageRating,
+                PropertyInt.PetBonusDamageReductionRating,
+                PropertyInt.PetBonusCritDamageRating,
+                PropertyInt.PetBonusCritDamageReductionRating
+            };
+
+            if (rarity == 2) // Rare: +1 to one random rating
+            {
+                var chosenRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                pet.SetProperty(chosenRating, 1);
+            }
+            else if (rarity == 3 || rarity == 4) // Legendary or Mythic
+            {
+                // 50/50 chance: +2 to one rating OR +1 to two different ratings
+                var option = ThreadSafeRandom.Next(0, 1); // 0 or 1
+
+                if (option == 0) // +2 to one rating
+                {
+                    var chosenRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                    pet.SetProperty(chosenRating, 2);
+                }
+                else // +1 to two different ratings
+                {
+                    // Pick first rating
+                    var firstIndex = ThreadSafeRandom.Next(0, availableRatings.Count - 1);
+                    var firstRating = availableRatings[firstIndex];
+                    pet.SetProperty(firstRating, 1);
+
+                    // Remove first rating from list and pick second
+                    availableRatings.RemoveAt(firstIndex);
+                    var secondRating = availableRatings[ThreadSafeRandom.Next(0, availableRatings.Count - 1)];
+                    pet.SetProperty(secondRating, 1);
+                }
             }
         }
     }

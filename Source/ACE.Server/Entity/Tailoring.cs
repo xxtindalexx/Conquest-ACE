@@ -75,6 +75,13 @@ namespace ACE.Server.Entity
                 return;
             }
 
+            // CONQUEST: Check if source is a pet tailoring kit - handle separately
+            if (PetTailoringKit.IsPetTailoringKit(source.WeenieClassId))
+            {
+                PetTailoringKit.UseObjectOnTarget(player, source, target);
+                return;
+            }
+
             // verify use requirements
             var useError = VerifyUseRequirements(player, source, target);
             if (useError != WeenieError.None)
@@ -735,7 +742,14 @@ namespace ACE.Server.Entity
         /// </summary>
         public static bool IsTailoringKit(uint wcid)
         {
-            // ...
+            // CONQUEST: Check for pet tailoring kit
+            if (PetTailoringKit.IsPetTailoringKit(wcid))
+                return true;
+
+            // CONQUEST: Check for morph gems
+            if (MorphGem.IsMorphGem(wcid))
+                return true;
+
             switch (wcid)
             {
                 case ArmorTailoringKit:

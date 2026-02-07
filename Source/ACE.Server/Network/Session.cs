@@ -263,7 +263,7 @@ namespace ACE.Server.Network
             // Character database objects are not cached. Each session gets a new character entity and dbContext from ShardDatabase.
             // To ensure the latest version of the character is saved before any new logins pull these records again, we queue a save here if necessary, at the instant logoff is requested.
             if (Player.CharacterChangesDetected)
-                Player.SaveCharacterToDatabase(true);
+                Player.SaveCharacterToDatabase();
 
             if (logOffRequestTime == DateTime.MinValue)
             {
@@ -287,7 +287,7 @@ namespace ACE.Server.Network
             // What that means is, we could end up with Character changes after the Character has been saved from the initial LogOff request.
             // To make sure we commit these additional changes (if any), we check again here
             if (Player?.CharacterChangesDetected ?? false)
-                Player?.SaveCharacterToDatabase(true);
+                Player?.SaveCharacterToDatabase();
 
             Player = null;
 

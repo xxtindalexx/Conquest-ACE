@@ -616,8 +616,12 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
+            // CONQUEST: Destroy both regular pet and combat pet on logout
             if (CurrentActivePet != null)
                 CurrentActivePet.Destroy();
+
+            if (CurrentActiveCombatPet != null)
+                CurrentActiveCombatPet.Destroy();
 
             // If we're in the dying animation process, we cannot logout until that animation completes..
             if (IsInDeathProcess)

@@ -657,7 +657,11 @@ namespace ACE.Server.Managers
                 ("rares_max_days_between", new Property<long>(45, "for rares_real_time_v2: the maximum number of days a player can go before a rare is generated on rare eligible creature kills")),
                 ("rares_max_seconds_between", new Property<long>(5256000, "for rares_real_time: the maximum number of seconds a player can go before a second chance at a rare is allowed on rare eligible creature kills that did not generate a rare")),
                 ("summoning_killtask_multicredit_cap", new Property<long>(2, "if allow_summoning_killtask_multicredit is enabled, the maximum # of killtask credits a player can receive from 1 kill")),
-                ("teleport_visibility_fix", new Property<long>(0, "Fixes some possible issues with invisible players and mobs. 0 = default / disabled, 1 = players only, 2 = creatures, 3 = all world objects"))
+                ("teleport_visibility_fix", new Property<long>(0, "Fixes some possible issues with invisible players and mobs. 0 = default / disabled, 1 = players only, 2 = creatures, 3 = all world objects")),
+
+                // CONQUEST: Mystery Egg Drop System
+                ("mystery_egg_min_mob_level", new Property<long>(50, "Minimum mob level required to drop mystery eggs. Mobs below this level will never drop eggs.")),
+                ("mystery_egg_wcid", new Property<long>(801502, "The weenie class ID (WCID) of the mystery egg item to create when dropped."))
                 );
 
         public static readonly ReadOnlyDictionary<string, Property<double>> DefaultDoubleProperties =
@@ -707,7 +711,17 @@ namespace ACE.Server.Managers
                 ("missile_attribute_multiplier", new Property<double>(1.0, "the multiplier applied to coordination for calculating missile weapons attribute damage modifiers")),
                 ("new_life_aug_curve_pct", new Property<double>(0.0, "a value between 0 and 1 representing the amount of the new curve to apply. 0 means the old curve will be used, 1 means the new curve will be used, and 0.5 means the midpoint between the curves will be used.")),
                 ("life_aug_prot_tuning_constant", new Property<double>(0.0034597, "the tuning constant r used in the  (1.0 - (1.0 - r)^a) life aug scaling formula - controls the size of step for each augmentation, relative to remaining cap (0.0034597 means every 200 augs halves the remaining bonus)")),
-                ("life_aug_prot_max_bonus", new Property<double>(0.32, "the maximum bonus that the life aug scaling can approach at infinite augs - T8 protection spells provide 68% base, so a bonus above 32% makes it possible to achieve full protection"))
+                ("life_aug_prot_max_bonus", new Property<double>(0.32, "the maximum bonus that the life aug scaling can approach at infinite augs - T8 protection spells provide 68% base, so a bonus above 32% makes it possible to achieve full protection")),
+
+                // CONQUEST: Mystery Egg Drop System
+                ("mystery_egg_base_drop_rate", new Property<double>(0.002, "Base chance (0.002 = 0.2%) for a mystery egg to drop from mobs level 50-99. Higher level mobs have multipliers applied.")),
+                ("mystery_egg_level_mult_100", new Property<double>(1.25, "Drop rate multiplier for mobs level 100-149.")),
+                ("mystery_egg_level_mult_150", new Property<double>(1.5, "Drop rate multiplier for mobs level 150-199.")),
+                ("mystery_egg_level_mult_200", new Property<double>(2.0, "Drop rate multiplier for mobs level 200+.")),
+                ("mystery_egg_weight_common", new Property<double>(85.25, "Rarity weight for Common eggs. All weights are relative (don't need to sum to 100).")),
+                ("mystery_egg_weight_rare", new Property<double>(13.0, "Rarity weight for Rare eggs.")),
+                ("mystery_egg_weight_legendary", new Property<double>(1.5, "Rarity weight for Legendary eggs.")),
+                ("mystery_egg_weight_mythic", new Property<double>(0.25, "Rarity weight for Mythic eggs."))
 
                 );
 

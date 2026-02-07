@@ -273,7 +273,15 @@ namespace ACE.Server.WorldObjects
                 container.Close(this);
         }
 
+        /// <summary>
+        /// CONQUEST: Regular/passive pet (persists through portals)
+        /// </summary>
         public Pet CurrentActivePet { get; set; }
+
+        /// <summary>
+        /// CONQUEST: Combat pet (dismissed on portal, separate from regular pet)
+        /// </summary>
+        public CombatPet CurrentActiveCombatPet { get; set; }
 
         public void ApplyConsumable(MotionCommand useMotion, Action action, float animMod = 1.0f)
         {

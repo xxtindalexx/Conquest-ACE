@@ -97,6 +97,10 @@ namespace ACE.Server.WorldObjects
             // All pets don't leave corpses, this maybe should have been in data, but isn't so lets make sure its true.
             NoCorpse = true;
 
+            // CONQUEST: Apply stored palette from pet device to the spawned creature BEFORE entering world
+            // This must happen before EnterWorld() so the appearance is correct when sent to clients
+            ACE.Server.Managers.PetPaletteManager.ApplyPaletteToCreature(this, petDevice);
+
             var success = EnterWorld();
 
             if (!success)
@@ -105,7 +109,12 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
-            player.CurrentActivePet = this;
+            // CONQUEST: Set the appropriate pet reference based on type
+            // Combat pets and regular pets can coexist
+            if (this is CombatPet combatPet)
+                player.CurrentActiveCombatPet = combatPet;
+            else
+                player.CurrentActivePet = this;
 
             petDevice.Pet = Guid.Full;
             PetDevice = petDevice.Guid.Full;
@@ -115,7 +124,20 @@ namespace ACE.Server.WorldObjects
             // This ensures GetPetRatingBonus() can read from CurrentActivePet (the creature)
             var deviceRarity = petDevice.GetProperty(PropertyInt.PetRarity);
             if (deviceRarity != null)
+            {
                 SetProperty(PropertyInt.PetRarity, deviceRarity.Value);
+
+                // Set icon underlay based on rarity
+                // Common: 0x06003355, Rare: 0x06003353, Legendary: 0x06003356, Mythic: 0x06003354
+                IconUnderlayId = deviceRarity.Value switch
+                {
+                    1 => 0x06003355, // Common
+                    2 => 0x06003353, // Rare
+                    3 => 0x06003356, // Legendary
+                    4 => 0x06003354, // Mythic
+                    _ => null
+                };
+            }
 
             var damageRating = petDevice.GetProperty(PropertyInt.PetBonusDamageRating);
             if (damageRating != null)
@@ -133,72 +155,44 @@ namespace ACE.Server.WorldObjects
             if (critDamageReductionRating != null)
                 SetProperty(PropertyInt.PetBonusCritDamageReductionRating, critDamageReductionRating.Value);
 
-
             if (IsPassivePet)
                 nextSlowTickTime = Time.GetUnixTime();
 
             return true;
         }
 
+        /// <summary>
+        /// CONQUEST: Modified to allow both regular pet and combat pet simultaneously
+        /// Regular pets only check/replace other regular pets
+        /// Combat pets only check/replace other combat pets
+        /// </summary>
         public bool? HandleCurrentActivePet(Player player)
         {
-            if (PropertyManager.GetBool("pet_stow_replace"))
-                return HandleCurrentActivePet_Replace(player);
-            else
-                return HandleCurrentActivePet_Retail(player);
-        }
-
-        public bool HandleCurrentActivePet_Replace(Player player)
-        {
-            // original ace logic
-            if (player.CurrentActivePet == null)
-                return true;
-
-            if (player.CurrentActivePet is CombatPet)
+            // CONQUEST: Dual pet support - regular pets and combat pets can coexist
+            if (this is CombatPet)
             {
-                // possibly add the ability to stow combat pets with passive pet devices here?
-                player.SendTransientError($"{player.CurrentActivePet.Name} is already active");
-                return false;
-            }
-
-            var stowPet = WeenieClassId == player.CurrentActivePet.WeenieClassId;
-
-            // despawn passive pet
-            player.CurrentActivePet.Destroy();
-
-            return !stowPet;
-        }
-
-        public bool? HandleCurrentActivePet_Retail(Player player)
-        {
-            if (player.CurrentActivePet == null)
-                return true;
-
-            if (IsPassivePet)
-            {
-                // using a passive pet device
-                // stow currently active passive/combat pet, as per retail
-                // spawning the new passive pet requires another double click
-                player.CurrentActivePet.Destroy();
-            }
-            else
-            {
-                // using a combat pet device
-                if (player.CurrentActivePet is CombatPet)
+                // Summoning a combat pet - only check for existing combat pet
+                if (player.CurrentActiveCombatPet != null)
                 {
-                    player.SendTransientError($"{player.CurrentActivePet.Name} is already active");
+                    // Check if same type (stow toggle)
+                    var stowPet = WeenieClassId == player.CurrentActiveCombatPet.WeenieClassId;
+                    player.CurrentActiveCombatPet.Destroy();
+                    return !stowPet;
                 }
-                else
+                return true;
+            }
+            else
+            {
+                // Summoning a regular/passive pet - only check for existing regular pet
+                if (player.CurrentActivePet != null)
                 {
-                    // stow currently active passive pet
-                    // stowing the currently active passive pet w/ a combat pet device will unfortunately start the cooldown timer (and decrease the structure?) on the combat pet device, as per retail
-                    // spawning the combat pet will require another double click in ~45s, as per retail
+                    // Check if same type (stow toggle)
+                    var stowPet = WeenieClassId == player.CurrentActivePet.WeenieClassId;
                     player.CurrentActivePet.Destroy();
-
-                    return null;
+                    return !stowPet;
                 }
+                return true;
             }
-            return false;
         }
 
         /// <summary>

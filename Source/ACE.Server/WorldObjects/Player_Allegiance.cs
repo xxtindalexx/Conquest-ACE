@@ -352,6 +352,15 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
+            // CONQUEST: Enlightened players cannot swear to un-enlightened players
+            // This prevents power-leveling of new characters via high-level enlightened vassals
+            if (Enlightenment >= 1 && target.Enlightenment == 0)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You are attempting to swear to a character that has never enlightened and your character has too much knowledge to swear to them.", ChatMessageType.Broadcast));
+                return false;
+            }
+
+
             // check ignore allegiance requests
             if (target.GetCharacterOption(CharacterOption.IgnoreAllegianceRequests))
             {

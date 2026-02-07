@@ -116,32 +116,27 @@ namespace ACE.Server.WorldObjects
                 return new ActivationResult(false);
             }
 
-            // duplicating some of this verification logic here from Pet.Init()
-            // since the PetDevice owner and the summoned Pet are separate objects w/ potentially different heartbeat offsets,
-            // the cooldown can still expire before the CombatPet's lifespan
-            // in this case, if the player tries to re-activate the PetDevice while the CombatPet is still in the world,
-            // we want to return an error without re-activating the cooldown
+            // CONQUEST: Check if this device summons a combat pet or regular pet
+            // and only block if the same type is already active
+            var weenie = DatabaseManager.World.GetCachedWeenie((uint)PetClass);
+            var isCombatPetDevice = weenie != null && weenie.WeenieType == WeenieType.CombatPet;
 
-            if (player.CurrentActivePet != null && player.CurrentActivePet is CombatPet)
+            if (isCombatPetDevice)
             {
-                if (PropertyManager.GetBool("pet_stow_replace"))
+                // This is a combat pet device - check if a combat pet is already active
+                if (player.CurrentActiveCombatPet != null)
                 {
-                    // original ace
-                    player.SendTransientError($"{player.CurrentActivePet.Name} is already active");
-                    return new ActivationResult(false);
-                }
-                else
-                {
-                    // retail stow
-                    var weenie = DatabaseManager.World.GetCachedWeenie((uint)PetClass);
-
-                    if (weenie == null || weenie.WeenieType != WeenieType.Pet)
-                    {
-                        player.SendTransientError($"{player.CurrentActivePet.Name} is already active");
-                        return new ActivationResult(false);
-                    }
+                    // Allow re-clicking to stow/toggle
+                    // The HandleCurrentActivePet logic will handle this
                 }
             }
+            else
+            {
+                // This is a regular pet device - check if a regular pet is already active
+                // Regular pets can coexist with combat pets
+                // The HandleCurrentActivePet logic will handle same-pet stowing
+            }
+
             return new ActivationResult(true);
         }
 

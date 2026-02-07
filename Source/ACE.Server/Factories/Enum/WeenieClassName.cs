@@ -41980,6 +41980,11 @@ namespace ACE.Server.Factories.Enum
         conquest_netheryag = 63370087,
         conquest_netheryumi = 63370088,
         conquest_netherbowwar = 63370089,
-        conquest_netherhammer = 63370097,   
+        conquest_netherhammer = 63370097,
+        // CONQUEST: Yoroi armor with Celdon textures
+        conquest_yoroisleeves = 53370014,
+        conquest_yoroibreastplate = 53370015,
+        conquest_yoroigirth = 53370016,
+        conquest_yoroileggings = 53370017,
     }
 }

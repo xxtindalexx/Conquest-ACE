@@ -882,8 +882,17 @@ namespace ACE.Server.WorldObjects
 
             if (this is Pet pet)
             {
-                if (pet.P_PetOwner?.CurrentActivePet == this)
-                    pet.P_PetOwner.CurrentActivePet = null;
+                // CONQUEST: Handle both regular pet and combat pet references
+                if (this is CombatPet)
+                {
+                    if (pet.P_PetOwner?.CurrentActiveCombatPet == this)
+                        pet.P_PetOwner.CurrentActiveCombatPet = null;
+                }
+                else
+                {
+                    if (pet.P_PetOwner?.CurrentActivePet == this)
+                        pet.P_PetOwner.CurrentActivePet = null;
+                }
 
                 if (pet.P_PetDevice?.Pet == Guid.Full)
                     pet.P_PetDevice.Pet = null;

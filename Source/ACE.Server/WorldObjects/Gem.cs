@@ -366,6 +366,20 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // Set pet rarity on the device so it can be read when summoning
+            pet.SetProperty(PropertyInt.PetRarity, eggRarityValue);
+
+            // Set icon underlay based on rarity
+            // Common: 0x06003355, Rare: 0x06003353, Legendary: 0x06003356, Mythic: 0x06003354
+            pet.IconUnderlayId = eggRarityValue switch
+            {
+                1 => 0x06003355, // Common
+                2 => 0x06003353, // Rare
+                3 => 0x06003356, // Legendary
+                4 => 0x06003354, // Mythic
+                _ => null
+            };
+
             // Randomize pet rating bonuses based on rarity (Rare/Legendary/Mythic only)
             AssignRandomPetRatings(pet, eggRarityValue);
 

@@ -651,10 +651,19 @@ namespace ACE.Server.WorldObjects
         public DateTime LastTeleportTime;
 
         /// <summary>
+        /// CONQUEST: Stores PetDevice GUID for pet restoration after teleport
+        /// Only used for regular Pets (not CombatPets)
+        /// </summary>
+        private uint? _savedPetDeviceGuid;
+
+        /// <summary>
         /// This is not thread-safe. Consider using WorldManager.ThreadSafeTeleport() instead if you're calling this from a multi-threaded subsection.
         /// </summary>
         public void Teleport(Position _newPosition, bool fromPortal = false)
         {
+            // CONQUEST: Save and dismiss regular pets (not combat pets) before teleport
+            // They will be restored in OnTeleportComplete()
+            SaveAndDismissPetForTeleport();
             log.Info($"[TELEPORT VARIANT DEBUG] {Name} - Received _newPosition variation: {_newPosition?.Variation?.ToString() ?? "null"}");
             var newPosition = new Position(_newPosition);
             log.Info($"[TELEPORT VARIANT DEBUG] {Name} - After creating newPosition, variation: {newPosition.Variation?.ToString() ?? "null"}");
@@ -878,6 +887,77 @@ namespace ACE.Server.WorldObjects
             // hijacking this for both start/end on portal teleport
             if (LastTeleportStartTimestamp == LastPortalTeleportTimestamp)
                 LastPortalTeleportTimestamp = Time.GetUnixTime();
+
+            // CONQUEST: Restore pet after teleport completes
+            RestorePetAfterTeleport();
+        }
+
+        /// <summary>
+        /// CONQUEST: Saves pet device reference and dismisses regular pet before teleport
+        /// Combat pets are NOT saved - they are dismissed permanently on teleport
+        /// </summary>
+        private void SaveAndDismissPetForTeleport()
+        {
+            _savedPetDeviceGuid = null;
+
+            if (CurrentActivePet == null)
+                return;
+
+            // Only save regular Pets, not CombatPets
+            if (CurrentActivePet is CombatPet)
+                return;
+
+            // Save the PetDevice GUID so we can re-summon after teleport
+            var petDeviceGuid = CurrentActivePet.PetDevice;
+            if (petDeviceGuid != null)
+            {
+                _savedPetDeviceGuid = petDeviceGuid;
+            }
+
+            // Destroy the pet - it will be re-summoned in OnTeleportComplete
+            CurrentActivePet.Destroy();
+        }
+
+        /// <summary>
+        /// CONQUEST: Restores regular pet after teleport using saved PetDevice
+        /// </summary>
+        private void RestorePetAfterTeleport()
+        {
+            if (_savedPetDeviceGuid == null)
+                return;
+
+            var petDeviceGuid = _savedPetDeviceGuid.Value;
+            _savedPetDeviceGuid = null;
+
+            // Find the PetDevice in player's inventory
+            var petDevice = FindObject(petDeviceGuid, SearchLocations.MyInventory) as PetDevice;
+            if (petDevice == null)
+            {
+                // Device no longer in inventory - can't restore pet
+                return;
+            }
+
+            // Check if device has charges and a valid PetClass
+            if (petDevice.Structure == 0 || petDevice.PetClass == null)
+                return;
+
+            // Small delay to ensure player is fully materialized before spawning pet
+            var actionChain = new ActionChain();
+            actionChain.AddDelaySeconds(0.5);
+            actionChain.AddAction(this, ActionType.PlayerLocation_RestorePet, () =>
+            {
+                // Re-verify device is still valid
+                if (petDevice == null || petDevice.PetClass == null)
+                    return;
+
+                // Don't restore if player already has a pet (e.g., summoned something else)
+                if (CurrentActivePet != null)
+                    return;
+
+                // Summon the pet without consuming a charge
+                petDevice.SummonCreature(this, (uint)petDevice.PetClass);
+            });
+            actionChain.EnqueueChain();
         }
 
         public void SendTeleportedViaMagicMessage(WorldObject itemCaster, Spell spell)

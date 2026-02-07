@@ -7082,5 +7082,157 @@ namespace ACE.Server.Command.Handlers
                 CommandHandlerHelper.WriteOutputInfo(session, line);
             }
         }
+
+        [CommandHandler("petpalette-reload", AccessLevel.Developer, CommandHandlerFlag.None, 0,
+            "Reload custom ClothingBase JSON files and database palette options.",
+            "")]
+        public static void HandlePetPaletteReload(Session session, params string[] parameters)
+        {
+            CommandHandlerHelper.WriteOutputInfo(session, "Reloading custom ClothingBase JSON files and database options...");
+            Managers.PetPaletteManager.Reload();
+
+            var stats = Managers.PetPaletteManager.GetCacheStats();
+            foreach (var line in stats.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, line);
+            }
+        }
+
+        [CommandHandler("petpalette-stats", AccessLevel.Developer, CommandHandlerFlag.None, 0,
+            "Display pet palette cache statistics.",
+            "")]
+        public static void HandlePetPaletteStats(Session session, params string[] parameters)
+        {
+            var stats = Managers.PetPaletteManager.GetCacheStats();
+            foreach (var line in stats.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, line);
+            }
+        }
+
+        [CommandHandler("petpalette-info", AccessLevel.Developer, CommandHandlerFlag.None, 1,
+            "Show palette options for a specific creature WCID.",
+            "<wcid>")]
+        public static void HandlePetPaletteInfo(Session session, params string[] parameters)
+        {
+            if (!uint.TryParse(parameters[0], out var wcid))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid WCID. Must be a number.");
+                return;
+            }
+
+            var entries = Managers.PetPaletteManager.GetValidPaletteEntries(wcid);
+            if (entries.Count == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"No palette options found for WCID {wcid}.");
+                return;
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Palette options for WCID {wcid}: {entries.Count} total");
+            foreach (var entry in entries)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"  PaletteTemplate: {entry.PaletteTemplate}, PaletteSet: 0x{entry.PaletteSet:X8}");
+            }
+        }
+
+        [CommandHandler("testpetdevice", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 2,
+            "Create a test pet device with random palette and stats, placed in your inventory.",
+            "<petDeviceWcid> <rarity>\nRarity: 1=Common, 2=Rare, 3=Legendary, 4=Mythic\nExample: /testpetdevice 33919 4")]
+        public static void HandleTestPetDevice(Session session, params string[] parameters)
+        {
+            if (!uint.TryParse(parameters[0], out var petDeviceWcid))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid pet device WCID. Must be a number.");
+                return;
+            }
+
+            if (!int.TryParse(parameters[1], out var rarity) || rarity < 1 || rarity > 4)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid rarity. Must be 1-4 (1=Common, 2=Rare, 3=Legendary, 4=Mythic).");
+                return;
+            }
+
+            var player = session.Player;
+
+            // Create the pet device directly from the specified WCID
+            var pet = WorldObjectFactory.CreateNewWorldObject(petDeviceWcid);
+            if (pet == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Failed to create pet device from WCID {petDeviceWcid}.");
+                return;
+            }
+
+            // Verify it's a PetDevice
+            var petDevice = pet as PetDevice;
+            if (petDevice == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"WCID {petDeviceWcid} is not a pet device.");
+                pet.Destroy();
+                return;
+            }
+
+            // Set pet rarity on the device
+            pet.SetProperty(PropertyInt.PetRarity, rarity);
+
+            // Update name with rarity prefix
+            var baseName = pet.Name ?? "Pet Essence";
+            pet.Name = $"{GetRarityName(rarity)} {baseName}";
+
+            // Set icon underlay based on rarity
+            pet.IconUnderlayId = rarity switch
+            {
+                1 => 0x06003355, // Common
+                2 => 0x06003353, // Rare
+                3 => 0x06003356, // Legendary
+                4 => 0x06003354, // Mythic
+                _ => null
+            };
+
+            // Assign random rating bonuses based on rarity
+            MysteryEgg.AssignRandomPetRatings(pet, rarity);
+
+            // Apply random palette using the creature WCID from PetClass
+            if (petDevice.PetClass != null)
+            {
+                Managers.PetPaletteManager.ApplyRandomPalette(pet, (uint)petDevice.PetClass.Value);
+            }
+
+            // Try to add to inventory
+            if (player.TryCreateInInventoryWithNetworking(pet))
+            {
+                var rarityName = GetRarityName(rarity);
+                CommandHandlerHelper.WriteOutputInfo(session, $"Created {rarityName} pet device: {pet.Name}");
+                CommandHandlerHelper.WriteOutputInfo(session, $"  PetClass (Creature WCID): {petDevice.PetClass}");
+                CommandHandlerHelper.WriteOutputInfo(session, $"  PaletteTemplate: {pet.GetProperty(PropertyInt.PaletteTemplate)}");
+                CommandHandlerHelper.WriteOutputInfo(session, $"  Shade: {pet.GetProperty(PropertyFloat.Shade):F3}");
+                CommandHandlerHelper.WriteOutputInfo(session, $"  PaletteBase: 0x{pet.GetProperty(PropertyDataId.PaletteBase):X8}");
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Inventory full! Could not add pet device.");
+                pet.Destroy();
+            }
+        }
+
+        // Shorthand alias for testpetdevice
+        [CommandHandler("tpd", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 2,
+            "Shorthand for /testpetdevice - Create a test pet device with random palette and stats.",
+            "<petDeviceWcid> <rarity>\nRarity: 1=Common, 2=Rare, 3=Legendary, 4=Mythic")]
+        public static void HandleTpd(Session session, params string[] parameters)
+        {
+            HandleTestPetDevice(session, parameters);
+        }
+
+        private static string GetRarityName(int rarity)
+        {
+            return rarity switch
+            {
+                1 => "Common",
+                2 => "Rare",
+                3 => "Legendary",
+                4 => "Mythic",
+                _ => "Unknown"
+            };
+        }
     }
 }

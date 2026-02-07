@@ -727,6 +727,9 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
+            // CONQUEST: Mystery Egg Drop System
+            TryGenerateMysteryEgg(killer);
+
             // create death treasure from loot generation factory
             if (DeathTreasure != null)
             {
@@ -802,6 +805,101 @@ namespace ACE.Server.WorldObjects
             if (slag == null) return;
 
             corpse.TryAddToInventory(slag);
+        }
+
+        /// <summary>
+        /// CONQUEST: Mystery Egg Drop System
+        /// Rolls for mystery egg drops based on mob level and configurable rates
+        /// Integrates with FellowshipRollManager for distribution and weekly limits
+        /// </summary>
+        private void TryGenerateMysteryEgg(DamageHistoryInfo killer)
+        {
+            // Only monsters can drop eggs
+            if (!IsMonster)
+                return;
+
+            // Must have a valid player killer
+            if (killer == null || !killer.IsPlayer)
+                return;
+
+            var killerPlayer = killer.TryGetAttacker() as Player;
+            if (killerPlayer == null)
+                return;
+
+            // Handle pet owners - credit goes to the pet's owner
+            if (killer.PetOwner != null)
+            {
+                killerPlayer = killer.TryGetPetOwner();
+                if (killerPlayer == null)
+                    return;
+            }
+
+            // Check minimum mob level requirement
+            var minMobLevel = (int)PropertyManager.GetLong("mystery_egg_min_mob_level", 50);
+            var mobLevel = Level ?? 0;
+            if (mobLevel < minMobLevel)
+                return;
+
+            // Calculate drop rate based on mob level
+            var baseDropRate = PropertyManager.GetDouble("mystery_egg_base_drop_rate", 0.002);
+            var dropRate = baseDropRate;
+
+            // Apply level multipliers
+            if (mobLevel >= 200)
+                dropRate *= PropertyManager.GetDouble("mystery_egg_level_mult_200", 2.0);
+            else if (mobLevel >= 150)
+                dropRate *= PropertyManager.GetDouble("mystery_egg_level_mult_150", 1.5);
+            else if (mobLevel >= 100)
+                dropRate *= PropertyManager.GetDouble("mystery_egg_level_mult_100", 1.25);
+            // Level 50-99 uses base rate (1.0x multiplier)
+
+            // Roll for drop
+            var dropRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
+            if (dropRoll > dropRate)
+                return;
+
+            // Egg drop succeeded - determine rarity using weighted random
+            var rarity = RollMysteryEggRarity();
+
+            // Get the mystery egg WCID from config
+            var eggWcid = (uint)PropertyManager.GetLong("mystery_egg_wcid", 801502);
+
+            // Use FellowshipRollManager to handle distribution (respects weekly limits and fellowship rolls)
+            if (killerPlayer.Fellowship != null)
+            {
+                // In a fellowship - initiate roll among eligible members
+                FellowshipRollManager.InitiateRoll(this, eggWcid, rarity, killerPlayer, killerPlayer.Fellowship);
+            }
+            else
+            {
+                // Solo player - award directly with weekly limit check
+                FellowshipRollManager.AwardItemToPlayerDirect(killerPlayer, eggWcid, rarity);
+            }
+        }
+
+        /// <summary>
+        /// Rolls for mystery egg rarity based on configured weights
+        /// </summary>
+        private static string RollMysteryEggRarity()
+        {
+            // Get weights from config
+            var weightCommon = PropertyManager.GetDouble("mystery_egg_weight_common", 85.25);
+            var weightRare = PropertyManager.GetDouble("mystery_egg_weight_rare", 13.0);
+            var weightLegendary = PropertyManager.GetDouble("mystery_egg_weight_legendary", 1.5);
+            var weightMythic = PropertyManager.GetDouble("mystery_egg_weight_mythic", 0.25);
+
+            var totalWeight = weightCommon + weightRare + weightLegendary + weightMythic;
+            var roll = ThreadSafeRandom.Next(0.0f, (float)totalWeight);
+
+            // Determine rarity based on roll
+            if (roll < weightMythic)
+                return "mythic";
+            if (roll < weightMythic + weightLegendary)
+                return "legendary";
+            if (roll < weightMythic + weightLegendary + weightRare)
+                return "rare";
+
+            return "common";
         }
 
         /// <summary>

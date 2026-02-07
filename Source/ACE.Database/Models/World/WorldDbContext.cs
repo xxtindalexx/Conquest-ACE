@@ -129,6 +129,10 @@ public partial class WorldDbContext : DbContext
     // CONQUEST: PK Dungeon configuration
     public virtual DbSet<PkDungeonLandblock> PkDungeonLandblocks { get; set; }
 
+    // CONQUEST: Pet palette randomization
+    public virtual DbSet<PetPaletteOption> PetPaletteOptions { get; set; }
+    public virtual DbSet<PetPaletteSubPalette> PetPaletteSubPalettes { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -1953,6 +1957,82 @@ public partial class WorldDbContext : DbContext
             entity.Property(e => e.Description)
                 .HasMaxLength(255)
                 .HasColumnName("description");
+        });
+
+        // CONQUEST: Pet Palette Options
+        modelBuilder.Entity<PetPaletteOption>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("pet_palette_options", tb => tb.HasComment("CONQUEST: Pet palette options for randomizing pet appearances"));
+
+            entity.HasIndex(e => e.PetWcid, "pet_wcid_idx");
+
+            entity.Property(e => e.Id)
+                .HasComment("Unique Id of this palette option")
+                .HasColumnName("id");
+            entity.Property(e => e.PetWcid)
+                .HasComment("Creature WCID this applies to (0 = all pets)")
+                .HasColumnName("pet_wcid");
+            entity.Property(e => e.PaletteTemplate)
+                .HasComment("PaletteTemplate to use (null = default)")
+                .HasColumnName("palette_template");
+            entity.Property(e => e.ShadeMin)
+                .HasDefaultValue(0f)
+                .HasComment("Minimum shade value")
+                .HasColumnName("shade_min");
+            entity.Property(e => e.ShadeMax)
+                .HasDefaultValue(1f)
+                .HasComment("Maximum shade value")
+                .HasColumnName("shade_max");
+            entity.Property(e => e.Weight)
+                .HasDefaultValue(1)
+                .HasComment("Rarity weight for this option")
+                .HasColumnName("weight");
+            entity.Property(e => e.Name)
+                .HasMaxLength(255)
+                .HasComment("Optional name/description")
+                .HasColumnName("name");
+            entity.Property(e => e.LastModified)
+                .ValueGeneratedOnAddOrUpdate()
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("datetime")
+                .HasColumnName("last_modified");
+        });
+
+        // CONQUEST: Pet Palette Sub-Palettes
+        modelBuilder.Entity<PetPaletteSubPalette>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("pet_palette_sub_palettes", tb => tb.HasComment("CONQUEST: Sub-palette entries for custom pet colors"));
+
+            entity.HasIndex(e => e.PaletteOptionId, "palette_option_id_idx");
+
+            entity.Property(e => e.Id)
+                .HasComment("Unique Id of this sub-palette")
+                .HasColumnName("id");
+            entity.Property(e => e.PaletteOptionId)
+                .HasComment("FK to pet_palette_options")
+                .HasColumnName("palette_option_id");
+            entity.Property(e => e.SubPaletteId)
+                .HasComment("The palette ID to use")
+                .HasColumnName("sub_palette_id");
+            entity.Property(e => e.Offset)
+                .HasComment("Start offset in palette")
+                .HasColumnName("offset");
+            entity.Property(e => e.Length)
+                .HasComment("Number of palette entries")
+                .HasColumnName("length");
+            entity.Property(e => e.LastModified)
+                .ValueGeneratedOnAddOrUpdate()
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("datetime")
+                .HasColumnName("last_modified");
+
+            entity.HasOne(d => d.PetPaletteOption).WithMany(p => p.PetPaletteSubPalettes)
+                .HasForeignKey(d => d.PaletteOptionId)
+                .HasConstraintName("fk_palette_option");
         });
 
         OnModelCreatingPartial(modelBuilder);
