@@ -80,9 +80,7 @@ namespace ACE.Server.Managers
                 return;
             }
 
-            if (recipe.IsTinkering())
-                log.InfoFormat("[TINKERING] {0}.UseObjectOnTarget({1}, {2}) | Status: {3}confirmed", player.Name, source.NameWithMaterial, target.NameWithMaterial, (confirmed ? "" : "un"));
-
+           
             var percentSuccess = GetRecipeChance(player, source, target, recipe);
 
             if (percentSuccess == null)
@@ -394,6 +392,29 @@ namespace ACE.Server.Managers
             {
                 var skill = player.GetCreatureSkill((Skill)recipe.Skill);
                 Proficiency.OnSuccessUse(player, skill, recipe.Difficulty);
+            }
+
+            // Immediately save modified items to prevent loss on crash/disconnect
+            // This is especially important for tinkering operations
+            if (modified != null && modified.Count > 0)
+            {
+                if (modified.Contains(target.Guid.Full))
+                {
+                    log.Info($"[TINKER DEBUG] Save check for {target.Name} (0x{target.Guid.Full:X8}): ChangesDetected={target.ChangesDetected}");
+                    if (target.ChangesDetected)
+                    {
+                        log.Info($"[TINKER DEBUG] Saving {target.Name} to database...");
+                        target.SaveBiotaToDatabase();
+                        log.Info($"[TINKER DEBUG] Save queued for {target.Name}");
+                    }
+                    else
+                    {
+                        log.Warn($"[TINKER DEBUG] NOT saving {target.Name} - ChangesDetected is false!");
+                    }
+                }
+
+                if (modified.Contains(source.Guid.Full) && source.ChangesDetected)
+                    source.SaveBiotaToDatabase();
             }
         }
 
@@ -1078,8 +1099,6 @@ namespace ACE.Server.Managers
                 var message = success ? recipe.SuccessMessage : recipe.FailMessage;
 
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.Craft));
-
-                log.Info($"[CRAFTING] {player.Name} used {source.NameWithMaterial} on {target.NameWithMaterial} {(success ? "" : "un")}successfully. {(destroySource ? $"| {source.NameWithMaterial} was destroyed " : "")}{(destroyTarget ? $"| {target.NameWithMaterial} was destroyed " : "")}| {message}");
             }
             else
                 BroadcastTinkering(player, source, target, successChance, success);
@@ -1108,7 +1127,6 @@ namespace ACE.Server.Managers
             // send local broadcast
             player.EnqueueBroadcast(new GameMessageSystemChat(msg, ChatMessageType.Craft), WorldObject.LocalBroadcastRange, ChatMessageType.Craft);
 
-            log.Info($"[TINKERING] {msg} | Chance: {chance}");
         }
 
         public static WorldObject CreateItem(Player player, uint wcid, uint amount)
@@ -1496,6 +1514,7 @@ namespace ACE.Server.Managers
             //    return TryMutateNative(player, source, target, recipe, dataId);
 
             var numTimesTinkered = target.NumTimesTinkered;
+            var imbuedEffectBefore = target.ImbuedEffect;
 
             var mutationScript = MutationCache.GetMutation(dataId);
 
@@ -1506,6 +1525,16 @@ namespace ACE.Server.Managers
             }
 
             var result = mutationScript.TryMutate(target);
+
+            // Debug logging for tinker persistence issue
+            var imbuedEffectAfter = target.ImbuedEffect;
+            var numTimesTinkeredAfter = target.NumTimesTinkered;
+            log.Info($"[TINKER DEBUG] {player.Name} tinkered {target.Name} (0x{target.Guid.Full:X8}) with mutation 0x{dataId:X8}");
+            log.Info($"[TINKER DEBUG]   ImbuedEffect: {imbuedEffectBefore} -> {imbuedEffectAfter}");
+            log.Info($"[TINKER DEBUG]   NumTimesTinkered: {numTimesTinkered} -> {numTimesTinkeredAfter}");
+            log.Info($"[TINKER DEBUG]   ChangesDetected: {target.ChangesDetected}");
+            log.Info($"[TINKER DEBUG]   Biota.PropertiesInt contains 179 (ImbuedEffect): {target.Biota.PropertiesInt?.ContainsKey(ACE.Entity.Enum.Properties.PropertyInt.ImbuedEffect) ?? false}");
+            log.Info($"[TINKER DEBUG]   Biota.PropertiesInt contains 171 (NumTimesTinkered): {target.Biota.PropertiesInt?.ContainsKey(ACE.Entity.Enum.Properties.PropertyInt.NumTimesTinkered) ?? false}");
 
             if (numTimesTinkered != target.NumTimesTinkered)
                 HandleTinkerLog(source, target);

@@ -660,6 +660,7 @@ namespace ACE.Server.Entity
 
             var msg = $"Arena Match Started: Event Type = {ActiveEvent.EventTypeDisplay}, Players = {ActiveEvent.PlayersDisplay}, EventID = {ActiveEvent.Id}. To watch the event, type /arena watch {ActiveEvent.Id}";
             PlayerManager.BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
+            DiscordChatManager.SendPvPMessage($"⚔️ Arena Match Started: {ActiveEvent.EventTypeDisplay} - {ActiveEvent.PlayersDisplay}");
             try
             {
                 var webhookUrl = PropertyManager.GetString("arena_globals_webhook");
@@ -817,10 +818,7 @@ namespace ACE.Server.Entity
                                 player.GrantLevelProportionalXp(0.05, 0, 0, true);
 
                                 //Give 15k lum
-                                if (player.MaximumLuminance != null)
-                                {
-                                    player.GrantLuminance(15000, XpType.Quest, ShareType.None);
-                                }
+                                player.GrantLuminance(15000, XpType.Quest, ShareType.None);
 
                                 //Give 1 Soul Fragment
                                 var soulFragment = WorldObjectFactory.CreateNewWorldObject(13370003); //Soul Fragment
@@ -860,10 +858,7 @@ namespace ACE.Server.Entity
                                 player.GrantLevelProportionalXp(0.05, 0, 0, true);
 
                                 //Give 15k lum
-                                if (player.MaximumLuminance != null)
-                                {
-                                    player.GrantLuminance(15000, XpType.Quest, ShareType.None);
-                                }
+                                player.GrantLuminance(15000, XpType.Quest, ShareType.None);
 
                                 //Give 1 Soul Fragment
                                 var ffaWinnerSoulFragment = WorldObjectFactory.CreateNewWorldObject(13370003); //Soul Fragment
@@ -900,10 +895,7 @@ namespace ACE.Server.Entity
                                 player.GrantLevelProportionalXp(0.05, 0, 0, true);
 
                                 //Give 15k lum
-                                if (player.MaximumLuminance != null)
-                                {
-                                    player.GrantLuminance(15000, XpType.Quest, ShareType.None);
-                                }
+                                player.GrantLuminance(15000, XpType.Quest, ShareType.None);
 
                                 //Give 1 Soul Fragment
                                 var groupWinnerSoulFragment = WorldObjectFactory.CreateNewWorldObject(13370003); //Soul Fragment
@@ -1034,10 +1026,7 @@ namespace ACE.Server.Entity
                                 player.GrantLevelProportionalXp(0.02, 0, 0, true);
 
                                 //Give 5k lum
-                                if (player.MaximumLuminance != null)
-                                {
-                                    player.GrantLuminance(5000, XpType.Quest, ShareType.None);
-                                }
+                                player.GrantLuminance(5000, XpType.Quest, ShareType.None);
 
                                 break;
 
@@ -1048,10 +1037,7 @@ namespace ACE.Server.Entity
                                 player.GrantLevelProportionalXp(0.02, 0, 0, true);
 
                                 //Give 5k lum
-                                if (player.MaximumLuminance != null)
-                                {
-                                    player.GrantLuminance(5000, XpType.Quest, ShareType.None);
-                                }
+                                player.GrantLuminance(5000, XpType.Quest, ShareType.None);
 
                                 break;
 
@@ -1061,10 +1047,7 @@ namespace ACE.Server.Entity
                                 player.GrantLevelProportionalXp(0.02, 0, 0, true);
 
                                 //Give 5k lum
-                                if (player.MaximumLuminance != null)
-                                {
-                                    player.GrantLuminance(5000, XpType.Quest, ShareType.None);
-                                }
+                                player.GrantLuminance(5000, XpType.Quest, ShareType.None);
 
                                 break;
                         }
@@ -1112,6 +1095,7 @@ namespace ACE.Server.Entity
             //Global Broadcast
             var globalMsg = $"{winnerList} just won a {ActiveEvent.EventTypeDisplay} arena event against {loserList} in {ArenaName}";
             PlayerManager.BroadcastToAll(new GameMessageSystemChat(globalMsg, ChatMessageType.Broadcast));
+            DiscordChatManager.SendPvPMessage($"🏆 {globalMsg}");
             try
             {
                 var webhookUrl = PropertyManager.GetString("arena_globals_webhook");
@@ -1356,6 +1340,7 @@ namespace ACE.Server.Entity
 
             var drawMsg = $"Arena event ended in a draw: {ActiveEvent.EventTypeDisplay} - {ActiveEvent.PlayersDisplay} - {ArenaName}";
             PlayerManager.BroadcastToAll(new GameMessageSystemChat(drawMsg, ChatMessageType.Broadcast));
+            DiscordChatManager.SendPvPMessage($"🤝 {drawMsg}");
             try
             {
                 var webhookUrl = PropertyManager.GetString("arena_globals_webhook");
@@ -1504,12 +1489,12 @@ namespace ACE.Server.Entity
             //heptagon.ArenaName = "The Heptagon";
             //locList.Add(heptagon.LandblockId, heptagon);
 
-            //oneTen
-            var oneTen = new ArenaLocation();
-            oneTen.LandblockId = 0x039D;
-            oneTen.SupportedEventTypes = new List<string>() { "1v1", "tugak" };
-            oneTen.ArenaName = "One Ten";
-            locList.Add(oneTen.LandblockId, oneTen);
+            ////oneTen
+            //var oneTen = new ArenaLocation();
+            //oneTen.LandblockId = 0x039D;
+            //oneTen.SupportedEventTypes = new List<string>() { "1v1", "tugak" };
+            //oneTen.ArenaName = "One Ten";
+            //locList.Add(oneTen.LandblockId, oneTen);
 
             return locList;
         }
@@ -1533,7 +1518,7 @@ namespace ACE.Server.Entity
                         0x596A, //Fowl Basement
                         //0xD50E, //Landing Strip
                         //0x7222  //The Heptagon
-                        0x039D, //One Ten
+                        //0x039D, //One Ten
                     };
                 }
 
@@ -1750,19 +1735,19 @@ namespace ACE.Server.Entity
                     //        // 0x7222002C [143.886292 81.059364 -0.445000] -0.999990 0.000000 0.000000 0.004404
                     //}); //The Heptagon
 
-                    _arenaLocationStartingPositions.Add(
-                        0x039D,
-                        new List<Position>()
-                        {
-                            new Position(0x039D02A4, 104.028847f, -46.040611f, 48.005001f, 0f, 0f, -0.925397f, -0.379000f, false, 2),
-                            //0x039D02A4 [104.028847 -46.040611 48.005001] -0.379000 0.000000 0.000000 -0.925397
-                            new Position(0x039D02A4, 103.830605f, -53.779991f, 48.005001f, 0f, 0f, -0.401763f, -0.915744f, false, 2),
-                            //0x039D02A4 [103.830605 -53.779991 48.005001] -0.915744 0.000000 0.000000 -0.401763
-                            new Position(0x039D02A4, 96.026833f, -53.870930f, 48.005001f, 0f, 0f, 0.449561f, -0.893250f, false, 2),
-                            //0x039D02A4 [96.026833 -53.870930 48.005001] -0.893250 0.000000 0.000000 0.449561
-                            new Position(0x039D02A4, 95.942345f, -45.941307f, 48.005001f, 0f, 0f, 0.924836f, -0.380366f, false, 2),
-                            //0x039D02A4 [95.942345 -45.941307 48.005001] -0.380366 0.000000 0.000000 0.924836
-                        }); //One Ten
+                    //_arenaLocationStartingPositions.Add(
+                    //    0x039D,
+                    //    new List<Position>()
+                    //    {
+                    //        new Position(0x039D02A4, 104.028847f, -46.040611f, 48.005001f, 0f, 0f, -0.925397f, -0.379000f, false, 2),
+                    //        //0x039D02A4 [104.028847 -46.040611 48.005001] -0.379000 0.000000 0.000000 -0.925397
+                    //        new Position(0x039D02A4, 103.830605f, -53.779991f, 48.005001f, 0f, 0f, -0.401763f, -0.915744f, false, 2),
+                    //        //0x039D02A4 [103.830605 -53.779991 48.005001] -0.915744 0.000000 0.000000 -0.401763
+                    //        new Position(0x039D02A4, 96.026833f, -53.870930f, 48.005001f, 0f, 0f, 0.449561f, -0.893250f, false, 2),
+                    //        //0x039D02A4 [96.026833 -53.870930 48.005001] -0.893250 0.000000 0.000000 0.449561
+                    //        new Position(0x039D02A4, 95.942345f, -45.941307f, 48.005001f, 0f, 0f, 0.924836f, -0.380366f, false, 2),
+                    //        //0x039D02A4 [95.942345 -45.941307 48.005001] -0.380366 0.000000 0.000000 0.924836
+                    //    }); //One Ten
                 }
 
                 return _arenaLocationStartingPositions;

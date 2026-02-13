@@ -485,12 +485,24 @@ namespace ACE.Server.Entity
 
             shareType &= ~ShareType.Fellowship;
 
+            // CONQUEST: Pre-calculate which members are in range for dynamic scaling
+            var membersInRange = new List<Player>();
+            foreach (var member in fellowshipMembers.Values)
+            {
+                if (GetDistanceScalar(player, member, xpType) > 0)
+                    membersInRange.Add(member);
+            }
+
             // quest turn-ins: flat share (retail default)
             if (xpType == XpType.Quest && !PropertyManager.GetBool("fellow_quest_bonus"))
             {
-                var perAmount = (long)amount / fellowshipMembers.Count;
+                // CONQUEST: Only split among members in range
+                if (membersInRange.Count == 0)
+                    return;
 
-                foreach (var member in fellowshipMembers.Values)
+                var perAmount = (long)amount / membersInRange.Count;
+
+                foreach (var member in membersInRange)
                 {
                     var fellowXpType = player == member ? XpType.Quest : XpType.Fellowship;
 
@@ -502,15 +514,17 @@ namespace ACE.Server.Entity
             // but with a significant boost to the amount of xp, based on # of fellowship members
             else if (EvenShare)
             {
-                var totalAmount = (ulong)Math.Round(amount * GetMemberSharePercent());
+                // CONQUEST: Scale XP bonus based on members actually in range, not total fellowship size
+                if (membersInRange.Count == 0)
+                    return;
 
-                foreach (var member in fellowshipMembers.Values)
+                var totalAmount = (ulong)Math.Round(amount * GetMemberSharePercent(membersInRange.Count));
+
+                foreach (var member in membersInRange)
                 {
-                    var shareAmount = (ulong)Math.Round(totalAmount * GetDistanceScalar(player, member, xpType));
-
                     var fellowXpType = player == member ? xpType : XpType.Fellowship;
 
-                    member.GrantXP((long)shareAmount, fellowXpType, shareType);
+                    member.GrantXP((long)totalAmount, fellowXpType, shareType);
                 }
 
                 return;
@@ -520,13 +534,17 @@ namespace ACE.Server.Entity
             // based on each fellowship member's level
             else
             {
-                var levelXPSum = fellowshipMembers.Values.Select(p => p.GetXPToNextLevel(p.Level.Value)).Sum();
+                // CONQUEST: Only consider members in range for level-based distribution
+                if (membersInRange.Count == 0)
+                    return;
 
-                foreach (var member in fellowshipMembers.Values)
+                var levelXPSum = membersInRange.Select(p => p.GetXPToNextLevel(p.Level.Value)).Sum();
+
+                foreach (var member in membersInRange)
                 {
                     var levelXPScale = (double)member.GetXPToNextLevel(member.Level.Value) / levelXPSum;
 
-                    var playerTotal = (ulong)Math.Round(amount * levelXPScale * GetDistanceScalar(player, member, xpType));
+                    var playerTotal = (ulong)Math.Round(amount * levelXPScale);
 
                     var fellowXpType = player == member ? xpType : XpType.Fellowship;
 
@@ -554,24 +572,18 @@ namespace ACE.Server.Entity
             }
             else
             {
-                // pre-filter: evenly divide between luminance-eligible fellows
-                // updated: retail supposedly did not do this
-                //var shareableMembers = GetFellowshipMembers().Values.Where(f => f.MaximumLuminance != null).ToList();
+                // CONQUEST: Only consider fellows in range for luminance distribution
+                // This dynamically adjusts the split based on who's actually in the landblock
+                var inRange = WithinRange(player, true);
 
-                var shareableMembers = GetFellowshipMembers().Values.ToList();
-
-                if (shareableMembers.Count == 0)
+                if (inRange.Count == 0)
                     return;
 
-                var perAmount = (long)Math.Round((double)(amount / (ulong)shareableMembers.Count));
-
-                // further filter to fellows in radar range
-                var inRange = shareableMembers.Intersect(WithinRange(player, true)).ToList();
+                // Split evenly among members in range
+                var perAmount = (long)Math.Round((double)(amount / (ulong)inRange.Count));
 
                 foreach (var member in inRange)
                 {
-                    if (member.MaximumLuminance == null) continue;
-
                     var fellowXpType = player == member ? xpType : XpType.Fellowship;
 
                     member.GrantLuminance(perAmount, fellowXpType, shareType);
@@ -582,8 +594,15 @@ namespace ACE.Server.Entity
         internal double GetMemberSharePercent()
         {
             var fellowshipMembers = GetFellowshipMembers();
+            return GetMemberSharePercent(fellowshipMembers.Count);
+        }
 
-            switch (fellowshipMembers.Count)
+        /// <summary>
+        /// CONQUEST: Overload that accepts member count for dynamic scaling based on members in range
+        /// </summary>
+        internal double GetMemberSharePercent(int memberCount)
+        {
+            switch (memberCount)
             {
                 case 1:
                     return 1.0;
@@ -638,10 +657,18 @@ namespace ACE.Server.Entity
             if (earner.Location.Indoors != fellow.Location.Indoors)
                 return 0.0f;
 
-            // If you are both indoors but in different landblocks.
-            if (earner.Location.Indoors && fellow.Location.Indoors && earner.Location.Landblock != fellow.Location.Landblock)
+            // If you are both indoors but in different landblocks or different variations.
+            if (earner.Location.Indoors && fellow.Location.Indoors &&
+                (earner.Location.Landblock != fellow.Location.Landblock || earner.Location.Variation != fellow.Location.Variation))
                 return 0.0f;
 
+            // CONQUEST: If both players are in the same dungeon (indoor landblock AND same variation), full XP regardless of distance
+            // This allows XP sharing across the entire dungeon even if one player is at the top and another at the bottom
+            if (earner.Location.Indoors && fellow.Location.Indoors &&
+                earner.Location.Landblock == fellow.Location.Landblock && earner.Location.Variation == fellow.Location.Variation)
+                return 1.0f;
+
+            // Outdoor distance scaling
             var dist = earner.Location.Distance2D(fellow.Location);
 
             if (dist >= MaxDistance * 2.0f)
@@ -656,13 +683,12 @@ namespace ACE.Server.Entity
         }
 
         /// <summary>
-        /// Returns fellows within radar range (75 units outdoors, 25 units indoors)
+        /// Returns fellows within sharing range
+        /// CONQUEST: Same dungeon = always in range, outdoor uses distance scaling
         /// </summary>
         public List<Player> WithinRange(Player player, bool includeSelf = false)
         {
             var fellows = GetFellowshipMembers();
-
-            var landblockRange = PropertyManager.GetBool("fellow_kt_landblock");
 
             var results = new List<Player>();
 
@@ -671,11 +697,26 @@ namespace ACE.Server.Entity
                 if (player == fellow && !includeSelf)
                     continue;
 
-                var shareable = player == fellow || landblockRange ?
-                    player.CurrentLandblock == fellow.CurrentLandblock || player.Location.DistanceTo(fellow.Location) <= 192.0f :
-                    player.Location.Distance2D(fellow.Location) <= player.CurrentRadarRange && player.ObjMaint.VisibleObjectsContainsKey(fellow.Guid.Full);      // 2d visible distance / radar range?
+                // CONQUEST: If both players are in the same dungeon (indoor landblock AND same variation), always in range
+                if (player.Location.Indoors && fellow.Location.Indoors &&
+                    player.Location.Landblock == fellow.Location.Landblock && player.Location.Variation == fellow.Location.Variation)
+                {
+                    results.Add(fellow);
+                    continue;
+                }
 
-                if (shareable)
+                // If one is indoor and one is outdoor, not in range
+                if (player.Location.Indoors != fellow.Location.Indoors)
+                    continue;
+
+                // If both are indoors but different landblocks or different variations, not in range
+                if (player.Location.Indoors && fellow.Location.Indoors &&
+                    (player.Location.Landblock != fellow.Location.Landblock || player.Location.Variation != fellow.Location.Variation))
+                    continue;
+
+                // Outdoor: use distance check
+                var dist = player.Location.Distance2D(fellow.Location);
+                if (dist <= MaxDistance)
                     results.Add(fellow);
             }
             return results;

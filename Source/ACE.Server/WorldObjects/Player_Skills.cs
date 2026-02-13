@@ -132,13 +132,13 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
-            // Check if Summoning skill requires Void Magic to be specialized
+            // Check if Summoning skill requires Void Magic to be trained
             if (skill == Skill.Summoning)
             {
                 var voidMagicSkill = GetCreatureSkill(Skill.VoidMagic, false);
-                if (voidMagicSkill == null || voidMagicSkill.AdvancementClass < SkillAdvancementClass.Specialized)
+                if (voidMagicSkill == null || voidMagicSkill.AdvancementClass < SkillAdvancementClass.Trained)
                 {
-                    Session.Network.EnqueueSend(new GameMessageSystemChat("You must specialize Void Magic before you can train Summoning!", ChatMessageType.Advancement));
+                    Session.Network.EnqueueSend(new GameMessageSystemChat("You must train Void Magic before you can train Summoning!", ChatMessageType.Advancement));
                     return false;
                 }
             }
@@ -186,11 +186,11 @@ namespace ACE.Server.WorldObjects
             if (creatureSkill.AdvancementClass >= SkillAdvancementClass.Trained || creditsSpent > AvailableSkillCredits)
                 return false;
 
-            // Server-side validation: Summoning requires Void Magic to be specialized
+            // Server-side validation: Summoning requires Void Magic to be trained
             if (skill == Skill.Summoning)
             {
                 var voidMagicSkill = GetCreatureSkill(Skill.VoidMagic, false);
-                if (voidMagicSkill == null || voidMagicSkill.AdvancementClass < SkillAdvancementClass.Specialized)
+                if (voidMagicSkill == null || voidMagicSkill.AdvancementClass < SkillAdvancementClass.Trained)
                     return false;
             }
 
@@ -296,6 +296,10 @@ namespace ACE.Server.WorldObjects
                 creatureSkill.ExperienceSpent = 0;
             }
 
+            // CONQUEST: If Void Magic is now untrained, also reset Summoning if trained/specialized
+            if (skill == Skill.VoidMagic && creatureSkill.AdvancementClass == SkillAdvancementClass.Untrained)
+                ResetSummoningIfTrained();
+
             return true;
         }
 
@@ -332,6 +336,7 @@ namespace ACE.Server.WorldObjects
         /// Called during OnTeleportComplete to ensure both new and existing characters have these skills
         /// Skills granted: Armor/Weapon/Item/MagicItem Tinkering (specialized, no credit cost)
         /// These skills are in AlwaysTrained list, so they cannot be untrained for credit refunds
+        /// Mule characters are excluded and have these skills removed if present
         /// </summary>
         public void GrantFreeTinkeringSkills()
         {
@@ -342,6 +347,21 @@ namespace ACE.Server.WorldObjects
                 Skill.ItemTinkering,
                 Skill.MagicItemTinkering
             };
+
+            // CONQUEST: Mules should not have tinkering skills - remove if present
+            // Also ensure mules are excluded from leaderboards
+            if (IsMule)
+            {
+                RemoveTinkeringSkillsFromMule(tinkeringSkills);
+
+                // Ensure mules are excluded from leaderboards
+                if (!ExcludeFromLeaderboards)
+                {
+                    ExcludeFromLeaderboards = true;
+                    ChangesDetected = true;
+                }
+                return;
+            }
 
             var updatedSkills = new List<CreatureSkill>();
 
@@ -374,6 +394,42 @@ namespace ACE.Server.WorldObjects
                     Session.Network.EnqueueSend(new GameMessagePrivateUpdateSkill(this, skill));
                 }
                 Session.Network.EnqueueSend(new GameMessageSystemChat("You have been granted free trained tinkering skills!", ChatMessageType.Advancement));
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Removes tinkering skills from mule characters
+        /// Called when a mule logs in and has tinkering skills that were previously granted
+        /// </summary>
+        private void RemoveTinkeringSkillsFromMule(List<Skill> tinkeringSkills)
+        {
+            var removedSkills = new List<CreatureSkill>();
+
+            foreach (var skill in tinkeringSkills)
+            {
+                var creatureSkill = GetCreatureSkill(skill);
+
+                // If trained or specialized, reset to untrained
+                if (creatureSkill.AdvancementClass == SkillAdvancementClass.Trained ||
+                    creatureSkill.AdvancementClass == SkillAdvancementClass.Specialized)
+                {
+                    creatureSkill.AdvancementClass = SkillAdvancementClass.Untrained;
+                    creatureSkill.Ranks = 0;
+                    creatureSkill.InitLevel = 0;
+                    creatureSkill.ExperienceSpent = 0;
+
+                    removedSkills.Add(creatureSkill);
+                }
+            }
+
+            // Send network updates to refresh skills on client
+            if (removedSkills.Any() && Session != null)
+            {
+                foreach (var skill in removedSkills)
+                {
+                    Session.Network.EnqueueSend(new GameMessagePrivateUpdateSkill(this, skill));
+                }
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Tinkering skills have been removed from your mule character.", ChatMessageType.Broadcast));
             }
         }
 
@@ -990,7 +1046,51 @@ namespace ACE.Server.WorldObjects
             else
                 Session.Network.EnqueueSend(updateSkill, new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
 
+            // CONQUEST: If Void Magic is now untrained, also reset Summoning if trained/specialized
+            if (skill == Skill.VoidMagic && creatureSkill.AdvancementClass == SkillAdvancementClass.Untrained)
+                ResetSummoningIfTrained();
+
             return true;
+        }
+
+        /// <summary>
+        /// CONQUEST: Resets Summoning skill if it is trained or specialized
+        /// Called when Void Magic is dropped to untrained, since Summoning requires Void Magic
+        /// </summary>
+        private void ResetSummoningIfTrained()
+        {
+            var summoningSkill = GetCreatureSkill(Skill.Summoning, false);
+            if (summoningSkill == null || summoningSkill.AdvancementClass < SkillAdvancementClass.Trained)
+                return;
+
+            // Get skill base for credit refunds
+            if (!DatManager.PortalDat.SkillTable.SkillBaseHash.TryGetValue((uint)Skill.Summoning, out var skillBase))
+                return;
+
+            var wasSpecialized = summoningSkill.AdvancementClass == SkillAdvancementClass.Specialized;
+
+            // Refund XP
+            RefundXP(summoningSkill.ExperienceSpent);
+
+            // Refund skill credits
+            var creditsRefunded = skillBase.TrainedCost;
+            if (wasSpecialized)
+                creditsRefunded += skillBase.UpgradeCostFromTrainedToSpecialized;
+
+            AvailableSkillCredits += creditsRefunded;
+
+            // Reset skill to untrained
+            summoningSkill.AdvancementClass = SkillAdvancementClass.Untrained;
+            summoningSkill.InitLevel = 0;
+            summoningSkill.Ranks = 0;
+            summoningSkill.ExperienceSpent = 0;
+
+            // Send network updates
+            var updateSkill = new GameMessagePrivateUpdateSkill(this, summoningSkill);
+            var updateCredits = new GameMessagePrivateUpdatePropertyInt(this, PropertyInt.AvailableSkillCredits, AvailableSkillCredits ?? 0);
+            var msg = new GameMessageSystemChat($"Your Summoning skill has been reset because Void Magic is no longer trained. All experience and skill credits have been refunded.", ChatMessageType.Broadcast);
+
+            Session.Network.EnqueueSend(updateSkill, updateCredits, msg);
         }
 
         /// <summary>

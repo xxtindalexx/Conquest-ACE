@@ -318,6 +318,11 @@ namespace ACE.Server.WorldObjects
             var salvageAmount = CalcNumUnits((int)salvageSkill, workmanship, AugmentationBonusSalvage) * stackSize;
             var tinkeringAmount = CalcNumUnits((int)highestTrainedTinkeringSkill, workmanship, 0);
 
+            // DEBUG: Log salvage calculation details
+            //Console.WriteLine($"[SALVAGE DEBUG] {Name}: Item={salvageItem.Name}, Workmanship={workmanship}, StackSize={stackSize}");
+            //Console.WriteLine($"[SALVAGE DEBUG] {Name}: SalvageSkill={salvageSkill}, TinkeringSkill={highestTrainedTinkeringSkill}, Augs={AugmentationBonusSalvage}");
+            //Console.WriteLine($"[SALVAGE DEBUG] {Name}: SalvageAmount={salvageAmount}, TinkeringAmount={tinkeringAmount}");
+
             // cap tinkeringAmount to item workmanship
             tinkeringAmount = Math.Min(tinkeringAmount, (int)Math.Round(salvageItem.Workmanship ?? 1.0f)) * stackSize;
 

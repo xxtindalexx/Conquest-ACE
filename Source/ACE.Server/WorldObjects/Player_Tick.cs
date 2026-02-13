@@ -4,6 +4,7 @@ using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Entity.PKQuests;
 using ACE.Server.Factories;
 using ACE.Server.Managers;
 using ACE.Server.Network.Enum;
@@ -123,6 +124,9 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Check PK-only dungeon enforcement
             PKDungeonEnforcementTick();
+
+            // CONQUEST: Track time spent in PK dungeons for quests
+            PKDungeonQuestTick();
 
             // CONQUEST: Check PvP custom augmentation mode timeout
             if (PropertyManager.GetBool("pvp_disable_custom_augs"))
@@ -830,6 +834,64 @@ namespace ACE.Server.WorldObjects
 
             if (MagicState.IsCasting)
                 HandleMotionDone_Magic(motionID, success);
+        }
+
+        // Track accumulated time for PK dungeon quest (saved periodically, not every tick)
+        private int _pkDungeonTimeAccumulator = 0;
+        private const int PK_DUNGEON_TIME_SAVE_INTERVAL = 60; // Save every 60 seconds
+
+        /// <summary>
+        /// CONQUEST: Tracks time spent in PK dungeons for quest progress
+        /// Called every heartbeat (~5 seconds) to increment PKDUNGEON_TIME_1H quest
+        /// </summary>
+        private void PKDungeonQuestTick()
+        {
+            // Check if player is in a landblock
+            if (CurrentLandblock == null || Location == null)
+                return;
+
+            var currentLandblock = (ushort)CurrentLandblock.Id.Landblock;
+            var currentVariation = Location.Variation ?? 0;
+
+            // Check if current location is a PK-only dungeon
+            if (!ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                return;
+
+            // Must be PK to earn time credit
+            if (PlayerKillerStatus != PlayerKillerStatus.PK)
+                return;
+
+            // Increment time spent in PK dungeon (heartbeat interval is ~5 seconds)
+            var timeIncrement = (int)CachedHeartbeatInterval;
+            if (timeIncrement <= 0)
+                timeIncrement = 5;
+
+            // Check if player has the time quest assigned and not completed
+            var timeQuest = PkQuestList.FirstOrDefault(x => x.QuestCode == "PKDUNGEON_TIME_1H");
+            if (timeQuest != null && !timeQuest.IsCompleted)
+            {
+                timeQuest.TaskDoneCount += timeIncrement;
+                _pkDungeonTimeAccumulator += timeIncrement;
+
+                var quest = PKQuests.GetPkQuestByCode("PKDUNGEON_TIME_1H");
+                if (quest != null && timeQuest.TaskDoneCount >= quest.TaskCount)
+                {
+                    if (!timeQuest.IsCompleted || !timeQuest.CompletedTime.HasValue)
+                    {
+                        timeQuest.IsCompleted = true;
+                        timeQuest.CompletedTime = DateTime.Now;
+                        Session.Network.EnqueueSend(new GameMessageSystemChat($"\nPK Quest Completed: {quest.Description}", ChatMessageType.System));
+                        SaveSerializedPkQuestList();
+                        _pkDungeonTimeAccumulator = 0;
+                    }
+                }
+                // Only save periodically to avoid excessive database writes
+                else if (_pkDungeonTimeAccumulator >= PK_DUNGEON_TIME_SAVE_INTERVAL)
+                {
+                    SaveSerializedPkQuestList();
+                    _pkDungeonTimeAccumulator = 0;
+                }
+            }
         }
     }
 }

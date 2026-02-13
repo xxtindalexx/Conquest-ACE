@@ -159,48 +159,6 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// Checks if player can use another treasure map (2 per 24 hours limit)
-        /// Resets counter if 24 hours have passed
-        /// </summary>
-        private static bool CheckDailyLimit(Player player)
-        {
-            var currentTime = (long)Time.GetUnixTime();
-            var lastResetTime = player.GetProperty(PropertyInt64.LastTreasureMapResetTime) ?? 0;
-            var mapsUsedToday = player.GetProperty(PropertyInt.TreasureMapsUsedToday) ?? 0;
-
-            // Check if 24 hours have passed since last reset
-            var timeSinceReset = currentTime - lastResetTime;
-            if (timeSinceReset >= 86400) // 86400 seconds = 24 hours
-            {
-                // Reset counter
-                player.SetProperty(PropertyInt.TreasureMapsUsedToday, 0);
-                player.SetProperty(PropertyInt64.LastTreasureMapResetTime, currentTime);
-                mapsUsedToday = 0;
-            }
-
-            // Check if player has reached daily limit
-            if (mapsUsedToday >= 2)
-            {
-                var hoursRemaining = (86400 - timeSinceReset) / 3600.0;
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"You have already used 2 treasure maps today. You can use another in {hoursRemaining:F1} hours.",
-                    ChatMessageType.System));
-                return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Increments the daily treasure map usage counter
-        /// </summary>
-        private static void IncrementDailyCounter(Player player)
-        {
-            var mapsUsedToday = player.GetProperty(PropertyInt.TreasureMapsUsedToday) ?? 0;
-            player.SetProperty(PropertyInt.TreasureMapsUsedToday, mapsUsedToday + 1);
-        }
-
-        /// <summary>
         /// Gives treasure map rewards to player based on probability table
         /// 100% 5 conquest coins, 100% 3 MMDs, then probability rolls for optional rewards
         /// Min 3 reward types, Max 5 reward types
@@ -436,15 +394,6 @@ namespace ACE.Server.WorldObjects
                     {
                         //Console.WriteLine("[DEBUG] Damage counter has reached 7, creating treasure chest...");
 
-                        // Check daily limit before completing the treasure map
-                        if (!CheckDailyLimit(player))
-                        {
-                            player.Session.Network.EnqueueSend(new GameMessageSystemChat(
-                                "You have reached your daily treasure map limit. The map remains in your inventory.",
-                                ChatMessageType.System));
-                            return;
-                        }
-
                         var animTime = DatManager.PortalDat.ReadFromDat<MotionTable>(player.MotionTableId).GetAnimationLength(MotionCommand.Pickup);
                         var actionChain = new ActionChain();
                         actionChain.AddAction(player, ActionType.TreasureMap_FoundTreasure, () =>
@@ -458,9 +407,6 @@ namespace ACE.Server.WorldObjects
                             player.EnqueueBroadcast(new GameMessageSound(player.Guid, Sound.HitPlate1, 1.0f));
                             player.EnqueueBroadcastMotion(new Motion(player.CurrentMotionState.Stance));
                             player.EnqueueBroadcast(new GameMessageSystemChat("You found the buried treasure!", ChatMessageType.System));
-
-                            // Increment daily counter (player successfully completed a treasure map)
-                            IncrementDailyCounter(player);
 
                             // After the message is shown, give loot to the player
                             GiveLootToPlayer(player);  // Call to give loot directly to the player's inventory

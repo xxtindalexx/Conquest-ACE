@@ -115,6 +115,10 @@ namespace ACE.Server.Network.Structure
             if (wo.Damage != null && !(wo is Clothing) || wo is MeleeWeapon || wo is Missile || wo is MissileLauncher || wo is Ammunition || wo is Caster)
                 BuildWeapon(wo);
 
+            // CONQUEST: Build pet device property descriptions
+            if (wo is PetDevice petDevice)
+                BuildPetDevice(petDevice);
+
             // TODO: Resolve this issue a better way?
             // Because of the way ACE handles default base values in recipe system (or rather the lack thereof)
             // we need to check the following weapon properties to see if they're below expected minimum and adjust accordingly
@@ -673,22 +677,224 @@ namespace ACE.Server.Network.Structure
             {
                 PropertiesBool[PropertyBool.SplitArrows] = true;
                 // prefer configured values; otherwise fall back to runtime defaults for transparency
-                const int DefaultSplitArrowCount = 3;
-                const double DefaultSplitArrowRange = 8.0;
-                const double DefaultSplitArrowDamageMultiplier = 0.6;
-
-                var splitCount = weapon.GetProperty(PropertyInt.SplitArrowCount) ?? DefaultSplitArrowCount;
+                var splitCount = weapon.GetProperty(PropertyInt.SplitArrowCount) ?? Creature.DEFAULT_SPLIT_ARROW_COUNT;
                 PropertiesInt[PropertyInt.SplitArrowCount] = splitCount;
 
-                var splitRange = weapon.GetProperty(PropertyFloat.SplitArrowRange) ?? DefaultSplitArrowRange;
+                var splitRange = weapon.GetProperty(PropertyFloat.SplitArrowRange) ?? Creature.DEFAULT_SPLIT_ARROW_RANGE;
                 PropertiesFloat[PropertyFloat.SplitArrowRange] = splitRange;
 
-                var damageMultiplier = weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? DefaultSplitArrowDamageMultiplier;
+                var damageMultiplier = weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? Creature.DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER;
                 PropertiesFloat[PropertyFloat.SplitArrowDamageMultiplier] = damageMultiplier;
             }
 
+            // Build detailed weapon property descriptions
+            BuildWeaponPropertyDescriptions(weapon);
+
             // item enchantments can also be on wielder currently
             AddEnchantments(weapon);
+        }
+
+        /// <summary>
+        /// Builds detailed human-readable descriptions of weapon special properties
+        /// Appends to the Use property string for display in appraisal panel
+        /// </summary>
+        private void BuildWeaponPropertyDescriptions(WorldObject weapon)
+        {
+            var descriptions = new List<string>();
+
+            // Slayer bonus
+            var slayerCreatureType = weapon.SlayerCreatureType;
+            var slayerDamageBonus = weapon.SlayerDamageBonus;
+            if (slayerCreatureType != null && slayerDamageBonus != null && slayerDamageBonus > 1.0f)
+            {
+                var creatureName = FormatCreatureName(slayerCreatureType.Value.ToString());
+                descriptions.Add($"- {creatureName} Slayer: {slayerDamageBonus.Value:G}x Dmg");
+            }
+
+            // Biting Strike (critical frequency bonus)
+            var critFrequency = weapon.GetProperty(PropertyFloat.CriticalFrequency);
+            if (critFrequency != null && critFrequency > 0)
+            {
+                var critPercent = critFrequency.Value * 100;
+                descriptions.Add($"- Biting Strike: +{critPercent:F0}% Crit Chance");
+            }
+
+            // Crushing Blow (critical damage multiplier)
+            var critDamageMod = weapon.GetProperty(PropertyFloat.CriticalMultiplier);
+            if (critDamageMod != null && critDamageMod > 1.0)
+            {
+                descriptions.Add($"- Crushing Blow: {critDamageMod:G}x Crit Dmg");
+            }
+
+            // Resistance Cleaving (vulnerability)
+            var resistanceCleaving = weapon.GetProperty(PropertyInt.ResistanceModifierType);
+            if (resistanceCleaving != null && resistanceCleaving > 0)
+            {
+                var damageType = (DamageType)resistanceCleaving.Value;
+                var vulnMod = weapon.GetProperty(PropertyFloat.ResistanceModifier) ?? 1.0;
+                if (vulnMod > 1.0)
+                {
+                    var vulnPercent = (vulnMod - 1.0) * 100;
+                    descriptions.Add($"- Resistance Cleaving: +{vulnPercent:F0}% {damageType.DisplayName()} Dmg (vuln)");
+                }
+            }
+
+            // Armor Cleaving
+            var armorCleaving = weapon.GetProperty(PropertyFloat.IgnoreArmor);
+            if (armorCleaving != null && armorCleaving > 0)
+            {
+                var ignorePercent = armorCleaving.Value * 100;
+                descriptions.Add($"- Armor Cleaving: Ignores {ignorePercent:F0}% Armor");
+            }
+
+            // Split Arrows
+            var hasSplitArrows = weapon.GetProperty(PropertyBool.SplitArrows);
+            if (hasSplitArrows == true)
+            {
+                var splitCount = weapon.GetProperty(PropertyInt.SplitArrowCount) ?? Creature.DEFAULT_SPLIT_ARROW_COUNT;
+                var splitRange = weapon.GetProperty(PropertyFloat.SplitArrowRange) ?? Creature.DEFAULT_SPLIT_ARROW_RANGE;
+                var splitDamage = weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? Creature.DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER;
+                var splitDamagePercent = splitDamage * 100;
+                descriptions.Add($"- Split Arrows: +{splitCount} targets, {splitRange:F0}m range, {splitDamagePercent:F0}% Dmg");
+            }
+
+            // Imbued effects
+            var imbuedEffect = (ImbuedEffectType)(weapon.GetProperty(PropertyInt.ImbuedEffect) ?? 0);
+
+            // Critical Strike
+            if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
+                descriptions.Add("- Critical Strike: +Crit Chance");
+
+            // Crippling Blow
+            if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
+                descriptions.Add("- Crippling Blow: +Crit Dmg");
+
+            // Armor Rending
+            if (imbuedEffect.HasFlag(ImbuedEffectType.ArmorRending))
+                descriptions.Add("- Armor Rending: Crits ignore armor");
+
+            // Elemental Rending effects
+            if (imbuedEffect.HasFlag(ImbuedEffectType.SlashRending))
+                descriptions.Add("- Slash Rending: +Slash Dmg (vuln)");
+            if (imbuedEffect.HasFlag(ImbuedEffectType.PierceRending))
+                descriptions.Add("- Pierce Rending: +Pierce Dmg (vuln)");
+            if (imbuedEffect.HasFlag(ImbuedEffectType.BludgeonRending))
+                descriptions.Add("- Bludgeon Rending: +Bludgeon Dmg (vuln)");
+            if (imbuedEffect.HasFlag(ImbuedEffectType.AcidRending))
+                descriptions.Add("- Acid Rending: +Acid Dmg (vuln)");
+            if (imbuedEffect.HasFlag(ImbuedEffectType.ColdRending))
+                descriptions.Add("- Cold Rending: +Cold Dmg (vuln)");
+            if (imbuedEffect.HasFlag(ImbuedEffectType.ElectricRending))
+                descriptions.Add("- Lightning Rending: +Lightning Dmg (vuln)");
+            if (imbuedEffect.HasFlag(ImbuedEffectType.FireRending))
+                descriptions.Add("- Fire Rending: +Fire Dmg (vuln)");
+            if (imbuedEffect.HasFlag(ImbuedEffectType.NetherRending))
+                descriptions.Add("- Void Rending: +Void Dmg (vuln)");
+
+            // Always Critical
+            if (imbuedEffect.HasFlag(ImbuedEffectType.AlwaysCritical))
+                descriptions.Add("- Always Critical: 100% Crit Chance");
+
+            // Ignore All Armor
+            if (imbuedEffect.HasFlag(ImbuedEffectType.IgnoreAllArmor))
+                descriptions.Add("- Ignore Armor: Bypasses all armor");
+
+            // Append descriptions to Use property if any exist
+            if (descriptions.Count > 0)
+            {
+                var existingUse = weapon.GetProperty(PropertyString.Use) ?? "";
+                var separator = string.IsNullOrEmpty(existingUse) ? "" : "\n\n";
+                var header = "Property Details:";
+                var descriptionText = header + "\n" + string.Join("\n", descriptions);
+
+                if (PropertiesString.ContainsKey(PropertyString.Use))
+                    PropertiesString[PropertyString.Use] = existingUse + separator + descriptionText + "\n";
+                else
+                    PropertiesString[PropertyString.Use] = descriptionText + "\n";
+            }
+        }
+
+        /// <summary>
+        /// Formats a creature type name for display (e.g., "UndeadHuman" -> "Undead Human")
+        /// </summary>
+        private static string FormatCreatureName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return name;
+
+            // Insert spaces before capital letters (except the first one)
+            var result = new System.Text.StringBuilder();
+            for (int i = 0; i < name.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]))
+                    result.Append(' ');
+                result.Append(name[i]);
+            }
+            return result.ToString();
+        }
+
+        /// <summary>
+        /// CONQUEST: Builds detailed human-readable descriptions of pet device properties
+        /// Shows rarity, rating bonuses, and special abilities
+        /// </summary>
+        private void BuildPetDevice(PetDevice petDevice)
+        {
+            var descriptions = new List<string>();
+
+            // Get pet rarity
+            var petRarity = petDevice.GetProperty(PropertyInt.PetRarity);
+            if (petRarity != null)
+            {
+                string rarityName;
+                switch (petRarity.Value)
+                {
+                    case 1: rarityName = "Common"; break;
+                    case 2: rarityName = "Rare"; break;
+                    case 3: rarityName = "Legendary"; break;
+                    case 4: rarityName = "Mythic"; break;
+                    default: rarityName = "Unknown"; break;
+                }
+                descriptions.Add($"- Rarity: {rarityName}");
+            }
+
+            // Get rating bonuses
+            var damageRating = petDevice.GetProperty(PropertyInt.PetBonusDamageRating);
+            if (damageRating != null && damageRating > 0)
+                descriptions.Add($"- Damage Rating: +{damageRating}");
+
+            var damageReductionRating = petDevice.GetProperty(PropertyInt.PetBonusDamageReductionRating);
+            if (damageReductionRating != null && damageReductionRating > 0)
+                descriptions.Add($"- Damage Reduction Rating: +{damageReductionRating}");
+
+            var critDamageRating = petDevice.GetProperty(PropertyInt.PetBonusCritDamageRating);
+            if (critDamageRating != null && critDamageRating > 0)
+                descriptions.Add($"- Crit Damage Rating: +{critDamageRating}");
+
+            var critDamageReductionRating = petDevice.GetProperty(PropertyInt.PetBonusCritDamageReductionRating);
+            if (critDamageReductionRating != null && critDamageReductionRating > 0)
+                descriptions.Add($"- Crit Damage Reduction Rating: +{critDamageReductionRating}");
+
+            // Mythic pets have special abilities
+            if (petRarity != null && petRarity.Value == 4)
+            {
+                descriptions.Add($"- Casts Heal other 3 when owner below 50% HP");
+                descriptions.Add($"- Casts Revitalize other 3 when owner below 50% Stam");
+                descriptions.Add($"- These spells have a 30 second cooldown");
+            }
+
+            // Append descriptions to Use property if any exist
+            if (descriptions.Count > 0)
+            {
+                var existingUse = petDevice.GetProperty(PropertyString.Use) ?? "";
+                var separator = string.IsNullOrEmpty(existingUse) ? "" : "\n\n";
+                var header = "Pet Details:";
+                var descriptionText = header + "\n" + string.Join("\n", descriptions);
+
+                if (PropertiesString.ContainsKey(PropertyString.Use))
+                    PropertiesString[PropertyString.Use] = existingUse + separator + descriptionText + "\n";
+                else
+                    PropertiesString[PropertyString.Use] = descriptionText + "\n";
+            }
         }
 
         private void BuildHookProfile(WorldObject hookedItem)

@@ -8,12 +8,14 @@ using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Entity.PKQuests;
 using ACE.Server.Factories;
 using ACE.Server.Factories.Entity;
 using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Server.Network.Managers;
 using ACE.Server.Network.Structure;
 using ACE.Server.WorldObjects;
 using ACE.Server.WorldObjects.Entity;
@@ -49,10 +51,33 @@ namespace ACE.Server.Command.Handlers
         //     //TODO: output
         // }
 
+        // sessions - Show current session count and limits
+        [CommandHandler("sessions", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 0,
+            "Shows current session count and server limits.")]
+        public static void HandleSessions(Session session, params string[] parameters)
+        {
+            var currentSessions = NetworkManager.GetSessionCount();
+            var authenticatedSessions = NetworkManager.GetAuthenticatedSessionCount();
+            var maxSessions = ConfigManager.Config.Server.Network.MaximumAllowedSessions;
+            var maxPerIP = ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress;
+            var onlinePlayers = PlayerManager.GetOnlineCount();
+
+            var msg = new StringBuilder();
+            msg.AppendLine("=== Server Session Info ===");
+            msg.AppendLine($"Online Players: {onlinePlayers}");
+            msg.AppendLine($"Active Sessions: {currentSessions}");
+            msg.AppendLine($"Authenticated Sessions: {authenticatedSessions}");
+            msg.AppendLine($"Maximum Allowed Sessions: {maxSessions}");
+            msg.AppendLine($"Maximum Sessions Per IP: {(maxPerIP == -1 ? "Unlimited" : maxPerIP.ToString())}");
+            msg.AppendLine($"Available Slots: {maxSessions - authenticatedSessions}");
+
+            session.Network.EnqueueSend(new GameMessageSystemChat(msg.ToString(), ChatMessageType.Broadcast));
+        }
+
         // bankaudit {subcommand} {parameters}
         [CommandHandler("bankaudit", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1,
             "Bank transfer audit commands.",
-            "log|patterns|suspicious|summaries|alerts|monitor|config|items|blacklist|status|cleanup|ip|migrate|fixsummaries|bankban|top|help\nUse 'bankaudit help' for detailed command information.")]
+            "log|patterns|suspicious|summaries|alerts|monitor|config|items|blacklist|status|cleanup|ip|migrate|fixsummaries|bankban|top|export|help\nUse 'bankaudit help' for detailed command information.")]
         public static void HandleBankAudit(Session session, params string[] parameters)
         {
             HandleBankAuditInternal(session, parameters);
@@ -61,7 +86,7 @@ namespace ACE.Server.Command.Handlers
         // ba {subcommand} {parameters} - Alias for bankaudit
         [CommandHandler("ba", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1,
             "Bank transfer audit commands (alias for bankaudit).",
-            "log|patterns|suspicious|summaries|alerts|monitor|config|items|blacklist|status|cleanup|ip|migrate|fixsummaries|bankban|top|help\nUse 'ba help' for detailed command information.")]
+            "log|patterns|suspicious|summaries|alerts|monitor|config|items|blacklist|status|cleanup|ip|migrate|fixsummaries|bankban|top|export|help\nUse 'ba help' for detailed command information.")]
         public static void HandleBA(Session session, params string[] parameters)
         {
             HandleBankAuditInternal(session, parameters);
@@ -72,7 +97,7 @@ namespace ACE.Server.Command.Handlers
             if (parameters.Length < 1)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /bankaudit <subcommand> [parameters] (or /ba)", ChatMessageType.Help));
-                session.Network.EnqueueSend(new GameMessageSystemChat("Subcommands: log, patterns, suspicious, summaries, alerts, monitor, config, items, blacklist, status, cleanup, ip, migrate, fixsummaries, bankban, top, help", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Subcommands: log, patterns, suspicious, summaries, alerts, monitor, config, items, blacklist, status, cleanup, ip, migrate, fixsummaries, bankban, top, export, help", ChatMessageType.Help));
                 return;
             }
 
@@ -128,6 +153,9 @@ namespace ACE.Server.Command.Handlers
                     break;
                 case "top":
                     HandleTransferTop(session, subParams);
+                    break;
+                case "export":
+                    HandleTransferExport(session, subParams);
                     break;
                 case "help":
                     HandleTransferHelp(session, subParams);
@@ -590,6 +618,7 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat("/bankaudit items list - Show tracked items list", ChatMessageType.System));
             session.Network.EnqueueSend(new GameMessageSystemChat("/bankaudit ip <player> [days] - Show IP address patterns for transfers", ChatMessageType.System));
             session.Network.EnqueueSend(new GameMessageSystemChat("/bankaudit top [days] - Show most active transfer participants", ChatMessageType.System));
+            session.Network.EnqueueSend(new GameMessageSystemChat("/bankaudit export [days] - Export transfer logs to CSV and upload to Discord", ChatMessageType.System));
             session.Network.EnqueueSend(new GameMessageSystemChat("/bankaudit migrate - Create/update all transfer monitoring tables", ChatMessageType.System));
             session.Network.EnqueueSend(new GameMessageSystemChat("/bankaudit fixsummaries - Fix duplicate transfer summaries and create unique index", ChatMessageType.System));
 
@@ -733,6 +762,109 @@ namespace ACE.Server.Command.Handlers
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Error retrieving top transfer participants: {ex.Message}", ChatMessageType.System));
             }
+        }
+
+        private static void HandleTransferExport(Session session, string[] parameters)
+        {
+            var days = 7;
+            if (parameters.Length > 0 && int.TryParse(parameters[0], out var parsedDays))
+            {
+                days = parsedDays;
+            }
+
+            // Clamp days to prevent ArgumentOutOfRangeException
+            days = Math.Max(1, Math.Min(days, 3650)); // ~10 years safety window
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Exporting transfer logs from the last {days} days...", ChatMessageType.System));
+
+            try
+            {
+                var transfers = TransferLogger.GetRecentTransfers(days);
+
+                if (transfers.Count == 0)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"No transfer logs found in the last {days} days.", ChatMessageType.System));
+                    return;
+                }
+
+                // Build CSV content
+                var csv = new StringBuilder();
+
+                // CSV header
+                csv.AppendLine("Id,Timestamp,TransferType,FromPlayerName,FromPlayerAccount,ToPlayerName,ToPlayerAccount,ItemName,Quantity,FromPlayerIP,ToPlayerIP,FromAccountCreated,ToAccountCreated,FromCharacterCreated,ToCharacterCreated,AdditionalData");
+
+                // CSV data rows
+                foreach (var t in transfers)
+                {
+                    var row = string.Join(",",
+                        EscapeCsvField(t.Id.ToString()),
+                        EscapeCsvField(t.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")),
+                        EscapeCsvField(t.TransferType),
+                        EscapeCsvField(t.FromPlayerName),
+                        EscapeCsvField(t.FromPlayerAccount ?? ""),
+                        EscapeCsvField(t.ToPlayerName),
+                        EscapeCsvField(t.ToPlayerAccount ?? ""),
+                        EscapeCsvField(t.ItemName),
+                        EscapeCsvField(t.Quantity.ToString()),
+                        EscapeCsvField(t.FromPlayerIP ?? ""),
+                        EscapeCsvField(t.ToPlayerIP ?? ""),
+                        EscapeCsvField(t.FromAccountCreatedDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? ""),
+                        EscapeCsvField(t.ToAccountCreatedDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? ""),
+                        EscapeCsvField(t.FromCharacterCreatedDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? ""),
+                        EscapeCsvField(t.ToCharacterCreatedDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? ""),
+                        EscapeCsvField(t.AdditionalData ?? "")
+                    );
+                    csv.AppendLine(row);
+                }
+
+                // Generate filename with timestamp
+                var filename = $"transfer_logs_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+                var csvBytes = Encoding.UTF8.GetBytes(csv.ToString());
+
+                // Check if Discord integration is enabled
+                var trackingChannelId = ConfigManager.Config.Chat.TrackingAuditChannelId;
+                if (trackingChannelId == 0 || !ConfigManager.Config.Chat.EnableDiscordConnection)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat("Discord tracking channel is not configured. Export cannot be sent.", ChatMessageType.System));
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Generated {transfers.Count} rows of export data.", ChatMessageType.System));
+                    return;
+                }
+
+                // Create memory stream for the file
+                using (var ms = new MemoryStream(csvBytes))
+                {
+                    var fileAttachment = new Discord.FileAttachment(ms, filename);
+                    var exportedBy = session.Player?.Name ?? "Unknown";
+                    DiscordChatManager.SendDiscordFile(
+                        "[EXPORT]",
+                        $"Transfer log export ({transfers.Count} records, last {days} days) by {exportedBy}",
+                        trackingChannelId,
+                        fileAttachment
+                    );
+                }
+
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Export complete! {transfers.Count} records exported to Discord tracking channel.", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"File: {filename}", ChatMessageType.System));
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Export failed: {ex.Message}", ChatMessageType.System));
+                log.Error($"Transfer export failed: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static string EscapeCsvField(string field)
+        {
+            if (string.IsNullOrEmpty(field))
+                return "\"\"";
+
+            // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
+            if (field.Contains(",") || field.Contains("\"") || field.Contains("\n") || field.Contains("\r"))
+            {
+                return "\"" + field.Replace("\"", "\"\"") + "\"";
+            }
+
+            return field;
         }
 
         private static void HandleTransferItems(Session session, string[] parameters)
@@ -7233,6 +7365,214 @@ namespace ACE.Server.Command.Handlers
                 4 => "Mythic",
                 _ => "Unknown"
             };
+        }
+
+        [CommandHandler("banip", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1, "Block an IP address from connecting", "<ip address> <reason> or 'list' to show banned IPs")]
+        public static void HandleBanIp(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /banip <ip address> <reason>");
+                CommandHandlerHelper.WriteOutputInfo(session, "       /banip list");
+                return;
+            }
+
+            // Handle list command
+            if (parameters[0].ToLower() == "list")
+            {
+                ListBannedIps(session);
+                return;
+            }
+
+            var ipAddress = parameters[0];
+
+            // Validate IP format
+            if (!System.Net.IPAddress.TryParse(ipAddress, out _))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Invalid IP address format: {ipAddress}");
+                return;
+            }
+
+            var reason = parameters.Length > 1 ? string.Join(" ", parameters.Skip(1)) : "No reason provided";
+            var ruleName = $"ACE Ban {ipAddress}";
+
+            try
+            {
+                // Execute netsh command to block the IP
+                var process = new System.Diagnostics.Process();
+                process.StartInfo.FileName = "netsh";
+                process.StartInfo.Arguments = $"advfirewall firewall add rule name=\"{ruleName}\" dir=in action=block remoteip={ipAddress}";
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.RedirectStandardError = true;
+                process.StartInfo.CreateNoWindow = true;
+                process.Start();
+                process.WaitForExit(5000);
+
+                var output = process.StandardOutput.ReadToEnd();
+                var error = process.StandardError.ReadToEnd();
+
+                if (process.ExitCode == 0)
+                {
+                    var logMsg = $"[IP BAN] {session.Player.Name} banned IP {ipAddress} | Reason: {reason}";
+                    log.Info(logMsg);
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Successfully banned IP: {ipAddress}");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Reason: {reason}");
+
+                    // Send to Discord admin channel
+                    DiscordChatManager.SendDiscordMessage("IP Ban", logMsg, ConfigManager.Config.Chat.AdminChannelId);
+                }
+                else
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Failed to ban IP. Error: {error}");
+                }
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error executing ban: {ex.Message}");
+                log.Error($"[IP BAN] Error banning IP {ipAddress}: {ex.Message}");
+            }
+        }
+
+        private static void ListBannedIps(Session session)
+        {
+            try
+            {
+                var process = new System.Diagnostics.Process();
+                process.StartInfo.FileName = "netsh";
+                process.StartInfo.Arguments = "advfirewall firewall show rule name=all dir=in";
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.CreateNoWindow = true;
+                process.Start();
+                process.WaitForExit(10000);
+
+                var output = process.StandardOutput.ReadToEnd();
+                var lines = output.Split('\n');
+
+                var bannedIps = new List<string>();
+                string currentRuleName = null;
+                string currentRemoteIp = null;
+
+                foreach (var line in lines)
+                {
+                    var trimmedLine = line.Trim();
+                    if (trimmedLine.StartsWith("Rule Name:") && trimmedLine.Contains("ACE Ban"))
+                    {
+                        currentRuleName = trimmedLine.Replace("Rule Name:", "").Trim();
+                    }
+                    else if (trimmedLine.StartsWith("RemoteIP:") && currentRuleName != null)
+                    {
+                        currentRemoteIp = trimmedLine.Replace("RemoteIP:", "").Trim();
+                        bannedIps.Add(currentRemoteIp);
+                        currentRuleName = null;
+                        currentRemoteIp = null;
+                    }
+                }
+
+                if (bannedIps.Count == 0)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, "No banned IPs found.");
+                }
+                else
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"\n===== Banned IPs ({bannedIps.Count}) =====");
+                    foreach (var ip in bannedIps)
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, $"  {ip}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error listing banned IPs: {ex.Message}");
+            }
+        }
+
+        [CommandHandler("unbanip", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1, "Remove an IP address ban", "<ip address>")]
+        public static void HandleUnbanIp(Session session, params string[] parameters)
+        {
+            var ipAddress = parameters[0];
+
+            // Validate IP format
+            if (!System.Net.IPAddress.TryParse(ipAddress, out _))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Invalid IP address format: {ipAddress}");
+                return;
+            }
+
+            var ruleName = $"ACE Ban {ipAddress}";
+
+            try
+            {
+                var process = new System.Diagnostics.Process();
+                process.StartInfo.FileName = "netsh";
+                process.StartInfo.Arguments = $"advfirewall firewall delete rule name=\"{ruleName}\"";
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.RedirectStandardError = true;
+                process.StartInfo.CreateNoWindow = true;
+                process.Start();
+                process.WaitForExit(5000);
+
+                var output = process.StandardOutput.ReadToEnd();
+                var error = process.StandardError.ReadToEnd();
+
+                if (process.ExitCode == 0 && !output.Contains("No rules match"))
+                {
+                    var logMsg = $"[IP UNBAN] {session.Player.Name} unbanned IP {ipAddress}";
+                    log.Info(logMsg);
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Successfully unbanned IP: {ipAddress}");
+
+                    // Send to Discord admin channel
+                    DiscordChatManager.SendDiscordMessage("IP Unban", logMsg, ConfigManager.Config.Chat.AdminChannelId);
+                }
+                else
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"No ban found for IP: {ipAddress}");
+                }
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error removing ban: {ex.Message}");
+                log.Error($"[IP UNBAN] Error unbanning IP {ipAddress}: {ex.Message}");
+            }
+        }
+
+        [CommandHandler("checkpkquests", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 1, "View a player's PK quest progress", "<player name>")]
+        public static void HandleCheckPkQuests(Session session, params string[] parameters)
+        {
+            var playerName = string.Join(" ", parameters);
+            var target = PlayerManager.GetOnlinePlayer(playerName);
+
+            if (target == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Player '{playerName}' is not online.");
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"\n===== PK Quests for {target.Name} =====");
+
+            if (target.PkQuestList == null || target.PkQuestList.Count == 0)
+            {
+                sb.AppendLine("No active PK quests assigned.");
+            }
+            else
+            {
+                foreach (var pkQuest in target.PkQuestList)
+                {
+                    var quest = PKQuests.GetPkQuestByCode(pkQuest.QuestCode);
+                    if (quest == null)
+                        continue;
+
+                    var status = pkQuest.IsCompleted ? "[COMPLETE]" : $"[{pkQuest.TaskDoneCount}/{quest.TaskCount}]";
+                    var rewarded = pkQuest.RewardDelivered ? " (Rewarded)" : "";
+                    sb.AppendLine($"  {status} {quest.Description}{rewarded}");
+                }
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, sb.ToString());
         }
     }
 }

@@ -1333,7 +1333,10 @@ namespace ACE.Server.WorldObjects.Managers
                         if (questName.EndsWith("@#kt", StringComparison.Ordinal))
                             log.Warn($"0x{WorldObject.Guid}:{WorldObject.Name} ({WorldObject.WeenieClassId}).EmoteManager.ExecuteEmote: EmoteType.StampQuest({questName}) is a depreciated kill task method.");
 
-                        questTarget.QuestManager.Stamp(emote.Message);
+                        // CONQUEST: Stamp returns false if IP restriction blocks the quest
+                        // Return -1 to signal the emote chain should be aborted (no Give, etc.)
+                        if (!questTarget.QuestManager.Stamp(emote.Message))
+                            return -1;
                     }
                     break;
 
@@ -2056,6 +2059,17 @@ namespace ACE.Server.WorldObjects.Managers
 
             if (Debug)
                 Console.WriteLine($" - { nextDelay}");
+
+            // CONQUEST: Negative delay signals the emote chain should be aborted (e.g., IP restriction blocked quest stamp)
+            if (nextDelay < 0)
+            {
+                Nested--;
+
+                if (Nested == 0)
+                    IsBusy = false;
+
+                return;
+            }
 
             if (emoteIdx < emoteSet.PropertiesEmoteAction.Count - 1)
                 Enqueue(emoteSet, targetObject, emoteIdx + 1, nextDelay);

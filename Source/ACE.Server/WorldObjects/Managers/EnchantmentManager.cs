@@ -601,8 +601,8 @@ namespace ACE.Server.WorldObjects.Managers
         /// </summary>
         public virtual void RemoveAllEnchantments()
         {
-            // exclude cooldowns and enchantments from items
-            var spellsToExclude = WorldObject.Biota.PropertiesEnchantmentRegistry.Clone(WorldObject.BiotaDatabaseLock).Where(i => i.Duration == -1 || i.SpellId > short.MaxValue).Select(i => i.SpellId);
+            // exclude vitae, cooldowns and enchantments from items
+            var spellsToExclude = WorldObject.Biota.PropertiesEnchantmentRegistry.Clone(WorldObject.BiotaDatabaseLock).Where(i => i.Duration == -1 || i.SpellId > short.MaxValue || i.SpellId == (int)SpellId.Vitae).Select(i => i.SpellId);
 
             WorldObject.Biota.PropertiesEnchantmentRegistry.RemoveAllEnchantments(spellsToExclude, WorldObject.BiotaDatabaseLock);
             WorldObject.ChangesDetected = true;
@@ -714,6 +714,8 @@ namespace ACE.Server.WorldObjects.Managers
                 return;
 
             var vitae = GetVitae();
+
+            //Console.WriteLine($"[VITAE DEBUG] {Player.Name}: RemoveVitae called, vitae={vitae?.StatModValue}");
 
             Remove(vitae);
         }
@@ -1694,7 +1696,14 @@ namespace ACE.Server.WorldObjects.Managers
         public void SendUpdateVitae()
         {
             if (Player == null) return;
-            var vitae = new Enchantment(Player, GetVitae());
+            var vitaeEntry = GetVitae();
+            if (vitaeEntry == null)
+            {
+                //Console.WriteLine($"[VITAE DEBUG] {Player.Name}: SendUpdateVitae called but GetVitae() returned null!");
+                return;
+            }
+            var vitae = new Enchantment(Player, vitaeEntry);
+            //Console.WriteLine($"[VITAE DEBUG] {Player.Name}: SendUpdateVitae - sending penalty={((1-vitae.StatModValue)*100):F1}% to client");
             Player.Session.Network.EnqueueSend(new GameEventMagicUpdateEnchantment(Player.Session, vitae));
         }
 

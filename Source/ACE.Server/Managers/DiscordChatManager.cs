@@ -389,6 +389,39 @@ namespace ACE.Server.Managers
         {
             outgoingMessages.Enqueue(message);
         }
+
+        /// <summary>
+        /// Sends a PvP-related message (PK deaths, arena events) to the configured PvP Discord channel
+        /// </summary>
+        public static void SendPvPMessage(string message)
+        {
+            if (!ConfigManager.Config.Chat.EnableDiscordConnection)
+                return;
+
+            var channelId = ConfigManager.Config.Chat.PvPChannelId;
+            if (channelId == 0)
+                return;
+
+            try
+            {
+                if (_discordSocketClient == null || _discordSocketClient.ConnectionState != ConnectionState.Connected)
+                    return;
+
+                var guild = _discordSocketClient.GetGuild((ulong)ConfigManager.Config.Chat.ServerId);
+                if (guild == null)
+                    return;
+
+                var channel = guild.GetTextChannel((ulong)channelId);
+                if (channel == null)
+                    return;
+
+                _ = channel.SendMessageAsync(message);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[DiscordRelay] Error sending PvP message: {ex.Message}");
+            }
+        }
     }
 }
 

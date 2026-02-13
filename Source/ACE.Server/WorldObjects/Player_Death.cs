@@ -10,6 +10,7 @@ using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Entity.PKQuests;
 using ACE.Server.Factories;
 using ACE.Server.Managers;
 using ACE.Server.Network.Structure;
@@ -112,6 +113,30 @@ namespace ACE.Server.WorldObjects
                     ACE.Server.Managers.ArenaManager.HandlePlayerDeath(Character.Id, pkPlayer.Character.Id);
                 }
 
+                // CONQUEST: Track PK dungeon kills for quests
+                if (CurrentLandblock != null && Location != null)
+                {
+                    var currentLandblock = (ushort)CurrentLandblock.Id.Landblock;
+                    var currentVariation = Location.Variation ?? 0;
+
+                    if (ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                    {
+                        // Increment kill quests for the killer
+                        pkPlayer.CompletePkQuestTasks(PKQuests.PKQuests_PKDungeonKills);
+
+                        // Reset survive streak for the victim (died in PK dungeon)
+                        var surviveQuest = PkQuestList.FirstOrDefault(x => x.QuestCode == "PKDUNGEON_SURVIVE");
+                        if (surviveQuest != null && !surviveQuest.IsCompleted)
+                        {
+                            surviveQuest.TaskDoneCount = 0;
+                            SaveSerializedPkQuestList();
+                        }
+
+                        // Increment survive streak for the killer
+                        pkPlayer.CompletePkQuestTask("PKDUNGEON_SURVIVE");
+                    }
+                }
+
                 // CONQUEST: Track PK death timestamp for 20-minute cooldown on /pk on command
                 SetProperty(PropertyInt64.LastPKDeathTime, (long)Time.GetUnixTime());
 
@@ -123,6 +148,12 @@ namespace ACE.Server.WorldObjects
                 globalPKDe += "\n[PKDe]";
 
                 PlayerManager.BroadcastToAll(new GameMessageSystemChat(globalPKDe, ChatMessageType.Broadcast));
+
+                // Send to Discord PvP channel
+                var discordPKMsg = $"⚔️ **{lastDamager.Name}** has defeated **{Name}**!";
+                if ((Location.Cell & 0xFFFF) < 0x100)
+                    discordPKMsg += $" (at {Location.GetMapCoordStr()})";
+                DiscordChatManager.SendPvPMessage(discordPKMsg);
             }
             else if (IsPKLiteDeath(topDamager))
                 pkPlayer.PlayerKillsPkl++;
@@ -222,6 +253,11 @@ namespace ACE.Server.WorldObjects
                 var msgPurgeEnchantments = new GameEventMagicPurgeEnchantments(Session);
                 EnchantmentManager.RemoveAllEnchantments();
                 Session.Network.EnqueueSend(msgPurgeEnchantments);
+
+                // Re-send vitae to client after purge, since purge removes ALL enchantments from client display
+                // but RemoveAllEnchantments() preserves vitae server-side
+                if (HasVitae)
+                    EnchantmentManager.SendUpdateVitae();
             }
             else
             {
@@ -260,10 +296,8 @@ namespace ACE.Server.WorldObjects
         {
             // teleport to sanctuary or best location
             var sanctuaryPosition = Sanctuary ?? Instantiation ?? Location;
-            log.Info($"[DEATH VARIANT DEBUG] {Name} - Sanctuary variation: {sanctuaryPosition?.Variation?.ToString() ?? "null"}");
 
             var newPosition = new Position(sanctuaryPosition);
-            log.Info($"[DEATH VARIANT DEBUG] {Name} - newPosition variation after copy: {newPosition.Variation?.ToString() ?? "null"}");
 
             // CONQUEST: Preserve variant from lifestone - if lifestone is on variant, respawn on that variant
             // If lifestone has no variant, Variation will be null by default

@@ -347,6 +347,28 @@ namespace ACE.Server.WorldObjects
         {
             if (!PropertyManager.GetBool("require_spell_comps"))
                 Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyBool(this, PropertyBool.SpellComponentsRequired, false));
+
+            // CONQUEST: Clear any stale arena observer properties from previous session
+            // This handles players who logged out while in observer mode
+            // Only trigger for actual arena observers, not admins using /cloak
+            if (IsArenaObserver || IsPendingArenaObserver)
+            {
+                IsArenaObserver = false;
+                IsPendingArenaObserver = false;
+                RecallsDisabled = false;
+                IsFrozen = false;
+                Attackable = true;
+                Cloaked = false;
+                Ethereal = false;
+                NoDraw = false;
+                Visibility = false;
+                ReportCollisions = true;
+                if (GagDuration <= 0)
+                {
+                    IsGagged = false;
+                }
+                EnqueueBroadcastPhysicsState();
+            }
         }
 
         /// <summary>

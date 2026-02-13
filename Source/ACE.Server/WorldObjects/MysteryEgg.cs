@@ -260,6 +260,11 @@ namespace ACE.Server.WorldObjects
 
                 player.SendMessage($"Your {rarityName} Mystery Egg hatched into {pet.Name}!");
 
+                // CONQUEST: Add quest stamp for tracking pet acquisition (RarityName + PetName without spaces)
+                var petNameNoSpaces = pet.Name?.Replace(" ", "") ?? "Unknown";
+                var questStamp = $"{rarityName}{petNameNoSpaces}";
+                player.QuestManager.Stamp(questStamp);
+
                 // Global broadcast for Legendary and Mythic
                 if (eggRarity.Value >= 3)
                 {
@@ -359,6 +364,11 @@ namespace ACE.Server.WorldObjects
                 };
 
                 player.SendMessage($"Your {rarityName} Mystery Egg has hatched into {pet.Name}!");
+
+                // CONQUEST: Add quest stamp for tracking pet acquisition (RarityName + PetName without spaces)
+                var petNameNoSpaces = pet.Name?.Replace(" ", "") ?? "Unknown";
+                var questStamp = $"{rarityName}{petNameNoSpaces}";
+                player.QuestManager.Stamp(questStamp);
 
                 // Global broadcast for Legendary and Mythic
                 if (eggRarity.Value >= 3)

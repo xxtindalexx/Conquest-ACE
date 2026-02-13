@@ -51,6 +51,23 @@ namespace ACE.Entity.Enum
             }
         }
 
+        /// <summary>
+        /// Returns a user-friendly display name for the damage type
+        /// Used in appraisal info for weapon properties
+        /// </summary>
+        public static string DisplayName(this DamageType damageType)
+        {
+            switch (damageType)
+            {
+                case DamageType.Electric:
+                    return "Lightning";
+                case DamageType.Nether:
+                    return "Void";
+                default:
+                    return damageType.ToString();
+            }
+        }
+
         public static bool IsMultiDamage(this DamageType damageType)
         {
             return EnumHelper.HasMultiple((uint)damageType);

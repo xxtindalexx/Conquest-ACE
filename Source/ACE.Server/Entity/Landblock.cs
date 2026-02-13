@@ -64,6 +64,58 @@ namespace ACE.Server.Entity
         // Loaded from database on server startup via LoadPKDungeonsFromDatabase()
         public static readonly HashSet<(ushort landblock, int variation)> pkDungeonLandblocks = new();
 
+        // CONQUEST: Cache of landblock names for fellowship list display
+        // Key is landblock ID, value is the location name (e.g., "Egg Orchard")
+        // Loaded from database on server startup via LoadLandblockNamesFromDatabase()
+        public static readonly Dictionary<ushort, string> landblockNames = new();
+
+        /// <summary>
+        /// CONQUEST: Gets the cached name for a landblock, or empty string if not found
+        /// </summary>
+        public static string GetLandblockName(ushort landblockId)
+        {
+            return landblockNames.TryGetValue(landblockId, out var name) ? name : "";
+        }
+
+        /// <summary>
+        /// CONQUEST: Loads landblock names from database into cache
+        /// Called during server startup
+        /// </summary>
+        public static void LoadLandblockNamesFromDatabase()
+        {
+            log.Info("Loading landblock names from database...");
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var descriptions = context.LandblockDescription.ToList();
+
+                    landblockNames.Clear();
+
+                    foreach (var desc in descriptions)
+                    {
+                        if (!string.IsNullOrWhiteSpace(desc.Name))
+                        {
+                            var landblockId = (ushort)desc.Landblock;
+                            // Only store the first name for each landblock (some may have duplicates)
+                            if (!landblockNames.ContainsKey(landblockId))
+                            {
+                                landblockNames[landblockId] = desc.Name;
+                            }
+                        }
+                    }
+
+                    log.Info($"Successfully loaded {landblockNames.Count} landblock name(s).");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error loading landblock names from database: {ex.Message}");
+                log.Error($"Stack trace: {ex.StackTrace}");
+            }
+        }
+
         /// <summary>
         /// CONQUEST: Loads PK dungeon landblock configurations from database into pkDungeonLandblocks HashSet
         /// Called during server startup

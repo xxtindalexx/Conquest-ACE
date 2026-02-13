@@ -251,7 +251,9 @@ namespace ACE.Entity.Enum.Properties
         EnrageMirrorImageChance = 9308,
         EnrageLeapKnockbackDistance = 9309,
         EnrageLeapStunDuration = 9310,
+        [AssessmentProperty]
         NSCoordinates                  = 9014,  // North/South coordinate for treasure maps
+        [AssessmentProperty]
         EWCoordinates                  = 9015,  // East/West coordinate for treasure maps
         [AssessmentProperty]
         SplitArrowRange                = 9032,

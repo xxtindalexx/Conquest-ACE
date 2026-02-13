@@ -1204,6 +1204,18 @@ namespace ACE.Database
             }
         }
 
+        /// <summary>
+        /// Gets the quest IP tracking record for a specific quest and IP address (read-only check)
+        /// </summary>
+        public QuestIpTracking GetQuestIpTracking(uint questId, string playerIp)
+        {
+            using (var context = new ShardDbContext())
+            {
+                return context.QuestIpTracking
+                    .FirstOrDefault(q => q.QuestId == questId && q.IpAddress == playerIp);
+            }
+        }
+
         #region Mystery Egg IP Tracking
 
         /// <summary>

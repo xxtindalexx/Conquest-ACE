@@ -1,6 +1,7 @@
 using log4net;
 
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Server.WorldObjects;
 
 namespace ACE.Server.Entity.Mutations
@@ -108,6 +109,14 @@ namespace ACE.Server.Entity.Mutations
 
                     result = arg1 * arg2;
                     break;
+            }
+
+            // Debug logging for tinker persistence issue
+            if (Quality.Type == EffectArgumentType.Quality &&
+                (Quality.StatIdx == (int)PropertyInt.ImbuedEffect ||
+                 Quality.StatIdx == (int)PropertyInt.NumTimesTinkered))
+            {
+                log.Info($"[MUTATION DEBUG] {wo.Name} (0x{wo.Guid}): Setting {(PropertyInt)Quality.StatIdx} = {result.GetValue()}");
             }
 
             Quality.StoreValue(wo, result);

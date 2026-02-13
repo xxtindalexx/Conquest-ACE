@@ -98,13 +98,12 @@ namespace ACE.Server.WorldObjects
         private void UpdateLumAllegiance(long amount)
         {
             if (!HasAllegiance)
-            {
                 return;
-            }
+
             if (amount <= 0)
-            {
                 return;
-            }
+
+            AllegianceManager.PassXP(AllegianceNode, (ulong)amount, true, true);
         }
 
         private void UpdateLuminance()

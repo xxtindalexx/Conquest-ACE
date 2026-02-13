@@ -52,6 +52,14 @@ namespace ACE.Server.WorldObjects
         {
             //log.Info($"-");
 
+            // CONQUEST: Arena observers cannot attack
+            if (IsArenaObserver)
+            {
+                Session.Network.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat("You cannot attack while observing an arena match.", ChatMessageType.Broadcast));
+                SendUseDoneEvent();
+                return;
+            }
+
             if (CombatMode != CombatMode.Melee)
             {
                 log.Warn($"{Name}.HandleActionTargetedMeleeAttack({targetGuid:X8}, {attackHeight}, {powerLevel}) - CombatMode mismatch {CombatMode}, LastCombatMode {LastCombatMode}");

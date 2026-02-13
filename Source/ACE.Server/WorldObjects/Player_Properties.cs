@@ -1460,6 +1460,15 @@ namespace ACE.Server.WorldObjects
             set { if (!value) RemoveProperty(PropertyBool.ExcludeFromLeaderboards); else SetProperty(PropertyBool.ExcludeFromLeaderboards, value); }
         }
 
+        /// <summary>
+        /// CONQUEST: Toggle to show/hide XP breakdown details when earning XP
+        /// </summary>
+        public bool ShowXpBreakdown
+        {
+            get => GetProperty(PropertyBool.ShowXpBreakdown) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.ShowXpBreakdown); else SetProperty(PropertyBool.ShowXpBreakdown, value); }
+        }
+
         public long? LuminanceAugmentSpellDurationCount
         {
             get => GetProperty(PropertyInt64.LumAugDurationCount) ?? 0;

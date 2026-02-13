@@ -210,5 +210,10 @@ namespace ACE.Entity.Enum.Properties
         IsPendingArenaObserver = 9038,
         HasArenaRareDmgBuff = 9039,
         HasArenaRareDmgReductionBuff = 9040,
+
+        /// <summary>
+        /// CONQUEST: If TRUE, shows detailed XP breakdown when earning XP from kills/quests
+        /// </summary>
+        ShowXpBreakdown = 9041,
     }
 }

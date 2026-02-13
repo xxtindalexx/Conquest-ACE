@@ -179,7 +179,9 @@ namespace ACE.Server.Managers
 
             if (!eventType.ToLower().Equals("group"))
             {
-                PlayerManager.BroadcastToAll(new GameMessageSystemChat($"A new player has queued for a{(eventType.ToLower().Equals("ffa") ? "n" : "")} {eventType} arena match. There {(queueCount > 1 ? "are" : "is")} currently {queueCount} player{(queueCount > 1 ? "s" : "")} queued for {eventType}", ChatMessageType.Broadcast));
+                var queueMsg = $"A new player has queued for a{(eventType.ToLower().Equals("ffa") ? "n" : "")} {eventType} arena match. There {(queueCount > 1 ? "are" : "is")} currently {queueCount} player{(queueCount > 1 ? "s" : "")} queued for {eventType}";
+                PlayerManager.BroadcastToAll(new GameMessageSystemChat(queueMsg, ChatMessageType.Broadcast));
+                DiscordChatManager.SendPvPMessage($"🏟️ {queueMsg}");
             }
 
             return true;
@@ -1059,22 +1061,40 @@ namespace ACE.Server.Managers
             actionChain.AddDelaySeconds(3);
             actionChain.AddAction(player, ActionType.ArenaObserver_ExitTeleport, () =>
             {
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You've exited observer mode for an arena match.", ChatMessageType.System));
-                player.ReturnFromArena(); // CONQUEST: Return to pre-arena location                
-            });
-            actionChain.AddDelaySeconds(0.5);
-            actionChain.AddAction(player, ActionType.ArenaObserver_ExitFinalize, () =>
-            {
+                // CONQUEST: Clear observer properties BEFORE teleport to prevent issues
+                // Clear all cloak-related properties directly instead of relying on DeCloak()
+                // DeCloak() has a guard that returns early if CloakStatus != On, but HandleCloak() never sets it
                 player.RecallsDisabled = false;
                 player.IsFrozen = false;
-                player.Attackable = true;                
+                player.Attackable = true;
+                player.Cloaked = false;
+                player.Ethereal = false;
+                player.NoDraw = false;
+                player.Visibility = false;
+                player.ReportCollisions = true;
                 if (player.GagDuration <= 0)
                 {
                     player.IsGagged = false;
                 }
-                player.DeCloak();
                 player.IsPendingArenaObserver = false;
                 player.IsArenaObserver = false;
+                player.EnqueueBroadcastPhysicsState();
+
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You've exited observer mode for an arena match.", ChatMessageType.System));
+                player.ReturnFromArena(); // CONQUEST: Return to pre-arena location
+            });
+            actionChain.AddDelaySeconds(0.5);
+            actionChain.AddAction(player, ActionType.ArenaObserver_ExitFinalize, () =>
+            {
+                // Redundant safety clear in case teleport didn't complete the chain
+                player.RecallsDisabled = false;
+                player.IsPendingArenaObserver = false;
+                player.IsArenaObserver = false;
+                player.Cloaked = false;
+                player.Ethereal = false;
+                player.NoDraw = false;
+                player.Attackable = true;
+                player.EnqueueBroadcastPhysicsState();
             });
             
             actionChain.EnqueueChain();            

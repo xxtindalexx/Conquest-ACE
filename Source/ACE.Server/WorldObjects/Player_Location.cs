@@ -664,9 +664,9 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: Save and dismiss regular pets (not combat pets) before teleport
             // They will be restored in OnTeleportComplete()
             SaveAndDismissPetForTeleport();
-            log.Info($"[TELEPORT VARIANT DEBUG] {Name} - Received _newPosition variation: {_newPosition?.Variation?.ToString() ?? "null"}");
+            //log.Info($"[TELEPORT VARIANT DEBUG] {Name} - Received _newPosition variation: {_newPosition?.Variation?.ToString() ?? "null"}");
             var newPosition = new Position(_newPosition);
-            log.Info($"[TELEPORT VARIANT DEBUG] {Name} - After creating newPosition, variation: {newPosition.Variation?.ToString() ?? "null"}");
+            //log.Info($"[TELEPORT VARIANT DEBUG] {Name} - After creating newPosition, variation: {newPosition.Variation?.ToString() ?? "null"}");
             //newPosition.PositionZ += 0.005f;
             newPosition.PositionZ += 0.005f * (ObjScale ?? 1.0f);
 
@@ -726,7 +726,7 @@ namespace ACE.Server.WorldObjects
                 LifestoneProtectionDispel();
 
             HandlePreTeleportVisibility(newPosition);
-            log.Info($"[TELEPORT VARIANT DEBUG] {Name} - Before UpdatePlayerPosition, newPosition variation: {newPosition.Variation?.ToString() ?? "null"}");
+            //log.Info($"[TELEPORT VARIANT DEBUG] {Name} - Before UpdatePlayerPosition, newPosition variation: {newPosition.Variation?.ToString() ?? "null"}");
 
             UpdatePlayerPosition(new Position(newPosition), true);
         }

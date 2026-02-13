@@ -74,8 +74,9 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            // DEBUG: Show XP breakdown for testing
-            if (xpType == XpType.Kill || xpType == XpType.Quest)
+            // CONQUEST: Show XP breakdown if player has enabled it via /xpbreakdown command
+            // Include Fellowship XP type so players in fellowships can also see the breakdown
+            if (ShowXpBreakdown && (xpType == XpType.Kill || xpType == XpType.Quest || xpType == XpType.Fellowship))
             {
                 var bonusXP = m_amount - amount;
                 var questBonusPercent = (questBonus - 1.0) * 100;
@@ -84,10 +85,14 @@ namespace ACE.Server.WorldObjects
                 // Separate enlightenment and equipment bonuses
                 var enlightenmentBonusPercent = Enlightenment * 1.0; // +1% per enlightenment level
                 var equipmentBonusPercent = EnchantmentManager.GetXPBonus() * 100; // Equipment XP bonus
+                // Augmentation bonus (5% per aug, kills only)
+                var augBonusXp = AugmentationBonusXp;
+                var augBonusPercent = (xpType == XpType.Kill) ? (augBonusXp * 5.0) : 0.0;
 
+                var xpSource = xpType == XpType.Fellowship ? "Fellowship" : (xpType == XpType.Quest ? "Quest" : "Kill");
                 Session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"XP Breakdown: {amount:N0} base → {m_amount:N0} total (+{bonusXP:N0} bonus)\n" +
-                    $"Modifiers: Quest {questBonusPercent:F2}% | PK Dungeon {pkBonusPercent:F0}% | Enlightenment {enlightenmentBonusPercent:F0}% | Equipment {equipmentBonusPercent:F0}%",
+                    $"XP Breakdown ({xpSource}): {amount:N0} base → {m_amount:N0} total (+{bonusXP:N0} bonus)\n" +
+                    $"Modifiers: Quest {questBonusPercent:F2}% | PK {pkBonusPercent:F0}% | ENL {enlightenmentBonusPercent:F0}% | Aug {augBonusPercent:F0}% | Equip {equipmentBonusPercent:F0}%",
                     ChatMessageType.Broadcast));
             }
 
@@ -102,6 +107,10 @@ namespace ACE.Server.WorldObjects
         /// <param name="shareable">If TRUE, this XP can be shared with fellowship members</param>
         public void GrantXP(long amount, XpType xpType, ShareType shareType = ShareType.All)
         {
+            // DEBUG: Log GrantXP entry for troubleshooting vitae issues
+            if (HasVitae)
+                //Console.WriteLine($"[VITAE DEBUG] {Name}: GrantXP entry - amount={amount:N0}, xpType={xpType}, shareType={shareType}, HasVitae=true");
+
             if (IsOlthoiPlayer || IsMule)
             {
                 if (HasVitae)
@@ -181,7 +190,14 @@ namespace ACE.Server.WorldObjects
             if (xpType == XpType.Quest)
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"You've earned {amount:N0} experience.", ChatMessageType.Broadcast));
 
-            if (HasVitae && xpType != XpType.Allegiance)
+            // DEBUG: Log vitae check for troubleshooting
+            var hasVitaeValue = HasVitae;
+            if (hasVitaeValue)
+            {
+                //Console.WriteLine($"[VITAE DEBUG] {Name}: HasVitae=true, xpType={xpType}, amount={amount:N0}");
+            }
+
+            if (hasVitaeValue && xpType != XpType.Allegiance)
                 UpdateXpVitae(amount);
         }
 
@@ -215,6 +231,9 @@ namespace ACE.Server.WorldObjects
 
             var maxPool = (int)VitaeCPPoolThreshold(vitaePenalty, DeathLevel.Value);
             var curPool = VitaeCpPool + amount;
+
+            // DEBUG: Log vitae update progress
+            //Console.WriteLine($"[VITAE DEBUG] {Name}: UpdateXpVitae - penalty={((1-vitaePenalty)*100):F1}%, DeathLevel={DeathLevel}, VitaeCpPool={VitaeCpPool:N0}, adding={amount:N0}, newPool={curPool:N0}, threshold={maxPool:N0}");
             while (curPool >= maxPool)
             {
                 curPool -= maxPool;

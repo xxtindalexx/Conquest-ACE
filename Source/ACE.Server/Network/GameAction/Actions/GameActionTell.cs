@@ -49,6 +49,37 @@ namespace ACE.Server.Network.GameAction.Actions
                 //return;
             }
 
+            // CONQUEST: Auto-join fellowship by telling "xp" to any fellowship member
+            if (message.Equals("xp", System.StringComparison.OrdinalIgnoreCase) && targetPlayer.Fellowship != null)
+            {
+                var fellowship = targetPlayer.Fellowship;
+
+                // Check if sender is already in a fellowship
+                if (session.Player.Fellowship != null)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You are already in a fellowship. Leave your current fellowship first.", ChatMessageType.Broadcast));
+                    return;
+                }
+
+                // Check if fellowship is locked
+                if (fellowship.IsLocked)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {targetPlayer.Name}'s fellowship is locked and not accepting new members.", ChatMessageType.Broadcast));
+                    return;
+                }
+
+                // Check if fellowship is full
+                if (fellowship.FellowshipMembers.Count >= ACE.Server.Entity.Fellowship.MaxFellows)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {targetPlayer.Name}'s fellowship is full ({fellowship.FellowshipMembers.Count}/{ACE.Server.Entity.Fellowship.MaxFellows}).", ChatMessageType.Broadcast));
+                    return;
+                }
+
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Attempting to add you to {targetPlayer.Name}'s fellowship.", ChatMessageType.Broadcast));
+                targetPlayer.FellowshipRecruit(session.Player);
+                return;
+            }
+
             var tell = new GameEventTell(targetPlayer.Session, message, session.Player.GetNameWithSuffix(), session.Player.Guid.Full, targetPlayer.Guid.Full, ChatMessageType.Tell);
             targetPlayer.Session.Network.EnqueueSend(tell);
         }

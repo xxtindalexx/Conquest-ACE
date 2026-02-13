@@ -120,40 +120,53 @@ namespace ACE.Server.Managers
 
             if (offlinePlayer.SaveInProgress)
             {
-                const int MAX_LOGIN_RETRIES = 10;
-                if (loginRetryCount >= MAX_LOGIN_RETRIES)
+                var stuckTime = (DateTime.UtcNow - offlinePlayer.LastRequestedDatabaseSave).TotalSeconds;
+
+                // CONQUEST: Safety fallback - if save has been stuck for over 5 minutes, force-clear the flag
+                // This prevents players from being permanently locked out due to buggy save state
+                const int SAVE_TIMEOUT_SECONDS = 300; // 5 minutes
+                if (stuckTime > SAVE_TIMEOUT_SECONDS)
                 {
-                    var stuckTime = (DateTime.UtcNow - offlinePlayer.LastRequestedDatabaseSave).TotalSeconds;
-                    log.Error($"[LOGIN BLOCK] {character.Name} REJECTED after {MAX_LOGIN_RETRIES} retries. Save stuck {stuckTime:N1}s. DB queue: {DatabaseManager.Shard.QueueCount}");
-
-                    if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.PerformanceAlertsChannelId > 0)
-                    {
-                        try
-                        {
-                            var msg = $"🔴 **CRITICAL**: `{character.Name}` login blocked after {MAX_LOGIN_RETRIES} retries. Save stuck {stuckTime:N1}s. DB Queue: {DatabaseManager.Shard.QueueCount}";
-                            DiscordChatManager.SendDiscordMessage("CRITICAL ALERT", msg, ConfigManager.Config.Chat.PerformanceAlertsChannelId);
-                        }
-                        catch { }
-                    }
-
-                    return;
+                    log.Warn($"[LOGIN RECOVERY] {character.Name} save stuck for {stuckTime:N1}s, force-clearing SaveInProgress flag to allow login.");
+                    offlinePlayer.SaveInProgress = false;
+                    // Fall through to normal login
                 }
                 else
                 {
-                    var timeWaiting = (DateTime.UtcNow - offlinePlayer.LastRequestedDatabaseSave).TotalMilliseconds;
-                    log.Warn($"[LOGIN BLOCK] {character.Name} login delayed (retry {loginRetryCount + 1}/{MAX_LOGIN_RETRIES}), save in-progress {timeWaiting:N0}ms.");
-
-                    SendLoginBlockDiscordAlert(character.Name, timeWaiting);
-
-                    var retryChain = new ACE.Server.Entity.Actions.ActionChain();
-                    retryChain.AddDelaySeconds(2.0);
-                    retryChain.AddAction(WorldManager.ActionQueue, ActionType.WorldManager_PlayerEnterWorld, () =>
+                    const int MAX_LOGIN_RETRIES = 10;
+                    if (loginRetryCount >= MAX_LOGIN_RETRIES)
                     {
-                        if (session != null && session.Player == null && session.State != Network.Enum.SessionState.TerminationStarted)
-                            PlayerEnterWorld(session, character, loginRetryCount + 1);
-                    });
-                    retryChain.EnqueueChain();
-                    return;
+                        log.Error($"[LOGIN BLOCK] {character.Name} REJECTED after {MAX_LOGIN_RETRIES} retries. Save stuck {stuckTime:N1}s. DB queue: {DatabaseManager.Shard.QueueCount}");
+
+                        if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.PerformanceAlertsChannelId > 0)
+                        {
+                            try
+                            {
+                                var msg = $"🔴 **CRITICAL**: `{character.Name}` login blocked after {MAX_LOGIN_RETRIES} retries. Save stuck {stuckTime:N1}s. DB Queue: {DatabaseManager.Shard.QueueCount}";
+                                DiscordChatManager.SendDiscordMessage("CRITICAL ALERT", msg, ConfigManager.Config.Chat.PerformanceAlertsChannelId);
+                            }
+                            catch { }
+                        }
+
+                        return;
+                    }
+                    else
+                    {
+                        var timeWaiting = (DateTime.UtcNow - offlinePlayer.LastRequestedDatabaseSave).TotalMilliseconds;
+                        log.Warn($"[LOGIN BLOCK] {character.Name} login delayed (retry {loginRetryCount + 1}/{MAX_LOGIN_RETRIES}), save in-progress {timeWaiting:N0}ms.");
+
+                        SendLoginBlockDiscordAlert(character.Name, timeWaiting);
+
+                        var retryChain = new ACE.Server.Entity.Actions.ActionChain();
+                        retryChain.AddDelaySeconds(2.0);
+                        retryChain.AddAction(WorldManager.ActionQueue, ActionType.WorldManager_PlayerEnterWorld, () =>
+                        {
+                            if (session != null && session.Player == null && session.State != Network.Enum.SessionState.TerminationStarted)
+                                PlayerEnterWorld(session, character, loginRetryCount + 1);
+                        });
+                        retryChain.EnqueueChain();
+                        return;
+                    }
                 }
             }
 

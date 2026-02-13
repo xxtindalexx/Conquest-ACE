@@ -7,6 +7,7 @@ using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Factories;
 using ACE.Server.Factories.Tables;
 using ACE.Server.Managers;
 using ACE.Server.Network;
@@ -42,10 +43,144 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship create <name> to create a fellowship", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship leave", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship disband", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship list to see all fellowships looking for members", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: tell any fellowship member 'xp' to join their fellowship", ChatMessageType.Broadcast));
+                return;
             }
 
             if (parameters.Count() == 1)
             {
+                if (parameters[0] == "list")
+                {
+                    // CONQUEST: List all fellowships that aren't full
+                    var availableFellowships = new List<(string leaderName, string fellowName, int count, int max, string location)>();
+                    var seenFellowships = new HashSet<uint>(); // Track by leader guid to avoid duplicates
+
+                    foreach (var player in PlayerManager.GetAllOnline())
+                    {
+                        if (player.Fellowship != null && !player.Fellowship.IsLocked)
+                        {
+                            var fellowship = player.Fellowship;
+                            var memberCount = fellowship.FellowshipMembers.Count;
+
+                            // Only list if not full and we haven't already listed this fellowship
+                            if (memberCount < Entity.Fellowship.MaxFellows && !seenFellowships.Contains(fellowship.FellowshipLeaderGuid))
+                            {
+                                seenFellowships.Add(fellowship.FellowshipLeaderGuid);
+                                var leader = PlayerManager.GetOnlinePlayer(fellowship.FellowshipLeaderGuid);
+                                var leaderName = leader?.Name ?? "Unknown";
+
+                                // CONQUEST: Skip fellowships where any member is in a PK dungeon
+                                bool isInPkDungeon = false;
+                                foreach (var memberEntry in fellowship.FellowshipMembers)
+                                {
+                                    var member = PlayerManager.GetOnlinePlayer(memberEntry.Key);
+                                    if (member?.CurrentLandblock != null)
+                                    {
+                                        var landblock = (ushort)member.CurrentLandblock.Id.Landblock;
+                                        var variation = member.CurrentLandblock.VariationId ?? 0;
+                                        if (Entity.Landblock.pkDungeonLandblocks.Contains((landblock, variation)))
+                                        {
+                                            isInPkDungeon = true;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if (!isInPkDungeon)
+                                {
+                                    // CONQUEST: Get location name from cached landblock names (loaded at startup)
+                                    string locationName = "";
+                                    if (leader?.CurrentLandblock != null)
+                                    {
+                                        var leaderLandblock = (ushort)leader.CurrentLandblock.Id.Landblock;
+                                        var leaderVariant = leader.CurrentLandblock.VariationId ?? 0;
+                                        locationName = Entity.Landblock.GetLandblockName(leaderLandblock);
+
+                                        // Append variant number if not base variant (0)
+                                        if (!string.IsNullOrEmpty(locationName) && leaderVariant > 0)
+                                        {
+                                            locationName += $" v{leaderVariant}";
+                                        }
+                                    }
+
+                                    availableFellowships.Add((leaderName, fellowship.FellowshipName, memberCount, Entity.Fellowship.MaxFellows, locationName));
+                                }
+                            }
+                        }
+                    }
+
+                    if (availableFellowships.Count == 0)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: No fellowships are currently looking for members.", ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Fellowships looking for members (tell any member 'xp' to join):", ChatMessageType.Broadcast));
+                        foreach (var (leaderName, fellowName, count, max, location) in availableFellowships)
+                        {
+                            var locationDisplay = string.IsNullOrEmpty(location) ? "" : $" @ {location}";
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"  - {fellowName} (Leader: {leaderName}) [{count}/{max}]{locationDisplay}", ChatMessageType.Broadcast));
+                        }
+                    }
+                    return;
+                }
+
+                // Debug command to see all fellowships and why they're filtered
+                if (parameters[0] == "debug")
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP DEBUG]: Scanning all online players...", ChatMessageType.Broadcast));
+                    var seenFellowships = new HashSet<uint>();
+
+                    foreach (var player in PlayerManager.GetAllOnline())
+                    {
+                        if (player.Fellowship != null && !seenFellowships.Contains(player.Fellowship.FellowshipLeaderGuid))
+                        {
+                            seenFellowships.Add(player.Fellowship.FellowshipLeaderGuid);
+                            var fellowship = player.Fellowship;
+                            var leader = PlayerManager.GetOnlinePlayer(fellowship.FellowshipLeaderGuid);
+                            var leaderName = leader?.Name ?? "Unknown";
+                            var memberCount = fellowship.FellowshipMembers.Count;
+
+                            string status = "VISIBLE";
+                            string reason = "";
+
+                            if (fellowship.IsLocked)
+                            {
+                                status = "HIDDEN";
+                                reason = "Locked";
+                            }
+                            else if (memberCount >= Entity.Fellowship.MaxFellows)
+                            {
+                                status = "HIDDEN";
+                                reason = "Full";
+                            }
+                            else
+                            {
+                                // Check PK dungeon
+                                foreach (var memberEntry in fellowship.FellowshipMembers)
+                                {
+                                    var member = PlayerManager.GetOnlinePlayer(memberEntry.Key);
+                                    if (member?.CurrentLandblock != null)
+                                    {
+                                        var lb = (ushort)member.CurrentLandblock.Id.Landblock;
+                                        var var_ = member.CurrentLandblock.VariationId ?? 0;
+                                        if (Entity.Landblock.pkDungeonLandblocks.Contains((lb, var_)))
+                                        {
+                                            status = "HIDDEN";
+                                            reason = $"PK Dungeon (0x{lb:X4} v{var_}, member: {member.Name})";
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"  {fellowship.FellowshipName} (Leader: {leaderName}) [{memberCount}/{Entity.Fellowship.MaxFellows}] - {status} {reason}", ChatMessageType.Broadcast));
+                        }
+                    }
+                    return;
+                }
+
                 if (parameters[0] == "landblock")
                 {
                     if (session.Player.CurrentLandblock == null)
@@ -90,14 +225,21 @@ namespace ACE.Server.Command.Handlers
                     var tPGuid = session.Player.CurrentAppraisalTarget;
                     if (tPGuid != null)
                     {
-                        var tplayer = PlayerManager.FindByGuid(tPGuid.Value) as Player;
+                        var tplayer = PlayerManager.GetOnlinePlayer(tPGuid.Value);
                         if (tplayer != null)
                         {
                             session.Player.FellowshipRecruit(tplayer);
                         }
+                        else
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Target player is not online.", ChatMessageType.Broadcast));
+                        }
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: No player targeted. Use /fship add <name> to add by name.", ChatMessageType.Broadcast));
                     }
                     return;
-
                 }
                 if (parameters[0] == "remove")
                 {
@@ -105,6 +247,10 @@ namespace ACE.Server.Command.Handlers
                     if (tPGuid != null)
                     {
                         session.Player.FellowshipDismissPlayer(tPGuid.Value);
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: No player targeted. Use /fship remove <name> to remove by name.", ChatMessageType.Broadcast));
                     }
                     return;
                 }
@@ -119,21 +265,29 @@ namespace ACE.Server.Command.Handlers
                 }
                 if (parameters[0] == "add")
                 {
-                    var tplayer = PlayerManager.FindByName(parameters[1]) as Player;
+                    var tplayer = PlayerManager.GetOnlinePlayer(parameters[1]);
                     if (tplayer != null)
                     {
                         session.Player.FellowshipRecruit(tplayer);
-                        return;
                     }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Player '{parameters[1]}' is not online.", ChatMessageType.Broadcast));
+                    }
+                    return;
                 }
                 if (parameters[0] == "remove")
                 {
-                    var tplayer = PlayerManager.FindByName(parameters[1]) as Player;
+                    var tplayer = PlayerManager.GetOnlinePlayer(parameters[1]);
                     if (tplayer != null)
                     {
                         session.Player.FellowshipDismissPlayer(tplayer.Guid.Full);
-                        return;
                     }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Player '{parameters[1]}' is not online.", ChatMessageType.Broadcast));
+                    }
+                    return;
                 }
             }
         }
@@ -145,6 +299,30 @@ namespace ACE.Server.Command.Handlers
         public static void HandlePop(Session session, params string[] parameters)
         {
             CommandHandlerHelper.WriteOutputInfo(session, $"Current world population: {PlayerManager.GetOnlineCount():N0}", ChatMessageType.Broadcast);
+        }
+
+        // upop - admin command to show unique IP connections
+        [CommandHandler("upop", AccessLevel.Sentinel, CommandHandlerFlag.None, 0,
+            "Show unique IP connections vs total population",
+            "")]
+        public static void HandleUniquePop(Session session, params string[] parameters)
+        {
+            var onlinePlayers = PlayerManager.GetAllOnline();
+            var totalCount = onlinePlayers.Count;
+            var uniqueIPs = new HashSet<string>();
+
+            foreach (var player in onlinePlayers)
+            {
+                if (player.Session?.EndPoint?.Address != null)
+                {
+                    uniqueIPs.Add(player.Session.EndPoint.Address.ToString());
+                }
+            }
+
+            var uniqueCount = uniqueIPs.Count;
+            var multiboxers = totalCount - uniqueCount;
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Population: {totalCount:N0} total, {uniqueCount:N0} unique IPs, {multiboxers:N0} multiboxed", ChatMessageType.Broadcast);
         }
 
         /// <summary>
@@ -258,6 +436,11 @@ namespace ACE.Server.Command.Handlers
             var pkDungeonBonus = player.GetPKDungeonBonus();
             var pkDungeonBonusPercent = ((pkDungeonBonus - 1.0) * 100.0);
 
+            // XP Augmentation Bonus (5% per augmentation, kills only)
+            var augmentationBonusXp = player.AugmentationBonusXp;
+            var augBonus = 1.0 + (augmentationBonusXp * 0.05);
+            var augBonusPercent = (augmentationBonusXp * 5.0);
+
             // Equipment Bonus (from enchantments) - GetXPBonus() returns additive modifier (e.g., 0.05 for 5%)
             var equipmentBonus = 1.0 + player.EnchantmentManager.GetXPBonus();
             var equipmentBonusPercent = (player.EnchantmentManager.GetXPBonus() * 100.0);
@@ -266,11 +449,24 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat($"Quest Bonus: {questBonusPercent:F2}% ({questCount:N0} quests)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Enlightenment Bonus: {enlightenmentBonusPercent:F2}% (Enlightenment {player.Enlightenment})", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"PK Dungeon Bonus: {pkDungeonBonusPercent:F2}%", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Augmentation Bonus: {augBonusPercent:F2}% (kills only, {augmentationBonusXp} augs)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Equipment Bonus: {equipmentBonusPercent:F2}%", ChatMessageType.Broadcast));
 
-            var totalBonus = (questBonus * enlightenmentBonus * pkDungeonBonus * equipmentBonus) - 1.0;
+            var totalBonus = (questBonus * enlightenmentBonus * pkDungeonBonus * augBonus * equipmentBonus) - 1.0;
             var totalBonusPercent = totalBonus * 100.0;
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus: {totalBonusPercent:F2}%", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus: {totalBonusPercent:F2}% (aug bonus applies to kills only)", ChatMessageType.Broadcast));
+        }
+
+        [CommandHandler("xpdebugging", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Toggle XP breakdown display when earning XP from kills and quests")]
+        public static void HandleXpBreakdown(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            // Toggle the setting
+            player.ShowXpBreakdown = !player.ShowXpBreakdown;
+
+            var status = player.ShowXpBreakdown ? "enabled" : "disabled";
+            session.Network.EnqueueSend(new GameMessageSystemChat($"XP breakdown display is now {status}.", ChatMessageType.Broadcast));
         }
 
         [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
@@ -440,9 +636,10 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit (or /b d) - Deposit all Pyreals, Luminance, Conquest Coins, Soul Fragments, and Event Tokens", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit pyreals 100 (or /b d p 100) - Deposit specific amount", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw pyreals 100 (or /b w p 100) - Withdraw 100 pyreals", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw notes 5 (or /b w n 5) - Withdraw 5 trade notes (250k each)", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank transfer pyreals 100 CharName - Transfer 100 pyreals to CharName", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank balance (or /b b) - View your bank balance", ChatMessageType.System));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s) Eventtokens (e)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s), Eventtokens (e), Notes (n)", ChatMessageType.System));
                 return;
             }
 
@@ -478,6 +675,7 @@ namespace ACE.Server.Command.Handlers
                 else if (parameters[1] == "Eventtokens" || parameters[1] == "e") iType = 3;
                 else if (parameters[1] == "ConquestCoins" || parameters[1] == "c") iType = 4;
                 else if (parameters[1] == "SoulFragments" || parameters[1] == "s") iType = 5;
+                else if (parameters[1] == "notes" || parameters[1] == "n") iType = 6;
             }
 
             if (parameters.Length == 3 || parameters.Length == 4)
@@ -619,7 +817,7 @@ namespace ACE.Server.Command.Handlers
                         }
                         session.Player.WithdrawConquestCoins(amount);
                         break;
-                    case 5: // Withdraw event tokens
+                    case 5: // Withdraw soul fragments
                         if (session.Player.SoulFragments != null && amount > session.Player.SoulFragments)
                         {
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked soul fragments.", ChatMessageType.System));
@@ -631,6 +829,61 @@ namespace ACE.Server.Command.Handlers
                             break;
                         }
                         session.Player.WithdrawSoulFragments(amount);
+                        break;
+                    case 6: // Withdraw trade notes
+                        const int TradeNoteWeenieId = 20630;
+                        const long TradeNoteValue = 250000;
+                        const int TradeNoteMaxStack = 250;
+
+                        if (amount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify number of trade notes to withdraw.", ChatMessageType.System));
+                            break;
+                        }
+
+                        long totalPyrealCost = amount * TradeNoteValue;
+                        if (session.Player.BankedPyreals == null || session.Player.BankedPyreals < totalPyrealCost)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked pyreals. You need {totalPyrealCost:N0} pyreals for {amount:N0} trade notes.", ChatMessageType.System));
+                            break;
+                        }
+
+                        // Calculate how many stacks we need
+                        long notesRemaining = amount;
+                        int notesCreated = 0;
+
+                        while (notesRemaining > 0)
+                        {
+                            int stackSize = (int)Math.Min(notesRemaining, TradeNoteMaxStack);
+                            var tradeNote = WorldObjectFactory.CreateNewWorldObject((uint)TradeNoteWeenieId);
+                            if (tradeNote == null)
+                            {
+                                session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Error creating trade notes.", ChatMessageType.System));
+                                break;
+                            }
+
+                            tradeNote.SetStackSize(stackSize);
+                            if (session.Player.TryCreateInInventoryWithNetworking(tradeNote))
+                            {
+                                notesCreated += stackSize;
+                                notesRemaining -= stackSize;
+                            }
+                            else
+                            {
+                                session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Inventory full. Created {notesCreated:N0} trade notes.", ChatMessageType.System));
+                                break;
+                            }
+                        }
+
+                        if (notesCreated > 0)
+                        {
+                            long pyrealCost = (long)notesCreated * TradeNoteValue;
+                            session.Player.BankedPyreals -= pyrealCost;
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Withdrew {notesCreated:N0} trade notes ({pyrealCost:N0} pyreals). Balance: {session.Player.BankedPyreals:N0}", ChatMessageType.System));
+
+                            // Log the transaction
+                            TransferLogger.LogBankTransfer(session.Player, session.Player.Name, $"Trade Note (250k)", notesCreated, "Trade Note Withdrawal");
+                        }
                         break;
                 }
             }
@@ -714,6 +967,27 @@ namespace ACE.Server.Command.Handlers
         {
             if (session.Player == null)
                 return;
+
+            // CONQUEST: Check for admin-style parameters and pass through to admin handler
+            if (parameters.Length > 0)
+            {
+                var adminParams = new[] { "npk", "pk", "pkl", "free" };
+                if (adminParams.Contains(parameters[0].ToLower()))
+                {
+                    // Check if user has Developer access
+                    if (session.AccessLevel >= AccessLevel.Developer)
+                    {
+                        // Pass through to admin handler
+                        AdminCommands.HandlePk(session, parameters);
+                        return;
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown parameter '{parameters[0]}'. Use '/pk on' or '/pk off'.", ChatMessageType.Broadcast));
+                        return;
+                    }
+                }
+            }
 
             // CONQUEST: Mules cannot use PK command
             if (session.Player.IsMule)
@@ -827,12 +1101,27 @@ namespace ACE.Server.Command.Handlers
                     return;
                 }
 
-                // Turn off PK
-                session.Player.PlayerKillerStatus = PlayerKillerStatus.NPK;
-                session.Player.PkLevel = PKLevel.NPK; // Set PkLevel so respite timer won't restore them to PK
-                session.Player.EnqueueBroadcast(new GameMessagePublicUpdatePropertyInt(session.Player, PropertyInt.PlayerKillerStatus, (int)session.Player.PlayerKillerStatus));
+                // Check if player is busy
+                if (session.Player.Teleporting || session.Player.TooBusyToRecall || session.Player.IsBusy || session.Player.IsInDeathProcess)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat("Cannot change PK status while teleporting or busy. Complete your movement and try again.", ChatMessageType.System));
+                    return;
+                }
 
-                session.Network.EnqueueSend(new GameMessageSystemChat("You are no longer a Player Killer. You are now safe from PvP attacks.", ChatMessageType.Broadcast));
+                // Show popup confirmation dialog
+                var confirmMessage = "Are you sure you want to disable PK status? You will no longer be able to participate in open world PvP.";
+
+                var confirm = session.Player.ConfirmationManager.EnqueueSend(
+                    new Confirmation_Custom(session.Player.Guid, () => {
+                        // This callback executes when player clicks "Yes"
+                        session.Player.PlayerKillerStatus = PlayerKillerStatus.NPK;
+                        session.Player.PkLevel = PKLevel.NPK; // Set PkLevel so respite timer won't restore them to PK
+                        session.Player.EnqueueBroadcast(new GameMessagePublicUpdatePropertyInt(session.Player, PropertyInt.PlayerKillerStatus, (int)session.Player.PlayerKillerStatus));
+
+                        session.Network.EnqueueSend(new GameMessageSystemChat("You are no longer a Player Killer. You are now safe from PvP attacks.", ChatMessageType.Broadcast));
+                    }),
+                    confirmMessage
+                );
             }
             else
             {
@@ -1787,6 +2076,34 @@ namespace ACE.Server.Command.Handlers
                 session.Player.LastPlayerCommandTimestamp = Time.GetUnixTime(DateTime.UtcNow);
                 return true;
             }
+        }
+
+        [CommandHandler("pkquests", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "View your current PK quest progress")]
+        public static void HandlePkQuests(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+            var sb = new StringBuilder();
+            sb.AppendLine($"\n===== Your PK Quests =====");
+
+            if (player.PkQuestList == null || player.PkQuestList.Count == 0)
+            {
+                sb.AppendLine("No active PK quests assigned.");
+            }
+            else
+            {
+                foreach (var pkQuest in player.PkQuestList)
+                {
+                    var quest = Entity.PKQuests.PKQuests.GetPkQuestByCode(pkQuest.QuestCode);
+                    if (quest == null)
+                        continue;
+
+                    var status = pkQuest.IsCompleted ? "[COMPLETE]" : $"[{pkQuest.TaskDoneCount}/{quest.TaskCount}]";
+                    var rewarded = pkQuest.RewardDelivered ? " (Rewarded)" : "";
+                    sb.AppendLine($"  {status} {quest.Description}{rewarded}");
+                }
+            }
+
+            session.Network.EnqueueSend(new GameMessageSystemChat(sb.ToString(), ChatMessageType.System));
         }
     }
 }

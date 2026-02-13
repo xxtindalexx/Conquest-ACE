@@ -41,6 +41,14 @@ namespace ACE.Server.WorldObjects
         {
             //log.Info($"-");
 
+            // CONQUEST: Arena observers cannot attack
+            if (IsArenaObserver)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot attack while observing an arena match.", ChatMessageType.Broadcast));
+                OnAttackDone();
+                return;
+            }
+
             if (CombatMode != CombatMode.Missile)
             {
                 log.Warn($"{Name}.HandleActionTargetedMissileAttack({targetGuid:X8}, {attackHeight}, {accuracyLevel}) - CombatMode mismatch {CombatMode}, LastCombatMode: {LastCombatMode}");

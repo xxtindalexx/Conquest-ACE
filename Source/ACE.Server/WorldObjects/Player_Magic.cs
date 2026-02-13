@@ -81,6 +81,14 @@ namespace ACE.Server.WorldObjects
         {
             //Console.WriteLine($"{Name}.HandleActionCastTargetedSpell({targetGuid:X8}, {spellId}, {builtInSpell})");
 
+            // CONQUEST: Arena observers cannot cast spells
+            if (IsArenaObserver)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot cast spells while observing an arena match.", ChatMessageType.Broadcast));
+                SendUseDoneEvent();
+                return;
+            }
+
             if (CombatMode != CombatMode.Magic)
             {
                 log.Warn($"{Name}.HandleActionCastTargetedSpell({targetGuid:X8}, {spellId}, {casterItem?.Name}) - CombatMode mismatch {CombatMode}, LastCombatMode: {LastCombatMode}");
@@ -271,6 +279,14 @@ namespace ACE.Server.WorldObjects
         public void HandleActionMagicCastUnTargetedSpell(uint spellId)
         {
             //Console.WriteLine($"{Name}.HandleActionCastUnTargetedSpell({spellId})");
+
+            // CONQUEST: Arena observers cannot cast spells (including recall)
+            if (IsArenaObserver)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot cast spells while observing an arena match.", ChatMessageType.Broadcast));
+                SendUseDoneEvent();
+                return;
+            }
 
             if (CombatMode != CombatMode.Magic)
             {

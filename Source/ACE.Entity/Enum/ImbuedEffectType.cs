@@ -26,4 +26,57 @@ namespace ACE.Entity.Enum
         AlwaysCritical                  = 0x40000000,
         IgnoreAllArmor                  = 0x80000000
     }
+
+
+    public static class ImbuedEffectTypeExtensions
+    {
+        /// <summary>
+        /// Returns a user-friendly display name for the imbued effect type
+        /// Used in appraisal info for weapon properties
+        /// </summary>
+        public static string DisplayName(this ImbuedEffectType effect)
+        {
+            switch (effect)
+            {
+                case ImbuedEffectType.CriticalStrike:
+                    return "Critical Strike";
+                case ImbuedEffectType.CripplingBlow:
+                    return "Crippling Blow";
+                case ImbuedEffectType.ArmorRending:
+                    return "Armor Rending";
+                case ImbuedEffectType.SlashRending:
+                    return "Slashing Rending";
+                case ImbuedEffectType.PierceRending:
+                    return "Piercing Rending";
+                case ImbuedEffectType.BludgeonRending:
+                    return "Bludgeoning Rending";
+                case ImbuedEffectType.AcidRending:
+                    return "Acid Rending";
+                case ImbuedEffectType.ColdRending:
+                    return "Cold Rending";
+                case ImbuedEffectType.ElectricRending:
+                    return "Lightning Rending";
+                case ImbuedEffectType.FireRending:
+                    return "Fire Rending";
+                case ImbuedEffectType.MeleeDefense:
+                    return "Melee Defense";
+                case ImbuedEffectType.MissileDefense:
+                    return "Missile Defense";
+                case ImbuedEffectType.MagicDefense:
+                    return "Magic Defense";
+                case ImbuedEffectType.Spellbook:
+                    return "Spellbook";
+                case ImbuedEffectType.NetherRending:
+                    return "Void Rending";
+                case ImbuedEffectType.IgnoreSomeMagicProjectileDamage:
+                    return "Magic Absorb";
+                case ImbuedEffectType.AlwaysCritical:
+                    return "Always Critical";
+                case ImbuedEffectType.IgnoreAllArmor:
+                    return "Ignore Armor";
+                default:
+                    return effect.ToString();
+            }
+        }
+    }
 }

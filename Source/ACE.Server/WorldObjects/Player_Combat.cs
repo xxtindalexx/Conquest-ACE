@@ -6,6 +6,7 @@ using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Entity.PKQuests;
 using ACE.Server.Managers;
 using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameEvent.Events;
@@ -518,6 +519,18 @@ namespace ACE.Server.WorldObjects
                 ACE.Server.Managers.ArenaManager.HandlePlayerDamage(Character.Id, attackerPlayer.Character.Id, damageTaken);
             }
 
+            // CONQUEST: Track PK dungeon damage for quests
+            if (source is Player pkAttacker && CurrentLandblock != null && Location != null)
+            {
+                var currentLandblock = (ushort)CurrentLandblock.Id.Landblock;
+                var currentVariation = Location.Variation ?? 0;
+
+                if (ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                {
+                    pkAttacker.CompletePkQuestTask("PKDUNGEON_DMG_50K", (int)damageTaken);
+                }
+            }
+
             // update stamina
             if (CombatMode != CombatMode.NonCombat)
             {
@@ -747,6 +760,13 @@ namespace ACE.Server.WorldObjects
         public void HandleActionChangeCombatMode(CombatMode newCombatMode, bool forceHandCombat = false, Action callback = null)
         {
             //log.Info($"{Name}.HandleActionChangeCombatMode({newCombatMode})");
+
+            // CONQUEST: Arena observers cannot enter combat mode
+            if (IsArenaObserver && newCombatMode != CombatMode.NonCombat)
+            {
+                Session.Network.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat("You cannot enter combat while observing an arena match.", ChatMessageType.Broadcast));
+                return;
+            }
 
             // Make sure the player doesn't have an invalid weapon setup (e.g. sword + wand)
             if (!CheckWeaponCollision(null, null, newCombatMode))
@@ -1388,9 +1408,10 @@ namespace ACE.Server.WorldObjects
             // Remove existing self-cast buffs so the lower-power buffs can be applied
             RemoveSelfCastBuffsForRebuff();
 
-            // Silently re-buff with base-level buffs (using buff system without Sentinel restriction)
-            // CONQUEST: Suppress visual effects when entering PvP mode
-            BuffPlayersForPvPMode(new Player[] { this }, true, 8, suppressVisualEffects: true);
+            // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
+            // CONQUEST: Buff level based on player level, suppress visual effects when entering PvP mode
+            var buffLevel = GetPvPBuffLevel();
+            BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
             Health.Current = (uint)(Health.MaxValue * healthPercent);
@@ -1478,9 +1499,10 @@ namespace ACE.Server.WorldObjects
             // Remove existing self-cast buffs so the lower-power buffs can be applied
             RemoveSelfCastBuffsForRebuff();
 
-            // Silently re-buff with base-level buffs (using buff system without Sentinel restriction)
-            // CONQUEST: Suppress visual effects when entering PK dungeon mode
-            BuffPlayersForPvPMode(new Player[] { this }, true, 8, suppressVisualEffects: true);
+            // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
+            // CONQUEST: Buff level based on player level, suppress visual effects when entering PK dungeon mode
+            var buffLevel = GetPvPBuffLevel();
+            BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
             Health.Current = (uint)(Health.MaxValue * healthPercent);
@@ -1546,9 +1568,10 @@ namespace ACE.Server.WorldObjects
             // Remove existing self-cast buffs so the higher-power buffs can be applied
             RemoveSelfCastBuffsForRebuff();
 
-            // Silently re-buff with full aug-boosted buffs (using buff system without Sentinel restriction)
-            // CONQUEST: Suppress visual effects when exiting PK dungeon mode
-            BuffPlayersForPvPMode(new Player[] { this }, true, 8, suppressVisualEffects: true);
+            // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
+            // CONQUEST: Buff level based on player level, suppress visual effects when exiting PK dungeon mode
+            var buffLevel = GetPvPBuffLevel();
+            BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
             Health.Current = (uint)(Health.MaxValue * healthPercent);
@@ -1615,9 +1638,10 @@ namespace ACE.Server.WorldObjects
             // Remove existing self-cast buffs so the higher-power buffs can be applied
             RemoveSelfCastBuffsForRebuff();
 
-            // Silently re-buff with full aug-boosted buffs (using buff system without Sentinel restriction)
-            // CONQUEST: Suppress visual effects when exiting PvP mode
-            BuffPlayersForPvPMode(new Player[] { this }, true, 8, suppressVisualEffects: true);
+            // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
+            // CONQUEST: Buff level based on player level, suppress visual effects when exiting PvP mode
+            var buffLevel = GetPvPBuffLevel();
+            BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
             Health.Current = (uint)(Health.MaxValue * healthPercent);
@@ -1634,6 +1658,26 @@ namespace ACE.Server.WorldObjects
             Session.Network.EnqueueSend(new GameMessageSystemChat(
                 "You have exited PvP combat mode. Custom augmentations restored.",
                 ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// CONQUEST: Returns the appropriate buff spell level based on player's character level
+        /// Used for PvP mode rebuffing to ensure level-appropriate buffs
+        /// </summary>
+        private ulong GetPvPBuffLevel()
+        {
+            var playerLevel = Level ?? 1;
+
+            if (playerLevel >= 180)
+                return 8;
+            else if (playerLevel >= 100)
+                return 7;
+            else if (playerLevel >= 60)
+                return 6;
+            else if (playerLevel >= 30)
+                return 5;
+            else
+                return 4;
         }
 
         /// <summary>

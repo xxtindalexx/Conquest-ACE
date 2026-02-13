@@ -596,16 +596,27 @@ namespace ACE.Server.WorldObjects
                             }
                             else
                             {
-                                var lastSoulFragmentLoot = killerPlayer.LastSoulFragmentLootTime ?? 0;
+                                // CONQUEST: Per-victim cooldown system
+                                // Each victim has their own 6-8 hour cooldown, so you can get trophies from
+                                // multiple different players, but not from the same player twice within the cooldown
                                 var currentTime = Time.GetUnixTime();
-                                var cooldownHours = ThreadSafeRandom.Next(6, 8);  // Random 6-8 hour cooldown
-                                var cooldownSeconds = cooldownHours * 3600;
+                                var cooldownHours = 6;  // Fixed 6 hour cooldown per victim
+                                var cooldownSeconds = (uint)(cooldownHours * 3600);
 
-                                if (currentTime >= lastSoulFragmentLoot + cooldownSeconds)
+                                // Use quest system to track per-victim cooldowns
+                                // Quest name format: PKSoulLoot_<victimGuid>
+                                var victimQuestName = $"PKSoulLoot_{player.Guid.Full:X8}";
+                                var questEntry = killerPlayer.QuestManager.GetQuest(victimQuestName);
+
+                                // Check if cooldown has passed for this specific victim
+                                var lastLootTime = questEntry?.LastTimeCompleted ?? 0;
+                                var cooldownExpired = currentTime >= lastLootTime + cooldownSeconds;
+
+                                if (cooldownExpired)
                                 {
-                                    // Cooldown has passed, drop Soul Fragments
+                                    // No cooldown for this victim (or cooldown expired), drop Soul Fragments
                                     var soulFragmentCount = ThreadSafeRandom.Next(1, 3);  // 1-3 soul fragments
-                                    var soulFragmentWeenieId = 13370003u;  // TODO: Replace with actual Soul Fragment weenie ID
+                                    var soulFragmentWeenieId = 13370003u;  // Soul Fragment weenie ID
 
                                     for (int i = 0; i < soulFragmentCount; i++)
                                     {
@@ -617,15 +628,21 @@ namespace ACE.Server.WorldObjects
                                         }
                                     }
 
-                                    // Update the loot timestamp when Soul Fragments are created
-                                    killerPlayer.LastSoulFragmentLootTime = (long)currentTime;
+                                    // Stamp the quest to record this loot time
+                                    killerPlayer.QuestManager.Update(victimQuestName);
+
+                                    killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                                        $"You looted {soulFragmentCount} Soul Fragment{(soulFragmentCount > 1 ? "s" : "")} from {player.Name}!",
+                                        ChatMessageType.Broadcast));
                                 }
                                 else
                                 {
-                                    // Still on cooldown - notify killer
-                                    var timeRemaining = (lastSoulFragmentLoot + cooldownSeconds) - currentTime;
+                                    // Still on cooldown for this specific victim
+                                    var timeRemaining = (lastLootTime + cooldownSeconds) - currentTime;
                                     var hoursRemaining = Math.Ceiling(timeRemaining / 3600.0);
-                                    killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {hoursRemaining} more hour(s) before you can loot Soul Fragments again.", ChatMessageType.Broadcast));
+                                    killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                                        $"You cannot loot Soul Fragments from {player.Name} for another {hoursRemaining} hour(s).",
+                                        ChatMessageType.Broadcast));
                                 }
                             }
                         }

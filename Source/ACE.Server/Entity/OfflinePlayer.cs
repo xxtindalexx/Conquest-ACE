@@ -70,17 +70,19 @@ namespace ACE.Server.Entity
         public void SaveBiotaToDatabase(bool enqueueSave, Action<bool> onCompleted)
         {
             LastRequestedDatabaseSave = DateTime.UtcNow;
-            SaveInProgress = true;
             ChangesDetected = false;
 
             if (enqueueSave)
             {
+                SaveInProgress = true;
                 DatabaseManager.Shard.SaveBiota(Biota, BiotaDatabaseLock, result =>
                 {
                     SaveInProgress = false;
                     onCompleted?.Invoke(result);
                 });
             }
+            // Note: SaveInProgress is only set when we actually enqueue a save operation
+            // If enqueueSave is false, no async operation is pending so SaveInProgress stays false
         }
 
 

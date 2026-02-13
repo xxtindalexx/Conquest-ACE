@@ -105,7 +105,7 @@ namespace ACE.Server.WorldObjects
 
             // Prevent swearing to own characters (same IP address)
             // Skip check if ANY account on the IP has multibox exemption (for legitimate households with multiple players)
-            if (Session?.EndPoint?.Address != null && patron.Session?.EndPoint?.Address != null)
+            if (!IsPlussed && !patron.IsPlussed && Session?.EndPoint?.Address != null && patron.Session?.EndPoint?.Address != null)
             {
                 if (Session.EndPoint.Address.Equals(patron.Session.EndPoint.Address))
                 {

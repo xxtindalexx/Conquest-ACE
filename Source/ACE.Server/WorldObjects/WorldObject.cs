@@ -494,9 +494,14 @@ namespace ACE.Server.WorldObjects
             sb.AppendLine("Guid: " + obj.Guid.Full + " (0x" + obj.Guid.Full.ToString("X") + ")");
 
             sb.AppendLine("----- Private Fields -----");
+            // CONQUEST: Skip verbose PK quest fields
+            var skipFields = new HashSet<string> { "_pkQuestList" };
             foreach (var prop in obj.GetType().GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).OrderBy(field => field.Name))
             {
                 if (prop.GetValue(obj) == null)
+                    continue;
+
+                if (skipFields.Contains(prop.Name))
                     continue;
 
                 sb.AppendLine($"{prop.Name.Replace("<", "").Replace(">k__BackingField", "")} = {prop.GetValue(obj)}");
@@ -601,6 +606,11 @@ namespace ACE.Server.WorldObjects
                     case "playerkillerstatus":
                         sb.AppendLine($"{prop.Name} = {obj.PlayerKillerStatus}" + " (" + (uint)obj.PlayerKillerStatus + ")");
                         break;
+                    // CONQUEST: Skip PK quest list - too verbose for property dump
+                    case "pkquestlist":
+                    case "pkquestlistserialized":
+                        sb.AppendLine($"{prop.Name} = [Skipped - too verbose]");
+                        break;
                     default:
                         sb.AppendLine($"{prop.Name} = {prop.GetValue(obj, null)}");
                         break;
@@ -622,7 +632,15 @@ namespace ACE.Server.WorldObjects
             foreach (var item in obj.GetAllPropertyInt64())
                 sb.AppendLine($"PropertyInt64.{Enum.GetName(typeof(PropertyInt64), item.Key)} ({(int)item.Key}) = {item.Value}");
             foreach (var item in obj.GetAllPropertyString())
+            {
+                // CONQUEST: Skip verbose PK quest info
+                if (item.Key == PropertyString.PKQuestInfo)
+                {
+                    sb.AppendLine($"PropertyString.{Enum.GetName(typeof(PropertyString), item.Key)} ({(int)item.Key}) = [Skipped - too verbose]");
+                    continue;
+                }
                 sb.AppendLine($"PropertyString.{Enum.GetName(typeof(PropertyString), item.Key)} ({(int)item.Key}) = {item.Value}");
+            }
 
             sb.AppendLine("\n");
 

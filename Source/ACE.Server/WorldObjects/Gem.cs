@@ -57,6 +57,14 @@ namespace ACE.Server.WorldObjects
             if (!(activator is Player player))
                 return;
 
+            // CONQUEST: Arena observers cannot use items (especially portal gems)
+            if (player.IsArenaObserver)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot use items while observing an arena match.", ChatMessageType.Broadcast));
+                return;
+            }
+
+
             if (player.IsBusy || player.Teleporting || player.suicideInProgress)
             {
                 player.SendWeenieError(WeenieError.YoureTooBusy);

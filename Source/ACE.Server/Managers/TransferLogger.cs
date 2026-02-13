@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ACE.Common;
 using ACE.Database;
 using ACE.Database.Models.Shard;
 using ACE.Server.WorldObjects;
@@ -61,6 +62,44 @@ namespace ACE.Server.Managers
             catch (Exception ex)
             {
                 log.Error($"Error sending admin message: {ex.Message}");
+            }
+        }
+
+        private static void SendDiscordTransferLog(TransferLog transferLog)
+        {
+            try
+            {
+                var trackingChannelId = ConfigManager.Config.Chat.TrackingAuditChannelId;
+                if (trackingChannelId == 0 || !ConfigManager.Config.Chat.EnableDiscordConnection)
+                    return;
+
+                var transferType = transferLog.TransferType.ToUpper().Replace(" ", "_");
+                var timestamp = transferLog.Timestamp.ToString("yyyy-MM-dd HH:mm:ss");
+
+                // Build a detailed message for Discord
+                var message = $"**{transferType}**\n" +
+                              $"From: {transferLog.FromPlayerName} ({transferLog.FromPlayerAccount ?? "Unknown"})\n" +
+                              $"To: {transferLog.ToPlayerName} ({transferLog.ToPlayerAccount ?? "Unknown"})\n" +
+                              $"Item: {transferLog.ItemName} x{transferLog.Quantity}\n" +
+                              $"Time: {timestamp} UTC";
+
+                // Add additional data if present
+                if (!string.IsNullOrEmpty(transferLog.AdditionalData))
+                {
+                    message += $"\nInfo: {transferLog.AdditionalData}";
+                }
+
+                // Add IP info if available
+                if (!string.IsNullOrEmpty(transferLog.FromPlayerIP) || !string.IsNullOrEmpty(transferLog.ToPlayerIP))
+                {
+                    message += $"\nIPs: {transferLog.FromPlayerIP ?? "N/A"} -> {transferLog.ToPlayerIP ?? "N/A"}";
+                }
+
+                DiscordChatManager.SendDiscordMessage("[TRACKING]", message, trackingChannelId);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error sending Discord transfer log: {ex.Message}");
             }
         }
 
@@ -1142,19 +1181,22 @@ namespace ACE.Server.Managers
                 {
                     var transferType = transferLog.TransferType.ToUpper().Replace(" ", "_");
                     var adminMessage = $"{transferType}: {transferLog.FromPlayerName} -> {transferLog.ToPlayerName}: {transferLog.ItemName} x{transferLog.Quantity}";
-                    
+
                     // Add location data for chest, ground drop, and ground pickup transfers
-                    if (!string.IsNullOrEmpty(transferLog.AdditionalData) && 
-                        (transferLog.TransferType == TransferTypeChestDeposit || 
+                    if (!string.IsNullOrEmpty(transferLog.AdditionalData) &&
+                        (transferLog.TransferType == TransferTypeChestDeposit ||
                          transferLog.TransferType == TransferTypeChestWithdrawal ||
                          transferLog.TransferType == TransferTypeGroundDrop ||
                          transferLog.TransferType == TransferTypeGroundPickup))
                     {
                         adminMessage += $" | {transferLog.AdditionalData}";
                     }
-                    
+
                     SendAdminMessage(adminMessage);
                 }
+
+                // Send to Discord tracking audit channel
+                SendDiscordTransferLog(transferLog);
             }
             catch (Exception ex)
             {

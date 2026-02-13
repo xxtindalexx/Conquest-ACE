@@ -4016,5 +4016,150 @@ namespace ACE.Server.Command.Handlers
                 log.Error($"Error in /dbqueue command: {ex.Message}\n{ex.StackTrace}");
             }
         }
+
+        /// <summary>
+        /// CONQUEST: Admin command to name the current landblock
+        /// Saves/updates the landblock_description table with the player's current landblock
+        /// Landblock is stored as decimal (e.g., 0x002B = 43)
+        /// </summary>
+        [CommandHandler("lbname", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1,
+            "Names the current landblock and saves it to the database",
+            "<name> [is_dungeon 0/1]\nExample: /lbname Egg Orchard\nExample: /lbname \"Some Dungeon\" 1")]
+        public static void HandleLandblockName(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /lbname <name> [is_dungeon 0/1]", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Get the player's current landblock (as decimal, e.g., 0x002B = 43)
+            var landblockId = (int)session.Player.Location.LandblockId.Landblock;
+            var landblockHex = $"0x{landblockId:X4}";
+
+            // Parse the name - join all parameters except last if it's a number
+            string name;
+            bool isDungeon;
+
+            // Check if last parameter is 0 or 1 (is_dungeon flag)
+            if (parameters.Length > 1 && (parameters[parameters.Length - 1] == "0" || parameters[parameters.Length - 1] == "1"))
+            {
+                name = string.Join(" ", parameters.Take(parameters.Length - 1));
+                isDungeon = parameters[parameters.Length - 1] == "1";
+            }
+            else
+            {
+                name = string.Join(" ", parameters);
+                // Auto-detect: if player is indoors (cell >= 0x100), it's likely a dungeon
+                var cellId = session.Player.Location.Cell & 0xFFFF;
+                isDungeon = cellId >= 0x100;
+            }
+
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    // Check if landblock already exists
+                    var existing = context.LandblockDescription.FirstOrDefault(l => l.Landblock == landblockId);
+
+                    if (existing != null)
+                    {
+                        // Update existing record
+                        var oldName = existing.Name;
+                        existing.Name = name;
+                        existing.IsDungeon = isDungeon;
+                        existing.HasDungeon = isDungeon;
+                        existing.LastModified = DateTime.Now;
+                        context.SaveChanges();
+
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Updated landblock {landblockHex} ({landblockId})", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  Old name: \"{oldName}\"", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  New name: \"{name}\"", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  Is dungeon: {isDungeon}", ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        // Insert new record
+                        var newDesc = new LandblockDescription
+                        {
+                            Landblock = landblockId,
+                            Name = name,
+                            IsDungeon = isDungeon,
+                            HasDungeon = isDungeon,
+                            LastModified = DateTime.Now
+                        };
+                        context.LandblockDescription.Add(newDesc);
+                        context.SaveChanges();
+
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Saved new landblock {landblockHex} ({landblockId})", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  Name: \"{name}\"", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  Is dungeon: {isDungeon}", ChatMessageType.Broadcast));
+                    }
+
+                    // Update the in-memory cache
+                    ACE.Server.Entity.Landblock.landblockNames[(ushort)landblockId] = name;
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat("Landblock cache updated.", ChatMessageType.Broadcast));
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error saving landblock: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error in /lbname command: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Show current landblock info
+        /// </summary>
+        [CommandHandler("lbinfo", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 0,
+            "Shows info about the current landblock",
+            "")]
+        public static void HandleLandblockInfo(Session session, params string[] parameters)
+        {
+            var landblockId = (int)session.Player.Location.LandblockId.Landblock;
+            var landblockHex = $"0x{landblockId:X4}";
+            var cellId = session.Player.Location.Cell & 0xFFFF;
+            var isIndoor = cellId >= 0x100;
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"=== Current Landblock Info ===", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock: {landblockHex} ({landblockId} decimal)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Cell: 0x{cellId:X4} ({(isIndoor ? "Indoor/Dungeon" : "Outdoor")})", ChatMessageType.Broadcast));
+
+            // Check database for existing info
+            try
+            {
+                using (var context = new WorldDbContext())
+                {
+                    var existing = context.LandblockDescription.FirstOrDefault(l => l.Landblock == landblockId);
+
+                    if (existing != null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Database Name: \"{existing.Name}\"", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Is Dungeon: {existing.IsDungeon}", ChatMessageType.Broadcast));
+                        if (!string.IsNullOrEmpty(existing.Directions))
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Directions: {existing.Directions}", ChatMessageType.Broadcast));
+                        if (!string.IsNullOrEmpty(existing.MacroRegion))
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Macro Region: {existing.MacroRegion}", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Last Modified: {existing.LastModified}", ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("No database entry for this landblock.", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat("Use /lbname <name> to add one.", ChatMessageType.Broadcast));
+                    }
+                }
+
+                // Check in-memory cache
+                if (ACE.Server.Entity.Landblock.landblockNames.TryGetValue((ushort)landblockId, out var cachedName))
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Cached Name: \"{cachedName}\"", ChatMessageType.Broadcast));
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error: {ex.Message}", ChatMessageType.Broadcast));
+            }
+        }
     }
 }

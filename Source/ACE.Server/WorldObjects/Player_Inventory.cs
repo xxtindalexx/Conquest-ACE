@@ -3250,6 +3250,30 @@ namespace ACE.Server.WorldObjects
                             return;
                         }
 
+                        // CONQUEST: Re-check IP quest item at execution time to prevent race conditions
+                        // This handles cases where multiple merge requests are sent rapidly
+                        if (sourceStackRootOwner != this && targetStackRootOwner == this)
+                        {
+                            var ipQuestName = sourceStack.GetProperty(PropertyString.IPQuest);
+                            if (!string.IsNullOrEmpty(ipQuestName))
+                            {
+                                // Just check if we can loot - don't increment (that was already done at request time)
+                                var quest = DatabaseManager.World.GetCachedQuest(ipQuestName);
+                                if (quest != null && quest.IsIpRestricted)
+                                {
+                                    string playerIp = new System.Net.IPAddress(Account.LastLoginIP).ToString();
+                                    var ipTracking = DatabaseManager.ShardDB.GetQuestIpTracking(quest.Id, playerIp);
+                                    if (ipTracking != null && ipTracking.SolvesCount > quest.IpLootLimit.GetValueOrDefault(1))
+                                    {
+                                        Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot loot this item. Your IP-wide limit has been reached.", ChatMessageType.Broadcast));
+                                        Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, mergeFromGuid));
+                                        EnqueuePickupDone(pickupMotion);
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+
                         if (DoHandleActionStackableMerge(sourceStack, targetStack, amount))
                         {
 
