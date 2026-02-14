@@ -48,6 +48,8 @@ public partial class WorldDbContext : DbContext
 
     public virtual DbSet<RecipeModsInt> RecipeModsInt { get; set; }
 
+    public virtual DbSet<RecipeModsInt64> RecipeModsInt64 { get; set; }
+
     public virtual DbSet<RecipeModsString> RecipeModsString { get; set; }
 
     public virtual DbSet<RecipeRequirementsBool> RecipeRequirementsBool { get; set; }
@@ -657,6 +659,31 @@ public partial class WorldDbContext : DbContext
             entity.HasOne(d => d.RecipeMod).WithMany(p => p.RecipeModsInt)
                 .HasForeignKey(d => d.RecipeModId)
                 .HasConstraintName("recipeId_mod_int");
+        });
+
+        modelBuilder.Entity<RecipeModsInt64>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("recipe_mods_int64", tb => tb.HasComment("Recipe Int64 Mods"));
+
+            entity.HasIndex(e => e.RecipeModId, "recipeId_mod_int64");
+
+            entity.Property(e => e.Id)
+                .HasComment("Unique Id of this Recipe Mod instance")
+                .HasColumnName("id");
+            entity.Property(e => e.Enum).HasColumnName("enum");
+            entity.Property(e => e.Index).HasColumnName("index");
+            entity.Property(e => e.RecipeModId)
+                .HasComment("Unique Id of Recipe Mod")
+                .HasColumnName("recipe_Mod_Id");
+            entity.Property(e => e.Source).HasColumnName("source");
+            entity.Property(e => e.Stat).HasColumnName("stat");
+            entity.Property(e => e.Value).HasColumnName("value");
+
+            entity.HasOne(d => d.RecipeMod).WithMany(p => p.RecipeModsInt64)
+                .HasForeignKey(d => d.RecipeModId)
+                .HasConstraintName("recipeId_mod_int64");
         });
 
         modelBuilder.Entity<RecipeModsString>(entity =>

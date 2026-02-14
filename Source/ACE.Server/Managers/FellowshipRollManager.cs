@@ -335,6 +335,7 @@ namespace ACE.Server.Managers
         /// - Admins: No limit (exempt for testing)
         /// - Exempt accounts: 4 per week per IP (double the normal limit)
         /// - Non-exempt accounts: 2 per week per IP (shared across all accounts on that IP)
+        /// Also checks player-level properties as a redundant safety measure
         /// </summary>
         private static bool CheckWeeklyMysteryEggLimit(Player player, out string message)
         {
@@ -352,6 +353,34 @@ namespace ACE.Server.Managers
             // Both exempt and non-exempt use IP-based tracking
             // Exempt accounts get double the limit (4 instead of 2)
             var weeklyLimit = isExempt ? 4 : 2;
+
+            // === Player Property Check (redundant safety) ===
+            var lastResetTime = player.GetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime) ?? 0;
+            var playerEggCount = player.GetProperty(PropertyInt.MysteryEggsObtainedThisWeek) ?? 0;
+
+            // Reset if more than 7 days have passed
+            if (currentTime - lastResetTime > 604800) // 604800 seconds = 7 days
+            {
+                playerEggCount = 0;
+                player.SetProperty(PropertyInt.MysteryEggsObtainedThisWeek, 0);
+                player.SetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime, currentTime);
+            }
+
+            // Check player-level limit (use same limit as IP-based)
+            if (playerEggCount >= weeklyLimit)
+            {
+                var timeSinceReset = currentTime - lastResetTime;
+                var secondsRemaining = 604800 - timeSinceReset;
+                var days = secondsRemaining / 86400;
+                var hours = (secondsRemaining % 86400) / 3600;
+                var minutes = (secondsRemaining % 3600) / 60;
+
+                var exemptNote = isExempt ? " (Exempt account: 4/week limit)" : "";
+                message = $"You have already obtained {weeklyLimit} Mystery Eggs this week on this character. You can obtain another in {days}d {hours}h {minutes}m.{exemptNote}";
+                return false;
+            }
+
+            // === IP-based Check ===
             return CheckIpMysteryEggLimit(player, currentTime, weeklyLimit, isExempt, out message);
         }
 
@@ -401,9 +430,28 @@ namespace ACE.Server.Managers
         /// Increments the weekly mystery egg counter
         /// Both exempt and non-exempt accounts use IP-based tracking
         /// Exempt accounts have a limit of 4, non-exempt have a limit of 2
+        /// Also tracks on player properties as a redundant check
         /// </summary>
         private static void IncrementMysteryEggCounter(Player player)
         {
+            var currentTime = (long)Time.GetUnixTime();
+
+            // === Player Property Tracking ===
+            var lastResetTime = player.GetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime) ?? 0;
+            var playerEggCount = player.GetProperty(PropertyInt.MysteryEggsObtainedThisWeek) ?? 0;
+
+            // Reset if more than 7 days have passed
+            if (currentTime - lastResetTime > 604800) // 604800 seconds = 7 days
+            {
+                playerEggCount = 0;
+                player.SetProperty(PropertyInt64.LastMysteryEggWeeklyResetTime, currentTime);
+            }
+
+            // Increment player-level counter
+            playerEggCount++;
+            player.SetProperty(PropertyInt.MysteryEggsObtainedThisWeek, playerEggCount);
+
+            // === IP-based Tracking ===
             var ipAddress = player.Session?.EndPoint?.Address?.ToString();
             if (string.IsNullOrEmpty(ipAddress))
                 return;

@@ -1,32 +1,30 @@
-using System;
-using System.Diagnostics;
-using System.Text.RegularExpressions;
-using System.Threading;
-
-using log4net;
-
 using ACE.Common;
 using ACE.Common.Performance;
 using ACE.Database;
 using ACE.Database.Entity;
+using ACE.Database.Models.Shard;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
-using ACE.Server.WorldObjects;
+using ACE.Server.Entity.Chess;
 using ACE.Server.Network;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Managers;
 using ACE.Server.Physics;
 using ACE.Server.Physics.Common;
-
+using ACE.Server.WorldObjects;
+using log4net;
+using System;
+using System.Diagnostics;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
+using Biota = ACE.Entity.Models.Biota;
 using Character = ACE.Database.Models.Shard.Character;
 using Position = ACE.Entity.Position;
-using System.Linq;
-using ACE.Database.Models.Shard;
-using Biota = ACE.Entity.Models.Biota;
 
 namespace ACE.Server.Managers
 {
@@ -121,52 +119,70 @@ namespace ACE.Server.Managers
             if (offlinePlayer.SaveInProgress)
             {
                 var stuckTime = (DateTime.UtcNow - offlinePlayer.LastRequestedDatabaseSave).TotalSeconds;
+                var dbQueueCount = DatabaseManager.Shard.QueueCount;
 
-                // CONQUEST: Safety fallback - if save has been stuck for over 5 minutes, force-clear the flag
-                // This prevents players from being permanently locked out due to buggy save state
+                // CONQUEST: Safety fallback - only force-clear if save has been stuck AND database queue is empty
+                // If queue is still processing, the save might still be pending - don't allow stale data load
                 const int SAVE_TIMEOUT_SECONDS = 300; // 5 minutes
-                if (stuckTime > SAVE_TIMEOUT_SECONDS)
+                const int MAX_LOGIN_RETRIES = 10;
+
+                if (stuckTime > SAVE_TIMEOUT_SECONDS && dbQueueCount == 0)
                 {
-                    log.Warn($"[LOGIN RECOVERY] {character.Name} save stuck for {stuckTime:N1}s, force-clearing SaveInProgress flag to allow login.");
+                    // Queue is empty but callback never fired - likely a bug, safe to proceed
+                    log.Warn($"[LOGIN RECOVERY] {character.Name} save stuck for {stuckTime:N1}s with empty DB queue, force-clearing SaveInProgress flag to allow login.");
                     offlinePlayer.SaveInProgress = false;
                     // Fall through to normal login
                 }
+                else if (stuckTime > SAVE_TIMEOUT_SECONDS && dbQueueCount > 0)
+                {
+                    // Queue still has items - save might still be pending
+                    // Keep retrying indefinitely while queue is processing (don't enforce MAX_LOGIN_RETRIES)
+                    log.Warn($"[LOGIN BLOCK] {character.Name} save pending {stuckTime:N1}s, DB queue has {dbQueueCount} items - waiting for save completion (retry {loginRetryCount + 1}).");
+
+                    var retryChain = new ACE.Server.Entity.Actions.ActionChain();
+                    retryChain.AddDelaySeconds(2.0);
+                    retryChain.AddAction(WorldManager.ActionQueue, ActionType.WorldManager_PlayerEnterWorld, () =>
+                    {
+                        if (session != null && session.Player == null && session.State != Network.Enum.SessionState.TerminationStarted)
+                            PlayerEnterWorld(session, character, loginRetryCount + 1);
+                    });
+                    retryChain.EnqueueChain();
+                    return;
+                }
+                else if (loginRetryCount >= MAX_LOGIN_RETRIES)
+                {
+                    // Max retries reached and queue is empty - something went wrong
+                    log.Error($"[LOGIN BLOCK] {character.Name} REJECTED after {MAX_LOGIN_RETRIES} retries. Save stuck {stuckTime:N1}s. DB queue: {dbQueueCount}");
+
+                    if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.PerformanceAlertsChannelId > 0)
+                    {
+                        try
+                        {
+                            var msg = $"🔴 **CRITICAL**: `{character.Name}` login blocked after {MAX_LOGIN_RETRIES} retries. Save stuck {stuckTime:N1}s. DB Queue: {dbQueueCount}";
+                            DiscordChatManager.SendDiscordMessage("CRITICAL ALERT", msg, ConfigManager.Config.Chat.PerformanceAlertsChannelId);
+                        }
+                        catch { }
+                    }
+
+                    return;
+                }
                 else
                 {
-                    const int MAX_LOGIN_RETRIES = 10;
-                    if (loginRetryCount >= MAX_LOGIN_RETRIES)
+                    // Normal case: save in progress, retry with delay
+                    var timeWaiting = (DateTime.UtcNow - offlinePlayer.LastRequestedDatabaseSave).TotalMilliseconds;
+                    log.Warn($"[LOGIN BLOCK] {character.Name} login delayed (retry {loginRetryCount + 1}/{MAX_LOGIN_RETRIES}), save in-progress {timeWaiting:N0}ms.");
+
+                    SendLoginBlockDiscordAlert(character.Name, timeWaiting);
+
+                    var retryChain = new ACE.Server.Entity.Actions.ActionChain();
+                    retryChain.AddDelaySeconds(2.0);
+                    retryChain.AddAction(WorldManager.ActionQueue, ActionType.WorldManager_PlayerEnterWorld, () =>
                     {
-                        log.Error($"[LOGIN BLOCK] {character.Name} REJECTED after {MAX_LOGIN_RETRIES} retries. Save stuck {stuckTime:N1}s. DB queue: {DatabaseManager.Shard.QueueCount}");
-
-                        if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.PerformanceAlertsChannelId > 0)
-                        {
-                            try
-                            {
-                                var msg = $"🔴 **CRITICAL**: `{character.Name}` login blocked after {MAX_LOGIN_RETRIES} retries. Save stuck {stuckTime:N1}s. DB Queue: {DatabaseManager.Shard.QueueCount}";
-                                DiscordChatManager.SendDiscordMessage("CRITICAL ALERT", msg, ConfigManager.Config.Chat.PerformanceAlertsChannelId);
-                            }
-                            catch { }
-                        }
-
-                        return;
-                    }
-                    else
-                    {
-                        var timeWaiting = (DateTime.UtcNow - offlinePlayer.LastRequestedDatabaseSave).TotalMilliseconds;
-                        log.Warn($"[LOGIN BLOCK] {character.Name} login delayed (retry {loginRetryCount + 1}/{MAX_LOGIN_RETRIES}), save in-progress {timeWaiting:N0}ms.");
-
-                        SendLoginBlockDiscordAlert(character.Name, timeWaiting);
-
-                        var retryChain = new ACE.Server.Entity.Actions.ActionChain();
-                        retryChain.AddDelaySeconds(2.0);
-                        retryChain.AddAction(WorldManager.ActionQueue, ActionType.WorldManager_PlayerEnterWorld, () =>
-                        {
-                            if (session != null && session.Player == null && session.State != Network.Enum.SessionState.TerminationStarted)
-                                PlayerEnterWorld(session, character, loginRetryCount + 1);
-                        });
-                        retryChain.EnqueueChain();
-                        return;
-                    }
+                        if (session != null && session.Player == null && session.State != Network.Enum.SessionState.TerminationStarted)
+                            PlayerEnterWorld(session, character, loginRetryCount + 1);
+                    });
+                    retryChain.EnqueueChain();
+                    return;
                 }
             }
 
@@ -301,6 +317,9 @@ namespace ACE.Server.Managers
             }
 
             session.Player.PlayerEnterWorld();
+
+            // Check if player's IP is gagged and apply gag if so
+            PlayerManager.CheckAndApplyIpGag(session.Player);
 
             var success = LandblockManager.AddObject(session.Player, true);
             if (!success)

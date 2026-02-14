@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -45,6 +48,22 @@ namespace ACE.Server.Managers
 
         private static DateTime lastDatabaseSave = DateTime.MinValue;
 
+        // IP-based gag system
+        private static readonly ConcurrentDictionary<string, IpGagInfo> ipGags = new ConcurrentDictionary<string, IpGagInfo>();
+        private static readonly string ipGagsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ipgags.json");
+
+        public class IpGagInfo
+        {
+            public string IpAddress { get; set; }
+            public double GagTimestamp { get; set; }
+            public double GagDuration { get; set; }
+            public string Reason { get; set; }
+            public string IssuedBy { get; set; }
+
+            public bool IsExpired => Time.GetUnixTime() > GagTimestamp + GagDuration;
+            public double RemainingSeconds => Math.Max(0, (GagTimestamp + GagDuration) - Time.GetUnixTime());
+        }
+
         /// <summary>
         /// This will load all the players from the database into the OfflinePlayers dictionary. It should be called before WorldManager is initialized.
         /// </summary>
@@ -77,6 +96,8 @@ namespace ACE.Server.Managers
                         log.Error($"PlayerManager.Initialize: couldn't find account for player {offlinePlayer.Name} ({offlinePlayer.Guid})");
                 }
             });
+            // Load IP gags from file
+            LoadIpGags();
         }
 
         private static readonly LinkedList<Player> playersPendingLogoff = new LinkedList<Player>();
@@ -800,6 +821,11 @@ namespace ACE.Server.Managers
 
         public static bool GagPlayer(Player issuer, string playerName)
         {
+            return GagPlayer(issuer, playerName, 300, null); // Default 5 minutes
+        }
+
+        public static bool GagPlayer(Player issuer, string playerName, double durationSeconds, string reason)
+        {
             var player = FindByName(playerName);
 
             if (player == null)
@@ -807,13 +833,26 @@ namespace ACE.Server.Managers
 
             player.SetProperty(ACE.Entity.Enum.Properties.PropertyBool.IsGagged, true);
             player.SetProperty(ACE.Entity.Enum.Properties.PropertyFloat.GagTimestamp, Common.Time.GetUnixTime());
-            player.SetProperty(ACE.Entity.Enum.Properties.PropertyFloat.GagDuration, 300);
+            player.SetProperty(ACE.Entity.Enum.Properties.PropertyFloat.GagDuration, durationSeconds);
+
 
             player.SaveBiotaToDatabase();
 
-            BroadcastToAuditChannel(issuer, $"{issuer.Name} has gagged {player.Name} for five minutes.");
+            var durationStr = FormatGagDuration(durationSeconds);
+            var reasonStr = string.IsNullOrEmpty(reason) ? "" : $" Reason: {reason}";
+            BroadcastToAuditChannel(issuer, $"{issuer.Name} has gagged {player.Name} for {durationStr}.{reasonStr}");
 
             return true;
+        }
+
+        private static string FormatGagDuration(double seconds)
+        {
+            var ts = TimeSpan.FromSeconds(seconds);
+            if (ts.TotalDays >= 1)
+                return $"{(int)ts.TotalDays} day{((int)ts.TotalDays != 1 ? "s" : "")}, {ts.Hours} hour{(ts.Hours != 1 ? "s" : "")}";
+            if (ts.TotalHours >= 1)
+                return $"{(int)ts.TotalHours} hour{((int)ts.TotalHours != 1 ? "s" : "")}, {ts.Minutes} minute{(ts.Minutes != 1 ? "s" : "")}";
+            return $"{(int)ts.TotalMinutes} minute{((int)ts.TotalMinutes != 1 ? "s" : "")}";
         }
 
         public static bool UnGagPlayer(Player issuer, string playerName)
@@ -834,6 +873,161 @@ namespace ACE.Server.Managers
             return true;
         }
 
+        #region IP Gag System
+
+        /// <summary>
+        /// Gags an IP address for the specified duration. All players logging in from this IP will be automatically gagged.
+        /// </summary>
+        public static bool GagIP(Player issuer, string ipAddress, double durationSeconds, string reason)
+        {
+            var gagInfo = new IpGagInfo
+            {
+                IpAddress = ipAddress,
+                GagTimestamp = Time.GetUnixTime(),
+                GagDuration = durationSeconds,
+                Reason = reason,
+                IssuedBy = issuer?.Name ?? "SYSTEM"
+            };
+
+            ipGags[ipAddress] = gagInfo;
+            SaveIpGags();
+
+            // Apply gag to all currently online players from this IP
+            var playersOnIP = GetAllOnline()
+                .Where(p => p.Session?.EndPoint?.Address?.ToString() == ipAddress)
+                .ToList();
+
+            foreach (var player in playersOnIP)
+            {
+                ApplyGagToPlayer(player, durationSeconds, reason);
+            }
+
+            var durationStr = FormatGagDuration(durationSeconds);
+            var reasonStr = string.IsNullOrEmpty(reason) ? "" : $" Reason: {reason}";
+            BroadcastToAuditChannel(issuer, $"{issuer?.Name ?? "SYSTEM"} has IP-gagged {ipAddress} for {durationStr}. {playersOnIP.Count} online player(s) affected.{reasonStr}");
+
+            return true;
+        }
+
+        /// <summary>
+        /// Removes an IP gag.
+        /// </summary>
+        public static bool UnGagIP(Player issuer, string ipAddress)
+        {
+            if (!ipGags.TryRemove(ipAddress, out _))
+                return false;
+
+            SaveIpGags();
+            BroadcastToAuditChannel(issuer, $"{issuer?.Name ?? "SYSTEM"} has removed IP-gag for {ipAddress}.");
+            return true;
+        }
+
+        /// <summary>
+        /// Checks if an IP address is currently gagged. Returns the gag info if found and not expired.
+        /// </summary>
+        public static IpGagInfo GetIpGag(string ipAddress)
+        {
+            if (ipGags.TryGetValue(ipAddress, out var gagInfo))
+            {
+                if (gagInfo.IsExpired)
+                {
+                    // Clean up expired gag
+                    ipGags.TryRemove(ipAddress, out _);
+                    SaveIpGags();
+                    return null;
+                }
+                return gagInfo;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Gets all active IP gags.
+        /// </summary>
+        public static List<IpGagInfo> GetAllIpGags()
+        {
+            // Clean up expired gags
+            var expired = ipGags.Where(kvp => kvp.Value.IsExpired).Select(kvp => kvp.Key).ToList();
+            foreach (var ip in expired)
+                ipGags.TryRemove(ip, out _);
+
+            if (expired.Count > 0)
+                SaveIpGags();
+
+            return ipGags.Values.ToList();
+        }
+
+        /// <summary>
+        /// Called when a player enters the world to check if their IP is gagged.
+        /// </summary>
+        public static void CheckAndApplyIpGag(Player player)
+        {
+            var ipAddress = player.Session?.EndPoint?.Address?.ToString();
+            if (string.IsNullOrEmpty(ipAddress))
+                return;
+
+            var gagInfo = GetIpGag(ipAddress);
+            if (gagInfo != null)
+            {
+                // Apply the remaining duration to this player
+                ApplyGagToPlayer(player, gagInfo.RemainingSeconds, gagInfo.Reason);
+                log.Info($"[IP GAG] Applied IP gag to {player.Name} from IP {ipAddress}. Remaining: {FormatGagDuration(gagInfo.RemainingSeconds)}");
+            }
+        }
+
+        private static void ApplyGagToPlayer(Player player, double durationSeconds, string reason)
+        {
+            player.SetProperty(PropertyBool.IsGagged, true);
+            player.SetProperty(PropertyFloat.GagTimestamp, Time.GetUnixTime());
+            player.SetProperty(PropertyFloat.GagDuration, durationSeconds);
+            player.SaveBiotaToDatabase();
+
+            // Notify the player
+            var durationStr = FormatGagDuration(durationSeconds);
+            var reasonMsg = string.IsNullOrEmpty(reason) ? "" : $" Reason: {reason}";
+            player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You have been gagged for {durationStr}.{reasonMsg}", ChatMessageType.WorldBroadcast));
+        }
+
+        private static void LoadIpGags()
+        {
+            try
+            {
+                if (File.Exists(ipGagsFilePath))
+                {
+                    var json = File.ReadAllText(ipGagsFilePath);
+                    var gags = JsonSerializer.Deserialize<List<IpGagInfo>>(json);
+                    if (gags != null)
+                    {
+                        foreach (var gag in gags)
+                        {
+                            if (!gag.IsExpired)
+                                ipGags[gag.IpAddress] = gag;
+                        }
+                    }
+                    log.Info($"[IP GAG] Loaded {ipGags.Count} active IP gags from file.");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[IP GAG] Failed to load IP gags: {ex.Message}");
+            }
+        }
+
+        private static void SaveIpGags()
+        {
+            try
+            {
+                var gags = ipGags.Values.Where(g => !g.IsExpired).ToList();
+                var json = JsonSerializer.Serialize(gags, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(ipGagsFilePath, json);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[IP GAG] Failed to save IP gags: {ex.Message}");
+            }
+        }
+
+        #endregion
         public static void BootAllPlayers()
         {
             foreach (var player in GetAllOnline().Where(p => p.Session.AccessLevel < AccessLevel.Advocate))

@@ -1455,7 +1455,11 @@ namespace ACE.Server.WorldObjects.Managers
             if (sharedCooldownID == null)
                 return true;
 
-            return GetCooldown(sharedCooldownID.Value) == 0.0f;
+            // Use a small tolerance to handle floating-point precision issues
+            // When cooldown expires, the remaining time calculation may return a tiny
+            // positive or negative value instead of exactly 0.0f, causing misfires
+            // 0.01 seconds (10ms) tolerance is imperceptible but handles precision errors
+            return GetCooldown(sharedCooldownID.Value) <= 0.01f;
         }
 
         /// <summary>

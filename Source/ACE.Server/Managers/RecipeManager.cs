@@ -396,6 +396,8 @@ namespace ACE.Server.Managers
 
             // Immediately save modified items to prevent loss on crash/disconnect
             // This is especially important for tinkering operations
+            // NOTE: We keep ChangesDetected = true so the logout save will also save the item
+            // This ensures the save happens even if the async queue hasn't processed yet
             if (modified != null && modified.Count > 0)
             {
                 if (modified.Contains(target.Guid.Full))
@@ -403,9 +405,18 @@ namespace ACE.Server.Managers
                     log.Info($"[TINKER DEBUG] Save check for {target.Name} (0x{target.Guid.Full:X8}): ChangesDetected={target.ChangesDetected}");
                     if (target.ChangesDetected)
                     {
-                        log.Info($"[TINKER DEBUG] Saving {target.Name} to database...");
+                        log.Info($"[TINKER DEBUG] Saving {target.Name} to database (keeping ChangesDetected=true for logout safety)...");
+
+                        // Queue the async save but DON'T let it clear ChangesDetected
+                        // We'll manually ensure it stays true so logout also saves
                         target.SaveBiotaToDatabase();
-                        log.Info($"[TINKER DEBUG] Save queued for {target.Name}");
+
+                        // Force ChangesDetected back to true - this ensures the logout process
+                        // will also save the item, providing a safety net if the async save
+                        // hasn't completed yet when the player logs off
+                        target.ChangesDetected = true;
+
+                        log.Info($"[TINKER DEBUG] Save queued for {target.Name}, ChangesDetected forced to true");
                     }
                     else
                     {
@@ -414,7 +425,10 @@ namespace ACE.Server.Managers
                 }
 
                 if (modified.Contains(source.Guid.Full) && source.ChangesDetected)
+                {
                     source.SaveBiotaToDatabase();
+                    source.ChangesDetected = true;  // Safety net for source too
+                }
             }
         }
 
@@ -1232,6 +1246,9 @@ namespace ACE.Server.Managers
                 foreach (var intMod in mod.RecipeModsInt)
                     ModifyInt(player, intMod, source, target, result, modified);
 
+                foreach (var int64Mod in mod.RecipeModsInt64)
+                    ModifyInt64(player, int64Mod, source, target, result, modified);
+
                 foreach (var floatMod in mod.RecipeModsFloat)
                     ModifyFloat(player, floatMod, source, target, result, modified);
 
@@ -1421,6 +1438,57 @@ namespace ACE.Server.Managers
                     break;
                 default:
                     log.Warn($"RecipeManager.ModifyString({source.Name}, {target.Name}): unhandled operation {op}");
+                    break;
+            }
+        }
+
+        public static void ModifyInt64(Player player, RecipeModsInt64 int64Mod, WorldObject source, WorldObject target, WorldObject result, HashSet<uint> modified)
+        {
+            var op = (ModificationOperation)int64Mod.Enum;
+            var prop = (PropertyInt64)int64Mod.Stat;
+            var value = int64Mod.Value;
+
+            var sourceMod = GetSourceMod((RecipeSourceType)int64Mod.Source, player, source);
+            var targetMod = GetTargetMod((ModificationType)int64Mod.Index, source, target, player, result);
+
+            switch (op)
+            {
+                case ModificationOperation.SetValue:
+                    player.UpdateProperty(targetMod, prop, value);
+                    modified.Add(targetMod.Guid.Full);
+                    if (Debug) Console.WriteLine($"{targetMod.Name}.SetProperty({prop}, {value}) - {op}");
+                    break;
+                case ModificationOperation.Add:
+                    player.UpdateProperty(targetMod, prop, (targetMod.GetProperty(prop) ?? 0) + value);
+                    modified.Add(targetMod.Guid.Full);
+                    if (Debug) Console.WriteLine($"{targetMod.Name}.IncProperty({prop}, {value}) - {op}");
+                    break;
+                case ModificationOperation.CopyFromSourceToTarget:
+                    player.UpdateProperty(target, prop, sourceMod.GetProperty(prop) ?? 0);
+                    modified.Add(target.Guid.Full);
+                    if (Debug) Console.WriteLine($"{target.Name}.SetProperty({prop}, {sourceMod.GetProperty(prop) ?? 0}) - {op}");
+                    break;
+                case ModificationOperation.CopyFromSourceToResult:
+                    player.UpdateProperty(result, prop, player.GetProperty(prop) ?? 0);
+                    modified.Add(result.Guid.Full);
+                    if (Debug) Console.WriteLine($"{result.Name}.SetProperty({prop}, {player.GetProperty(prop) ?? 0}) - {op}");
+                    break;
+                case ModificationOperation.SetBitsOn:
+                    var bits = targetMod.GetProperty(prop) ?? 0;
+                    bits |= value;
+                    player.UpdateProperty(targetMod, prop, bits);
+                    modified.Add(targetMod.Guid.Full);
+                    if (Debug) Console.WriteLine($"{targetMod.Name}.SetProperty({prop}, 0x{bits:X}) - {op}");
+                    break;
+                case ModificationOperation.SetBitsOff:
+                    bits = targetMod.GetProperty(prop) ?? 0;
+                    bits &= ~value;
+                    player.UpdateProperty(targetMod, prop, bits);
+                    modified.Add(targetMod.Guid.Full);
+                    if (Debug) Console.WriteLine($"{targetMod.Name}.SetProperty({prop}, 0x{bits:X}) - {op}");
+                    break;
+                default:
+                    log.Warn($"RecipeManager.ModifyInt64({source.Name}, {target.Name}): unhandled operation {op}");
                     break;
             }
         }

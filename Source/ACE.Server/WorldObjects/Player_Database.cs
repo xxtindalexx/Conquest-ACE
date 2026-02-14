@@ -78,6 +78,16 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void SavePlayerToDatabase()
         {
+            SavePlayerToDatabase(null);
+        }
+
+        /// <summary>
+        /// Saves the character to the persistent database with optional completion callback.<para />
+        /// Will also save any possessions that are marked with ChangesDetected.
+        /// </summary>
+        /// <param name="onCompleted">Optional callback invoked when the save operation completes</param>
+        public void SavePlayerToDatabase(Action<bool> onCompleted)
+        {
             if (CharacterChangesDetected)
                 SaveCharacterToDatabase();
 
@@ -103,6 +113,7 @@ namespace ACE.Server.WorldObjects
             {
                 if (!result)
                     BiotaSaveFailed = true;
+                onCompleted?.Invoke(result);
             }, this.Guid.ToString());
         }
 

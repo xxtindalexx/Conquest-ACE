@@ -46,5 +46,7 @@ public partial class RecipeMod
 
     public virtual ICollection<RecipeModsInt> RecipeModsInt { get; set; } = new List<RecipeModsInt>();
 
+    public virtual ICollection<RecipeModsInt64> RecipeModsInt64 { get; set; } = new List<RecipeModsInt64>();
+
     public virtual ICollection<RecipeModsString> RecipeModsString { get; set; } = new List<RecipeModsString>();
 }

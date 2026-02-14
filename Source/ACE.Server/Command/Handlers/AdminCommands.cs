@@ -1832,59 +1832,281 @@ namespace ACE.Server.Command.Handlers
             // TODO: output
         }
 
-        // gag < char name >
-        [CommandHandler("gag", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 1,
-            "Prevents a character from talking.",
-            "< char name >\nThe character will not be able to @tell or use chat normally.")]
+        // gag <char name> <days> <hours> <minutes> [reason]
+        [CommandHandler("gag", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 4,
+            "Prevents a character from talking for a specified duration.",
+            "<char name> <days> <hours> <minutes> [reason]\n" +
+            "Example: /gag Bibbity 1 0 0 Racial slurs\n" +
+            "Example: /gag Bibbity 0 0 5 (5 minutes, no reason)\n" +
+            "Example: /gag \"Player Name\" 0 2 30 Spamming chat")]
         public static void HandleGag(Session session, params string[] parameters)
         {
-            // usage: @gag < char name >
-            // This command gags the specified character for five minutes.  The character will not be able to @tell or use chat normally.
-            // @gag - Prevents a character from talking.
-            // @ungag -Allows a gagged character to talk again.
-
-            if (parameters.Length > 0)
+            if (parameters.Length < 4)
             {
-                var playerName = string.Join(" ", parameters);
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /gag <char name> <days> <hours> <minutes> [reason]", ChatMessageType.Broadcast);
+                return;
+            }
 
-                var msg = "";
-                if (PlayerManager.GagPlayer(session.Player, playerName))
-                {
-                    msg = $"{playerName} has been gagged for five minutes.";
-                }
-                else
-                {
-                    msg = $"Unable to gag a character named {playerName}, check the name and re-try the command.";
-                }
+            // Parse player name (could be quoted for names with spaces)
+            string playerName;
+            int nextParamIndex;
 
+            if (parameters[0].StartsWith("\""))
+            {
+                // Find the closing quote
+                var nameBuilder = new System.Text.StringBuilder();
+                int i;
+                for (i = 0; i < parameters.Length; i++)
+                {
+                    if (i > 0) nameBuilder.Append(" ");
+                    nameBuilder.Append(parameters[i]);
+                    if (parameters[i].EndsWith("\"") && i > 0)
+                        break;
+                    if (parameters[i].EndsWith("\"") && parameters[i].Length > 1)
+                        break;
+                }
+                playerName = nameBuilder.ToString().Trim('"');
+                nextParamIndex = i + 1;
+            }
+            else
+            {
+                playerName = parameters[0];
+                nextParamIndex = 1;
+            }
+
+            // Check we still have enough parameters for duration
+            if (parameters.Length < nextParamIndex + 3)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /gag <char name> <days> <hours> <minutes> [reason]", ChatMessageType.Broadcast);
+                return;
+            }
+
+            // Parse duration
+            if (!int.TryParse(parameters[nextParamIndex], out int days) || days < 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid days value. Must be a non-negative integer.", ChatMessageType.Broadcast);
+                return;
+            }
+            if (!int.TryParse(parameters[nextParamIndex + 1], out int hours) || hours < 0 || hours > 23)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid hours value. Must be 0-23.", ChatMessageType.Broadcast);
+                return;
+            }
+            if (!int.TryParse(parameters[nextParamIndex + 2], out int minutes) || minutes < 0 || minutes > 59)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid minutes value. Must be 0-59.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            var totalSeconds = (days * 86400) + (hours * 3600) + (minutes * 60);
+            if (totalSeconds <= 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Duration must be greater than 0.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            // Parse optional reason (everything after the duration)
+            string reason = null;
+            if (parameters.Length > nextParamIndex + 3)
+            {
+                reason = string.Join(" ", parameters.Skip(nextParamIndex + 3));
+            }
+
+            if (PlayerManager.GagPlayer(session.Player, playerName, totalSeconds, reason))
+            {
+                var durationStr = $"{days}d {hours}h {minutes}m";
+                var msg = $"{playerName} has been gagged for {durationStr}.";
+                if (!string.IsNullOrEmpty(reason))
+                    msg += $" Reason: {reason}";
                 CommandHandlerHelper.WriteOutputInfo(session, msg, ChatMessageType.WorldBroadcast);
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Unable to gag a character named {playerName}, check the name and re-try the command.", ChatMessageType.Broadcast);
             }
         }
 
-        // ungag < char name >
-        [CommandHandler("ungag", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 1,
-            "Allows a gagged character to talk again.",
-            "< char name >\nThe character will again be able to @tell and use chat normally.")]
-        public static void HandleUnGag(Session session, params string[] parameters)
+        // gagip <account name> <days> <hours> <minutes> [reason]
+        [CommandHandler("gagip", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 4,
+            "Gags an IP address - prevents all characters from that IP from chatting.",
+            "<account name> <days> <hours> <minutes> [reason]\n" +
+            "Example: /gagip BibbityAccount 1 0 0 Racial slurs on multiple accounts\n" +
+            "This gags the IP address itself - any character logging in from that IP will be gagged.\n" +
+            "The gag persists across server restarts and applies to ALL accounts from that IP.")]
+        public static void HandleGagIP(Session session, params string[] parameters)
         {
-            // usage: @ungag < char name >
-            // @ungag -Allows a gagged character to talk again.
-
-            if (parameters.Length > 0)
+            if (parameters.Length < 4)
             {
-                var playerName = string.Join(" ", parameters);
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /gagip <account name> <days> <hours> <minutes> [reason]", ChatMessageType.Broadcast);
+                return;
+            }
 
-                var msg = "";
-                if (PlayerManager.UnGagPlayer(session.Player, playerName))
+            var accountName = parameters[0];
+
+            // Parse duration
+            if (!int.TryParse(parameters[1], out int days) || days < 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid days value. Must be a non-negative integer.", ChatMessageType.Broadcast);
+                return;
+            }
+            if (!int.TryParse(parameters[2], out int hours) || hours < 0 || hours > 23)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid hours value. Must be 0-23.", ChatMessageType.Broadcast);
+                return;
+            }
+            if (!int.TryParse(parameters[3], out int minutes) || minutes < 0 || minutes > 59)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Invalid minutes value. Must be 0-59.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            var totalSeconds = (days * 86400) + (hours * 3600) + (minutes * 60);
+            if (totalSeconds <= 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Duration must be greater than 0.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            // Parse optional reason
+            string reason = null;
+            if (parameters.Length > 4)
+            {
+                reason = string.Join(" ", parameters.Skip(4));
+            }
+
+            // Look up the account to get their last login IP
+            var account = DatabaseManager.Authentication.GetAccountByName(accountName);
+            if (account == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Unable to find an account named {accountName}.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            if (account.LastLoginIP == null || account.LastLoginIP.Length == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account {accountName} has no recorded login IP.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            // Convert byte[] IP to string
+            string targetIP;
+            try
+            {
+                var ipAddress = new System.Net.IPAddress(account.LastLoginIP);
+                targetIP = ipAddress.ToString();
+            }
+            catch
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Unable to parse IP address for account {accountName}.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            // Use the IP gag system - this gags the IP itself and applies to all current/future logins
+            PlayerManager.GagIP(session.Player, targetIP, totalSeconds, reason);
+
+            var durationStr = $"{days}d {hours}h {minutes}m";
+            var playersOnIP = PlayerManager.GetAllOnline()
+                .Where(p => p.Session?.EndPoint?.Address?.ToString() == targetIP)
+                .Select(p => p.Name)
+                .ToList();
+
+            var msg = $"IP {targetIP} (account: {accountName}) has been gagged for {durationStr}.";
+            if (playersOnIP.Count > 0)
+                msg += $" {playersOnIP.Count} online player(s) affected: {string.Join(", ", playersOnIP)}";
+            else
+                msg += " No players currently online from this IP - gag will apply when they log in.";
+            if (!string.IsNullOrEmpty(reason))
+                msg += $" Reason: {reason}";
+
+            CommandHandlerHelper.WriteOutputInfo(session, msg, ChatMessageType.WorldBroadcast);
+        }
+
+        // ungagip <account name or IP>
+        [CommandHandler("ungagip", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 1,
+            "Removes an IP gag.",
+            "<account name or IP address>\n" +
+            "Example: /ungagip BibbityAccount\n" +
+            "Example: /ungagip 192.168.1.100")]
+        public static void HandleUnGagIP(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /ungagip <account name or IP address>", ChatMessageType.Broadcast);
+                return;
+            }
+
+            var input = parameters[0];
+            string targetIP;
+
+            // Check if input looks like an IP address
+            if (System.Net.IPAddress.TryParse(input, out var parsedIP))
+            {
+                targetIP = parsedIP.ToString();
+            }
+            else
+            {
+                // Treat as account name
+                var account = DatabaseManager.Authentication.GetAccountByName(input);
+                if (account == null)
                 {
-                    msg = $"{playerName} has been ungagged.";
-                }
-                else
-                {
-                    msg = $"Unable to ungag a character named {playerName}, check the name and re-try the command.";
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Unable to find an account named {input}.", ChatMessageType.Broadcast);
+                    return;
                 }
 
-                CommandHandlerHelper.WriteOutputInfo(session, msg, ChatMessageType.WorldBroadcast);
+                if (account.LastLoginIP == null || account.LastLoginIP.Length == 0)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Account {input} has no recorded login IP.", ChatMessageType.Broadcast);
+                    return;
+                }
+
+                try
+                {
+                    targetIP = new System.Net.IPAddress(account.LastLoginIP).ToString();
+                }
+                catch
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Unable to parse IP address for account {input}.", ChatMessageType.Broadcast);
+                    return;
+                }
+            }
+
+            if (PlayerManager.UnGagIP(session.Player, targetIP))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"IP gag removed for {targetIP}.", ChatMessageType.WorldBroadcast);
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"No active IP gag found for {targetIP}.", ChatMessageType.Broadcast);
+            }
+        }
+
+        // listipgags
+        [CommandHandler("listipgags", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 0,
+            "Lists all active IP gags.",
+            "")]
+        public static void HandleListIpGags(Session session, params string[] parameters)
+        {
+            var gags = PlayerManager.GetAllIpGags();
+
+            if (gags.Count == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "No active IP gags.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"=== Active IP Gags ({gags.Count}) ===", ChatMessageType.Broadcast);
+            foreach (var gag in gags.OrderBy(g => g.RemainingSeconds))
+            {
+                var remaining = TimeSpan.FromSeconds(gag.RemainingSeconds);
+                var remainingStr = remaining.TotalHours >= 1
+                    ? $"{(int)remaining.TotalHours}h {remaining.Minutes}m"
+                    : $"{(int)remaining.TotalMinutes}m {remaining.Seconds}s";
+
+                var msg = $"  {gag.IpAddress} - {remainingStr} remaining - by {gag.IssuedBy}";
+                if (!string.IsNullOrEmpty(gag.Reason))
+                    msg += $" - {gag.Reason}";
+
+                CommandHandlerHelper.WriteOutputInfo(session, msg, ChatMessageType.Broadcast);
             }
         }
 
