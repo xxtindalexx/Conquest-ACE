@@ -215,5 +215,9 @@ namespace ACE.Entity.Enum.Properties
         /// CONQUEST: If TRUE, shows detailed XP breakdown when earning XP from kills/quests
         /// </summary>
         ShowXpBreakdown = 9041,
+
+        // CONQUEST: Champion Mutation System
+        ChampionEnabled = 9200,    // Generator property - enables champion spawns
+        IsChampion = 9201,         // Creature property - this is a champion
     }
 }
