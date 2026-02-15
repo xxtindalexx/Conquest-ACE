@@ -64,6 +64,11 @@ namespace ACE.Server.Entity
         // Loaded from database on server startup via LoadPKDungeonsFromDatabase()
         public static readonly HashSet<(ushort landblock, int variation)> pkDungeonLandblocks = new();
 
+        // CONQUEST: Cache of PK dungeon descriptions for lockout notification messages
+        // Key is (landblock, variation) tuple, value is the description (e.g., "PK Egg Orchard")
+        // Loaded from database on server startup via LoadPKDungeonsFromDatabase()
+        public static readonly Dictionary<(ushort landblock, int variation), string> pkDungeonDescriptions = new();
+
         // CONQUEST: Cache of landblock names for fellowship list display
         // Key is landblock ID, value is the location name (e.g., "Egg Orchard")
         // Loaded from database on server startup via LoadLandblockNamesFromDatabase()
@@ -75,6 +80,15 @@ namespace ACE.Server.Entity
         public static string GetLandblockName(ushort landblockId)
         {
             return landblockNames.TryGetValue(landblockId, out var name) ? name : "";
+        }
+
+        /// <summary>
+        /// CONQUEST: Gets the cached description for a PK dungeon by landblock and variation
+        /// Returns empty string if not found or no description set
+        /// </summary>
+        public static string GetPKDungeonDescription(ushort landblockId, int variation)
+        {
+            return pkDungeonDescriptions.TryGetValue((landblockId, variation), out var desc) ? desc : "";
         }
 
         /// <summary>
@@ -131,10 +145,16 @@ namespace ACE.Server.Entity
                     var configs = context.PkDungeonLandblocks.ToList();
 
                     pkDungeonLandblocks.Clear();
+                    pkDungeonDescriptions.Clear();
 
                     foreach (var config in configs)
                     {
                         pkDungeonLandblocks.Add((config.Landblock, config.Variation));
+
+                        // Cache description for lockout notification messages
+                        if (!string.IsNullOrWhiteSpace(config.Description))
+                            pkDungeonDescriptions[(config.Landblock, config.Variation)] = config.Description;
+
                         log.Info($"  Loaded PK dungeon: 0x{config.Landblock:X4} Variant {config.Variation}" +
                                 (string.IsNullOrWhiteSpace(config.Description) ? "" : $" ({config.Description})"));
                     }

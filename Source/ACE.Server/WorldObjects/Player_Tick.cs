@@ -125,6 +125,9 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: Check PK-only dungeon enforcement
             PKDungeonEnforcementTick();
 
+            // CONQUEST: Check if PK dungeon lockout has expired and notify player
+            PKDungeonLockoutExpirationTick();
+
             // CONQUEST: Track time spent in PK dungeons for quests
             PKDungeonQuestTick();
 
@@ -704,6 +707,53 @@ namespace ACE.Server.WorldObjects
                         Teleport(holtburg);
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Checks if a PK dungeon lockout has expired and notifies the player
+        /// Also clears the lockout properties once expired
+        /// </summary>
+        private void PKDungeonLockoutExpirationTick()
+        {
+            var lastDeathLocation = LastPKDungeonDeathLocation ?? 0;
+            var lastDeathTime = LastPKDungeonDeathTime ?? 0;
+
+            // No lockout active
+            if (lastDeathLocation == 0 || lastDeathTime == 0)
+                return;
+
+            var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
+            var lockoutDuration = 7200; // 2 hours in seconds
+
+            // Lockout has expired
+            if (timeSinceDeath >= lockoutDuration)
+            {
+                // Unpack the landblock and variation from stored location
+                var deathLandblock = (ushort)(lastDeathLocation >> 16);
+                var deathVariation = (int)(lastDeathLocation & 0xFFFF);
+
+                // Get the dungeon description for the notification
+                var dungeonName = ACE.Server.Entity.Landblock.GetPKDungeonDescription(deathLandblock, deathVariation);
+
+                // Notify the player
+                if (!string.IsNullOrWhiteSpace(dungeonName))
+                {
+                    Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"Your dungeon lockout for {dungeonName} has expired. You may now enter that dungeon again!",
+                        ChatMessageType.Broadcast));
+                }
+                else
+                {
+                    // Fallback if no description is set - use landblock ID
+                    Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"Your dungeon lockout for landblock 0x{deathLandblock:X4} (variant {deathVariation}) has expired. You may now enter that dungeon again!",
+                        ChatMessageType.Broadcast));
+                }
+
+                // Clear the lockout properties
+                LastPKDungeonDeathLocation = null;
+                LastPKDungeonDeathTime = null;
             }
         }
 
