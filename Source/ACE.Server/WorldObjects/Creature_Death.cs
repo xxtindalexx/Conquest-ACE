@@ -204,12 +204,19 @@ namespace ACE.Server.WorldObjects
 
                 var totalXP = (XpOverride ?? 0) * damagePercent;
 
+                // CONQUEST: Apply champion XP multiplier
+                totalXP *= GetChampionXpMultiplier();
+
                 playerDamager.EarnXP((long)Math.Round(totalXP), XpType.Kill);
 
                 // handle luminance
                 if (LuminanceAward != null)
                 {
                     var totalLuminance = (long)Math.Round(LuminanceAward.Value * damagePercent);
+
+                    // CONQUEST: Apply champion luminance multiplier
+                    totalLuminance = (long)(totalLuminance * GetChampionLuminanceMultiplier());
+
                     playerDamager.EarnLuminance(totalLuminance, XpType.Kill);
                 }
             }
