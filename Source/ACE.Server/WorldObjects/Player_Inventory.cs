@@ -1375,8 +1375,9 @@ namespace ACE.Server.WorldObjects
 
             OnPutItemInContainer(item.Guid.Full, container.Guid.Full, placement);
 
-            // Only check when looting from external sources (corpses/world), not when moving within own inventory
-            if (itemRootOwner != this && containerRootOwner == this && item is TreasureMap treasureMap)
+            // Only check loot limit when looting from a CORPSE, not when picking up from ground/house storage
+            // This allows players to drop maps, store in house chests, and pick them back up without hitting the limit
+            if (itemRootOwner is Corpse && containerRootOwner == this && item is TreasureMap treasureMap)
             {
                 // Check daily loot limit (2 maps per 24 hours)
                 var currentTime = (long)Time.GetUnixTime();
