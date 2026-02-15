@@ -661,6 +661,13 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void Teleport(Position _newPosition, bool fromPortal = false)
         {
+            // CONQUEST: Block teleport to PK dungeons player is locked out of
+            if (!IsAdmin && _newPosition != null && IsLockedOutOfPKDungeon(_newPosition, out var lockoutMessage))
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat(lockoutMessage, ChatMessageType.Broadcast));
+                return;
+            }
+
             // CONQUEST: Save and dismiss regular pets (not combat pets) before teleport
             // They will be restored in OnTeleportComplete()
             SaveAndDismissPetForTeleport();
@@ -1082,6 +1089,60 @@ namespace ACE.Server.WorldObjects
             playerWasMovedFromNoLogLandblock = true;
 
             return;
+        }
+
+        /// <summary>
+        /// CONQUEST: Checks if player is locked out of a PK dungeon at the destination
+        /// Returns true if locked out, with an appropriate message
+        /// </summary>
+        private bool IsLockedOutOfPKDungeon(Position destination, out string message)
+        {
+            message = null;
+
+            if (destination == null)
+                return false;
+
+            // Extract landblock and variation from destination
+            var destLandblock = (ushort)(destination.Cell >> 16);
+            var destVariation = destination.Variation ?? 0;
+
+            // Check if destination is a PK-only dungeon
+            if (!ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((destLandblock, destVariation)))
+                return false;
+
+            // Check if player has a lockout for this dungeon
+            var lastDeathLocation = LastPKDungeonDeathLocation ?? 0;
+            var lastDeathTime = LastPKDungeonDeathTime ?? 0;
+
+            if (lastDeathLocation == 0 || lastDeathTime == 0)
+                return false;
+
+            // Unpack the landblock and variation from stored death location
+            var deathLandblock = (ushort)(lastDeathLocation >> 16);
+            var deathVariation = (int)(lastDeathLocation & 0xFFFF);
+
+            // Check if they died in this specific dungeon
+            if (deathLandblock != destLandblock || deathVariation != destVariation)
+                return false;
+
+            // Check if lockout is still active
+            var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
+            var lockoutDuration = 7200; // 2 hours in seconds
+
+            if (timeSinceDeath >= lockoutDuration)
+                return false;
+
+            // Player is locked out
+            var remainingSeconds = (int)(lockoutDuration - timeSinceDeath);
+            var hours = remainingSeconds / 3600;
+            var minutes = (remainingSeconds % 3600) / 60;
+
+            if (hours > 0)
+                message = $"You are locked out of this dungeon for {hours} hour{(hours == 1 ? "" : "s")} and {minutes} minute{(minutes == 1 ? "" : "s")} after dying to a player there.";
+            else
+                message = $"You are locked out of this dungeon for {minutes} more minute{(minutes == 1 ? "" : "s")} after dying to a player there.";
+
+            return true;
         }
     }
 }

@@ -1995,6 +1995,18 @@ namespace ACE.Server.WorldObjects.Managers
                 return;
             }
 
+            // Bounds check: ensure PropertiesEmoteAction exists and emoteIdx is valid
+            if (emoteSet.PropertiesEmoteAction == null || emoteIdx < 0 || emoteIdx >= emoteSet.PropertiesEmoteAction.Count)
+            {
+                if (emoteSet.PropertiesEmoteAction == null || emoteSet.PropertiesEmoteAction.Count == 0)
+                    log.Warn($"[EMOTE] {WorldObject.Name} (0x{WorldObject.Guid}:{WorldObject.WeenieClassId}) has empty PropertiesEmoteAction for emote category {emoteSet.Category}");
+                else
+                    log.Warn($"[EMOTE] {WorldObject.Name} (0x{WorldObject.Guid}:{WorldObject.WeenieClassId}) emoteIdx {emoteIdx} out of range (count: {emoteSet.PropertiesEmoteAction.Count})");
+
+                Nested--;
+                return;
+            }
+
             IsBusy = true;
 
             var emote = emoteSet.PropertiesEmoteAction.ElementAt(emoteIdx);

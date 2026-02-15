@@ -7437,6 +7437,134 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
+        [CommandHandler("randompet", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 0,
+           "Create a random pet from the mystery egg cache with optional rarity.",
+           "[rarity]\nRarity: 1=Common, 2=Rare, 3=Legendary, 4=Mythic\nIf omitted, rolls for rarity using weighted probabilities.\nExample: /randompet 3 (Legendary)\nExample: /randompet (random rarity)")]
+        public static void HandleRandomPet(Session session, params string[] parameters)
+        {
+            int rarity;
+            bool rolledRarity = false;
+
+            if (parameters.Length > 0 && !string.IsNullOrEmpty(parameters[0]))
+            {
+                if (!int.TryParse(parameters[0], out rarity) || rarity < 1 || rarity > 4)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, "Invalid rarity. Must be 1-4 (1=Common, 2=Rare, 3=Legendary, 4=Mythic).");
+                    return;
+                }
+            }
+            else
+            {
+                // Roll for rarity using weighted probabilities
+                rarity = RollPetRarity();
+                rolledRarity = true;
+            }
+
+            var player = session.Player;
+
+            // Get pets from cache for this rarity
+            var eligiblePets = MysteryEgg.GetPetsByRarityPublic(rarity);
+            if (eligiblePets == null || eligiblePets.Count == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"No pets found in cache for rarity {rarity} ({GetRarityName(rarity)}). Use /petcache to check cache status.");
+                return;
+            }
+
+            // Randomly select a pet
+            var randomIndex = ThreadSafeRandom.Next(0, eligiblePets.Count - 1);
+            var selectedPetWcid = eligiblePets[randomIndex];
+
+            // Create the pet
+            var pet = WorldObjectFactory.CreateNewWorldObject(selectedPetWcid);
+            if (pet == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Failed to create pet from WCID {selectedPetWcid}.");
+                return;
+            }
+
+            // Verify it's a PetDevice
+            var petDevice = pet as PetDevice;
+            if (petDevice == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"WCID {selectedPetWcid} is not a pet device.");
+                pet.Destroy();
+                return;
+            }
+
+            // Set pet rarity on the device
+            pet.SetProperty(PropertyInt.PetRarity, rarity);
+
+            // Update name with rarity prefix if not already present
+            var baseName = pet.Name ?? "Pet Essence";
+            var rarityName = GetRarityName(rarity);
+            if (!baseName.StartsWith(rarityName))
+                pet.Name = $"{rarityName} {baseName}";
+
+            // Set icon underlay based on rarity
+            pet.IconUnderlayId = rarity switch
+            {
+                1 => 0x06003355, // Common
+                2 => 0x06003353, // Rare
+                3 => 0x06003356, // Legendary
+                4 => 0x06003354, // Mythic
+                _ => null
+            };
+
+            // Assign random rating bonuses based on rarity
+            MysteryEgg.AssignRandomPetRatings(pet, rarity);
+
+            // Apply random palette using the creature WCID from PetClass
+            if (petDevice.PetClass != null)
+            {
+                Managers.PetPaletteManager.ApplyRandomPalette(pet, (uint)petDevice.PetClass.Value);
+            }
+
+            // Try to add to inventory
+            if (player.TryCreateInInventoryWithNetworking(pet))
+            {
+                var rollInfo = rolledRarity ? " (rolled)" : "";
+                CommandHandlerHelper.WriteOutputInfo(session, $"Created {rarityName}{rollInfo} pet: {pet.Name}");
+                CommandHandlerHelper.WriteOutputInfo(session, $"  WCID: {selectedPetWcid}");
+                CommandHandlerHelper.WriteOutputInfo(session, $"  PetClass (Creature WCID): {petDevice.PetClass}");
+
+                // Show rating bonuses
+                var dmgRating = pet.GetProperty(PropertyInt.PetBonusDamageRating) ?? 0;
+                var drRating = pet.GetProperty(PropertyInt.PetBonusDamageReductionRating) ?? 0;
+                var critRating = pet.GetProperty(PropertyInt.PetBonusCritDamageRating) ?? 0;
+                var critDrRating = pet.GetProperty(PropertyInt.PetBonusCritDamageReductionRating) ?? 0;
+                CommandHandlerHelper.WriteOutputInfo(session, $"  Ratings: DMG +{dmgRating}, DR +{drRating}, Crit +{critRating}, CritDR +{critDrRating}");
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Inventory full! Could not add pet.");
+                pet.Destroy();
+            }
+        }
+
+        /// <summary>
+        /// Rolls for pet rarity using weighted probabilities (same as mystery egg system)
+        /// </summary>
+        private static int RollPetRarity()
+        {
+            var weightCommon = PropertyManager.GetDouble("mystery_egg_weight_common", 85.25);
+            var weightRare = PropertyManager.GetDouble("mystery_egg_weight_rare", 13.0);
+            var weightLegendary = PropertyManager.GetDouble("mystery_egg_weight_legendary", 1.5);
+            var weightMythic = PropertyManager.GetDouble("mystery_egg_weight_mythic", 0.25);
+
+            var totalWeight = weightCommon + weightRare + weightLegendary + weightMythic;
+            var roll = ThreadSafeRandom.Next(0.0f, (float)totalWeight);
+
+            // Determine rarity based on roll (check rarest first)
+            if (roll < weightMythic)
+                return 4; // Mythic
+            if (roll < weightMythic + weightLegendary)
+                return 3; // Legendary
+            if (roll < weightMythic + weightLegendary + weightRare)
+                return 2; // Rare
+
+            return 1; // Common
+        }
+
         [CommandHandler("petpalette-reload", AccessLevel.Developer, CommandHandlerFlag.None, 0,
             "Reload custom ClothingBase JSON files and database palette options.",
             "")]

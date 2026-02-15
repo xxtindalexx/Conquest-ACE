@@ -137,6 +137,14 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// Gets pets by rarity from cache (public accessor for admin commands)
+        /// </summary>
+        public static List<uint> GetPetsByRarityPublic(int rarity)
+        {
+            return GetPetsByRarity(rarity);
+        }
+
+        /// <summary>
         /// Gets pets by rarity from cache
         /// </summary>
         private static List<uint> GetPetsByRarity(int rarity)

@@ -133,18 +133,26 @@ namespace ACE.Server.WorldObjects
 
             // Use LScape.get_landcell to check if the generated coordinates are blocked (by water, building, etc.)
             var landcell = LScape.get_landcell(position.GetCell(), null) as SortCell;
-            if (landcell == null || landcell.has_building() || landcell.CurLandblock.WaterType == LandDefs.WaterType.EntirelyWater)
+            if (landcell == null || landcell.has_building())
             {
-                //Console.WriteLine($"[DEBUG] Coordinates are blocked by water or building at Latitude {latitude}, Longitude {longitude}.");
+                //Console.WriteLine($"[DEBUG] Coordinates are blocked by building at Latitude {latitude}, Longitude {longitude}.");
                 return false;  // Coordinates are blocked, return false
             }
 
-            // Ensure the location is walkable
-            var pos = new Physics.Common.Position();
-            var location = pos.ACEPosition();
-            if (!location.IsWalkable())
+            // Check for any water (entirely or partially)
+            if (landcell.CurLandblock.WaterType != LandDefs.WaterType.NotWater)
             {
-               // Console.WriteLine($"[DEBUG] Coordinates are not walkable at Latitude {latitude}, Longitude {longitude}.");
+                //Console.WriteLine($"[DEBUG] Coordinates are in water at Latitude {latitude}, Longitude {longitude}.");
+                return false;
+            }
+
+            // Adjust position to terrain height before walkability check
+            position.AdjustMapCoords();
+
+            // Ensure the location is walkable (checks slope - prevents steep cliffs/mountains)
+            if (!position.IsWalkable())
+            {
+                //Console.WriteLine($"[DEBUG] Coordinates are not walkable (steep slope/cliff) at Latitude {latitude}, Longitude {longitude}.");
                 return false;  // If the coordinates are not walkable, return false
             }
 

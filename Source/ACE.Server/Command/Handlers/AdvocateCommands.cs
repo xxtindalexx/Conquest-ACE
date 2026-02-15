@@ -1,4 +1,5 @@
 using ACE.Entity.Enum;
+using ACE.Entity;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Managers;
@@ -6,6 +7,7 @@ using ACE.Server.Network;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Physics.Common;
 using ACE.Server.WorldObjects;
+using System;
 using System.Collections.Generic;
 
 namespace ACE.Server.Command.Handlers
@@ -197,6 +199,72 @@ namespace ACE.Server.Command.Handlers
                 $"{ aceParams[1].AsPosition.RotationZ}, {aceParams[1].AsPosition.RotationW}]", ChatMessageType.Broadcast);
 
             aceParams[0].AsPlayer.Teleport(aceParams[1].AsPosition);
+        }
+
+        // telelb <landblock>
+        [CommandHandler("telelb", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 1,
+            "Teleports you to the center of a landblock.",
+            "<landblock>\nExample: /telelb 00EA (hex)\nExample: /telelb 0x00EA (hex)\nExample: /telelb 234 (decimal)\n" +
+            "Teleports to the center of the specified landblock (outdoor cell).")]
+        public static void HandleTeleLandblock(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /telelb <landblock>", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var input = parameters[0].Trim();
+            uint landblockId;
+
+            // Check for explicit hex prefix
+            if (input.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                // Parse as hex
+                if (!uint.TryParse(input.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out landblockId))
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid hex landblock format: {parameters[0]}", ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+            // Try decimal first (if all digits 0-9)
+            else if (uint.TryParse(input, System.Globalization.NumberStyles.Integer, null, out landblockId))
+            {
+                // Successfully parsed as decimal
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Parsed {input} as decimal (0x{landblockId:X4})", ChatMessageType.Broadcast));
+            }
+            // Fall back to hex (for cases like "00EA" without 0x prefix)
+            else if (!uint.TryParse(input, System.Globalization.NumberStyles.HexNumber, null, out landblockId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock format: {parameters[0]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Landblock ID should be 16-bit (0x0000 to 0xFFFF)
+            if (landblockId > 0xFFFF)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock ID must be 0x0000-0xFFFF, got: 0x{landblockId:X}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Build the full cell ID: landblock << 16 | cell (0x0001 for outdoor center)
+            var cellId = (landblockId << 16) | 0x0001;
+
+            // Create position at center of landblock (84, 84) with ground level
+            var position = new ACE.Entity.Position(cellId, 84f, 84f, 0f, 0f, 0f, 0f, 1f);
+
+            // Adjust Z to ground level
+            position.PositionZ = position.GetTerrainZ();
+
+            // Check if water block
+            var landblock = ACE.Server.Physics.Common.LScape.get_landblock(position.LandblockId.Raw, null);
+            if (landblock != null && landblock.WaterType == ACE.Server.Physics.Common.LandDefs.WaterType.EntirelyWater)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Warning: Landblock 0x{landblockId:X4} is entirely water.", ChatMessageType.Broadcast));
+            }
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Teleporting to landblock 0x{landblockId:X4} (center)", ChatMessageType.Broadcast));
+            session.Player.Teleport(position);
         }
     }
 }

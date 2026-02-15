@@ -137,7 +137,7 @@ namespace ACE.Server.WorldObjects
                     }
                 }
 
-                // CONQUEST: Track PK death timestamp for 20-minute cooldown on /pk on command
+                // CONQUEST: Track PK death timestamp for 2-hour cooldown on /pk on command
                 SetProperty(PropertyInt64.LastPKDeathTime, (long)Time.GetUnixTime());
 
                 var globalPKDe = $"{lastDamager.Name} has defeated {Name}!";
@@ -256,7 +256,9 @@ namespace ACE.Server.WorldObjects
 
                 // Re-send vitae to client after purge, since purge removes ALL enchantments from client display
                 // but RemoveAllEnchantments() preserves vitae server-side
-                if (HasVitae)
+                // Use GetVitae() directly instead of HasVitae to bypass potential caching issues
+                var vitaeEntry = EnchantmentManager.GetVitae();
+                if (vitaeEntry != null)
                     EnchantmentManager.SendUpdateVitae();
             }
             else
@@ -275,7 +277,7 @@ namespace ACE.Server.WorldObjects
             {
                 CreateCorpse(topDamager, hadVitae);
 
-                // CONQUEST: Track death in PK-only dungeon variant for 20-minute re-entry cooldown (PK vs PK only)
+                // CONQUEST: Track death in PK-only dungeon variant for 2-hour re-entry cooldown (PK vs PK only)
                 TrackPKDungeonDeath(topDamager);
 
                 ThreadSafeTeleportOnDeath(); // enter portal space
@@ -1161,7 +1163,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// CONQUEST: Tracks player death in PK-only dungeon variants
         /// Stores the specific landblock+variant where they died
-        /// Used to enforce 20-minute re-entry cooldown for that specific dungeon
+        /// Used to enforce 2-hour re-entry cooldown for that specific dungeon
         /// Only tracks PK vs PK deaths (not deaths to mobs)
         /// </summary>
         public void TrackPKDungeonDeath(DamageHistoryInfo topDamager)

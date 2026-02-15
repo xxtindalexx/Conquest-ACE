@@ -190,14 +190,10 @@ namespace ACE.Server.WorldObjects
             if (xpType == XpType.Quest)
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"You've earned {amount:N0} experience.", ChatMessageType.Broadcast));
 
-            // DEBUG: Log vitae check for troubleshooting
-            var hasVitaeValue = HasVitae;
-            if (hasVitaeValue)
-            {
-                //Console.WriteLine($"[VITAE DEBUG] {Name}: HasVitae=true, xpType={xpType}, amount={amount:N0}");
-            }
-
-            if (hasVitaeValue && xpType != XpType.Allegiance)
+            // Check vitae directly via GetVitae() to bypass potential caching issues
+            // HasVitae uses EnchantmentManagerWithCaching which can return stale values
+            var vitaeEntry = EnchantmentManager.GetVitae();
+            if (vitaeEntry != null && xpType != XpType.Allegiance)
                 UpdateXpVitae(amount);
         }
 

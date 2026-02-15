@@ -372,22 +372,26 @@ namespace ACE.Server.WorldObjects
                     }
                 }
 
-                // CONQUEST: Enlightenment Spell Chain - war magic chains to nearby target for 30% damage
+                // CONQUEST: Spell Chain - war magic chains to nearby targets
                 // Only for war magic, only for players, not for chain spells (prevent infinite chains), not for PvP
-                // Only single-target spells (Bolt, Streak, Arc) - exclude AoE spells (Ring, Blast, Volley, Wall, Strike)
+                // All spell types except Ring (which is AoE circle)
                 if (player != null && !IsChainSpell && targetPlayer == null && Spell.School == MagicSchool.WarMagic)
                 {
-                    // Only chain single-target projectile types
-                    var canChain = SpellType == ProjectileSpellType.Bolt ||
-                                   SpellType == ProjectileSpellType.Streak ||
-                                   SpellType == ProjectileSpellType.Arc;
+                    // All spell types can chain except Ring and Wall spells (AoE types)
+                    var canChain = SpellType != ProjectileSpellType.Ring &&
+                                   SpellType != ProjectileSpellType.Wall &&
+                                   SpellType != ProjectileSpellType.Undef;
 
                     if (canChain)
                     {
-                        var spellChainBonus = player.GetProperty(PropertyInt.EnlightenmentSpellChainBonus) ?? 0;
-                        if (spellChainBonus > 0)
+                        // Total chain targets = base SpellChainTargets + EnlightenmentSpellChainBonus
+                        var baseChainTargets = player.GetProperty(PropertyInt.SpellChainTargets) ?? 0;
+                        var enlightenmentBonus = player.GetProperty(PropertyInt.EnlightenmentSpellChainBonus) ?? 0;
+                        var totalChainTargets = baseChainTargets + enlightenmentBonus;
+
+                        if (totalChainTargets > 0)
                         {
-                            TryCreateSpellChain(player, creatureTarget, damage.Value);
+                            TryCreateSpellChain(player, creatureTarget, damage.Value, totalChainTargets);
                         }
                     }
                 }
@@ -1090,40 +1094,45 @@ namespace ACE.Server.WorldObjects
 
         // CONQUEST: Spell Chain constants
         private const float SpellChainRange = 10.0f;  // Range to find chain targets (meters)
-        private const float SpellChainDamageMultiplier = 0.30f;  // 30% of original damage
+        private const float DefaultSpellChainDamagePercent = 30;  // Default 30% of original damage
 
         /// <summary>
-        /// CONQUEST: Attempts to create a chain spell that jumps from the primary target to a nearby secondary target
+        /// CONQUEST: Attempts to create chain spells that jump from the primary target to nearby secondary targets
         /// </summary>
-        private void TryCreateSpellChain(Player caster, Creature primaryTarget, float originalDamage)
+        private void TryCreateSpellChain(Player caster, Creature primaryTarget, float originalDamage, int maxChainTargets)
         {
-            // Find a valid chain target
-            var chainTarget = FindSpellChainTarget(caster, primaryTarget);
-            if (chainTarget == null)
+            // Find valid chain targets (up to maxChainTargets)
+            var chainTargets = FindSpellChainTargets(caster, primaryTarget, maxChainTargets);
+            if (chainTargets == null || chainTargets.Count == 0)
                 return;
 
-            // Calculate chain damage (30% of original)
-            var chainDamage = originalDamage * SpellChainDamageMultiplier;
+            // Get damage percentage from property or use default (30%)
+            var damagePercent = caster.GetProperty(PropertyInt.SpellChainDamagePercent) ?? (int)DefaultSpellChainDamagePercent;
+            var damageMultiplier = damagePercent / 100.0f;
+            var chainDamage = originalDamage * damageMultiplier;
 
-            // Create visual effect - play lightning/energy effect from primary to secondary target
-            // Use the spell's target effect or a generic chain effect
+            // Create visual effect on primary target
             primaryTarget.EnqueueBroadcast(new GameMessageScript(primaryTarget.Guid, PlayScript.PortalStorm, 0.5f));
 
-            // Create and launch a new chain projectile from primary target to secondary target
-            CreateChainProjectile(caster, primaryTarget, chainTarget, chainDamage);
+            // Create and launch a chain projectile to each target
+            foreach (var chainTarget in chainTargets)
+            {
+                CreateChainProjectile(caster, primaryTarget, chainTarget, chainDamage, damageMultiplier);
+            }
         }
 
         /// <summary>
-        /// CONQUEST: Finds a valid target for spell chain
+        /// CONQUEST: Finds valid targets for spell chain (returns up to maxTargets closest valid targets)
         /// </summary>
-        private Creature FindSpellChainTarget(Player caster, Creature primaryTarget)
+        private List<Creature> FindSpellChainTargets(Player caster, Creature primaryTarget, int maxTargets)
         {
-            if (primaryTarget?.CurrentLandblock == null)
-                return null;
+            var result = new List<Creature>();
+
+            if (primaryTarget?.CurrentLandblock == null || maxTargets <= 0)
+                return result;
 
             var primaryPos = primaryTarget.Location.ToGlobal(false);
-            Creature bestTarget = null;
-            float bestDistance = SpellChainRange;
+            var candidatesWithDistance = new List<(Creature creature, float distance)>();
 
             // Search in the primary target's landblock and adjacent landblocks
             var allNearbyObjects = primaryTarget.CurrentLandblock.GetWorldObjectsForPhysicsHandling().ToList();
@@ -1159,20 +1168,26 @@ namespace ACE.Server.WorldObjects
                 var objPos = creature.Location.ToGlobal(false);
                 var distance = Vector3.Distance(primaryPos, objPos);
 
-                if (distance < bestDistance)
+                if (distance <= SpellChainRange)
                 {
-                    bestDistance = distance;
-                    bestTarget = creature;
+                    candidatesWithDistance.Add((creature, distance));
                 }
             }
 
-            return bestTarget;
+            // Sort by distance and take up to maxTargets
+            result = candidatesWithDistance
+                .OrderBy(c => c.distance)
+                .Take(maxTargets)
+                .Select(c => c.creature)
+                .ToList();
+
+            return result;
         }
 
         /// <summary>
         /// CONQUEST: Creates and launches a chain projectile from primary target to secondary target
         /// </summary>
-        private void CreateChainProjectile(Player caster, Creature primaryTarget, Creature chainTarget, float chainDamage)
+        private void CreateChainProjectile(Player caster, Creature primaryTarget, Creature chainTarget, float chainDamage, float damageMultiplier)
         {
             // Create a new spell projectile using the same spell
             var spellType = GetProjectileSpellType(Spell.Id);
@@ -1185,7 +1200,7 @@ namespace ACE.Server.WorldObjects
 
             // Mark as chain spell to prevent further chaining
             sp.IsChainSpell = true;
-            sp.ChainDamageMultiplier = SpellChainDamageMultiplier;
+            sp.ChainDamageMultiplier = damageMultiplier;
 
             // Store the pre-calculated chain damage
             sp.LifeProjectileDamage = (uint)chainDamage;

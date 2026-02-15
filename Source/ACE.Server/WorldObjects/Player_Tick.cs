@@ -634,7 +634,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// CONQUEST: Enforces PK-only dungeon restrictions
         /// Boots NPK players out of PK-only dungeons every heartbeat (~5 seconds)
-        /// /// Also enforces 20-minute per-dungeon lockout after death
+        /// Also enforces 2-hour per-dungeon lockout after death
         /// </summary>
         private void PKDungeonEnforcementTick()
         {
@@ -659,7 +659,7 @@ namespace ACE.Server.WorldObjects
                 {
                     bootReason = "You have been removed from this PK-only dungeon. You must be PK to remain here.";
                 }
-                // Check 2: 20-minute dungeon lockout after death
+                // Check 2: 2-hour dungeon lockout after death
                 else
                 {
                     var lastDeathLocation = LastPKDungeonDeathLocation ?? 0;
@@ -675,7 +675,7 @@ namespace ACE.Server.WorldObjects
                         if (deathLandblock == currentLandblock && deathVariation == currentVariation)
                         {
                             var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
-                            var lockoutDuration = 1200; // 20 minutes in seconds
+                            var lockoutDuration = 7200; // 2 hours in seconds
 
                             if (timeSinceDeath < lockoutDuration)
                             {

@@ -694,6 +694,10 @@ namespace ACE.Entity.Enum.Properties
         EnlightenmentSplitArrowBonus = 9328,    // +1 split arrows at ENL 25
         EnlightenmentAetheriaSurgeBonus = 9329, // +1 aetheria level at ENL 50
         EnlightenmentSpellChainBonus = 9330,    // +1 spell chain at ENL 75 (war magic chains to nearby target)
+        // CONQUEST: Spell Chain Properties (like Cleave/Split Arrow)
+        [AssessmentProperty]
+        SpellChainTargets = 9331,              // Base number of additional targets for spell chain
+        SpellChainDamagePercent = 9332,        // Damage percentage dealt to chain targets (e.g., 30 = 30%)
         // CONQUEST: Morph gem weapon element randomization
         WeenieSwapClassId = 19001, // Tracks the weenie class ID when weapon element has been swapped
         AppearanceWeenieClassId = 19002, // Tracks the visual appearance WCID for tailored/morphed weapons
