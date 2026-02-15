@@ -1015,12 +1015,12 @@ namespace ACE.Server.Command.Handlers
                     return;
                 }
 
-                // Check 20-minute cooldown after PK death
+                // Check 2-hour cooldown after PK death
                 var lastPKDeath = session.Player.GetProperty(PropertyInt64.LastPKDeathTime) ?? 0;
                 if (lastPKDeath > 0)
                 {
                     var timeSinceDeath = Time.GetUnixTime() - lastPKDeath;
-                    var cooldown = 1200; // 20 minutes in seconds
+                    var cooldown = 7200; // 2 hours in seconds
 
                     if (timeSinceDeath < cooldown)
                     {
