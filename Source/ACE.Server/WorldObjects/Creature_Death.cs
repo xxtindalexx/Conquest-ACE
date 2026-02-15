@@ -582,10 +582,12 @@ namespace ACE.Server.WorldObjects
                         corpse.PkLevel = PKLevel.PK;
 
                         // CONQUEST: Drop 1-3 Soul Fragments on PK death
-                        // Victim must be level > 50 to drop soul fragments
-                        // Check if killer can loot Soul Fragments (6-8 hour cooldown)
+                        // Victim must be level > 90 to drop soul fragments
+                        // Check if killer can loot Soul Fragments (6 hour cooldown per victim)
                         var killerPlayer = killer?.TryGetAttacker() as Player;
-                        if (killerPlayer != null && (player.Level ?? 1) > 90)
+                        var victimLevel = player.Level ?? 1;
+
+                        if (killerPlayer != null && victimLevel > 90)
                         {
                             // CONQUEST: Don't drop soul fragments if killer and victim are in same allegiance
                             if (killerPlayer.Allegiance != null && player.Allegiance != null &&
@@ -645,6 +647,13 @@ namespace ACE.Server.WorldObjects
                                         ChatMessageType.Broadcast));
                                 }
                             }
+                        }
+                        else if (killerPlayer != null && victimLevel <= 90)
+                        {
+                            // Victim level too low - notify killer
+                            killerPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                                $"{player.Name} is too low level ({victimLevel}) to drop Soul Fragments. Victims must be level 91+.",
+                                ChatMessageType.Broadcast));
                         }
                     }
 

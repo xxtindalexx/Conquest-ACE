@@ -114,7 +114,7 @@ namespace ACE.Server.WorldObjects
                 if (!result)
                     BiotaSaveFailed = true;
                 onCompleted?.Invoke(result);
-            }, this.Guid.ToString());
+            });
         }
 
         public void SaveCharacterToDatabase()

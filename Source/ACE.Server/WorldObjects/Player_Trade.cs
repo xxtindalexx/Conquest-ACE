@@ -273,7 +273,7 @@ namespace ACE.Server.WorldObjects
                 IsBusy = false;
                 target.IsBusy = false;
 
-                DatabaseManager.Shard.SaveBiotasInParallel(tradedItems, result => { }, "FinalizeTrade");
+                DatabaseManager.Shard.SaveBiotasInParallel(tradedItems, result => { });
 
                 // Log the trade
                 ACE.Server.Managers.TransferLogger.LogTrade(this, target, targetEscrow, myEscrow);

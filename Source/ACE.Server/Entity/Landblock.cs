@@ -857,7 +857,7 @@ namespace ACE.Server.Entity
             ProcessPendingWorldObjectAdditionsAndRemovals();
 
             stopwatch.Restart();
-            foreach (var player in players)
+            foreach (var player in players.ToList())
                 player.Player_Tick(currentUnixTime);
             ServerPerformanceMonitor.AddToCumulativeEvent(ServerPerformanceMonitor.CumulativeEventHistoryType.Landblock_Tick_Player_Tick, stopwatch.Elapsed.TotalSeconds);
 
@@ -1477,29 +1477,13 @@ namespace ACE.Server.Entity
 
             if (biotas.Count > 0)
             {
-                DatabaseManager.Shard.SaveBiotasInParallel(
-                    biotas,
-                    result =>
+                DatabaseManager.Shard.SaveBiotasInParallel(biotas, result =>
+                {
+                    if (!result)
                     {
-                        // Clear SaveInProgress flags on world thread for thread safety
-                        var clearFlagsAction = new ACE.Server.Entity.Actions.ActionChain();
-                        clearFlagsAction.AddAction(WorldManager.ActionQueue, ActionType.Landblock_ClearFlagsAfterSave, () =>
-                        {
-                            foreach (var wo in savedObjects)
-                            {
-                                if (!wo.IsDestroyed)
-                                    wo.SaveInProgress = false;
-                            }
-
-                            if (!result)
-                            {
-                                log.Warn($"[LANDBLOCK SAVE] Bulk save for landblock {Id.Raw}{(VariationId.HasValue ? $":v{VariationId.Value}" : string.Empty)} returned false; SaveInProgress flags cleared to avoid stuck state.");
-                            }
-                        });
-                        clearFlagsAction.EnqueueChain();
-                    },
-                    $"SaveDB:Landblock:{this.Id.Raw}{(this.VariationId.HasValue ? $":v{this.VariationId.Value}" : string.Empty)}"
-                );
+                        log.Warn($"[LANDBLOCK SAVE] Bulk save for landblock {Id.Raw}{(VariationId.HasValue ? $":v{VariationId.Value}" : string.Empty)} returned false.");
+                    }
+                });
             }
         }
 

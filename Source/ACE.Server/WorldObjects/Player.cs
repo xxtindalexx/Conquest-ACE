@@ -707,28 +707,8 @@ namespace ACE.Server.WorldObjects
             PlayerManager.RemovePlayerFromFinalLogoffQueue(this);
             CurrentLandblock?.RemoveWorldObject(Guid, false);
             SetPropertiesAtLogOut();
-
-            // Capture player GUID for use in callback
-            var playerGuid = Guid.Full;
-
-            // Queue the save (includes player biota and all possessions with changes)
-            SavePlayerToDatabase(result =>
-            {
-                // When save completes, clear SaveInProgress on the OfflinePlayer
-                // This allows the player to log back in without loading stale data
-                var offlinePlayer = PlayerManager.GetOfflinePlayer(playerGuid);
-                if (offlinePlayer != null)
-                    offlinePlayer.SaveInProgress = false;
-            });
-
-            // Switch to offline state (creates OfflinePlayer from current biota)
+            SavePlayerToDatabase();
             PlayerManager.SwitchPlayerFromOnlineToOffline(this);
-
-            // Set SaveInProgress on the newly created OfflinePlayer
-            // This prevents login until the save callback fires
-            var newOfflinePlayer = PlayerManager.GetOfflinePlayer(playerGuid);
-            if (newOfflinePlayer != null)
-                newOfflinePlayer.SaveInProgress = true;
 
             log.DebugFormat("[LOGOUT] Account {0} exited the world with character {1} (0x{2}) at {3}.", Account.AccountName, Name, Guid, DateTime.Now.ToCommonString());
         }
