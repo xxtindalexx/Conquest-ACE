@@ -560,6 +560,25 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
+        [CommandHandler("petdmg", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Toggle visibility of damage dealt by your summoned pets")]
+        public static void HandlePetDamage(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            // Toggle the setting
+            var currentSetting = player.GetProperty(PropertyBool.ShowPetDamage) ?? false;
+            player.SetProperty(PropertyBool.ShowPetDamage, !currentSetting);
+
+            var newSetting = player.GetProperty(PropertyBool.ShowPetDamage) ?? false;
+            var status = newSetting ? "ENABLED" : "DISABLED";
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Pet Damage Display is now {status}.", ChatMessageType.Broadcast));
+            if (newSetting)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  - You will now see damage dealt by your summoned pets", ChatMessageType.Broadcast));
+            }
+        }
+
         [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
         public static void HandleEnlighten(Session session, params string[] parameters)
         {
@@ -730,7 +749,7 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw notes 5 (or /b w n 5) - Withdraw 5 trade notes (250k each)", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank transfer pyreals 100 CharName - Transfer 100 pyreals to CharName", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank balance (or /b b) - View your bank balance", ChatMessageType.System));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s), Eventtokens (e), Notes (n)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s), Eventtokens (e), Notes (n), LegendaryKeys (k)", ChatMessageType.System));
                 return;
             }
 
@@ -767,6 +786,7 @@ namespace ACE.Server.Command.Handlers
                 else if (parameters[1] == "ConquestCoins" || parameters[1] == "c") iType = 4;
                 else if (parameters[1] == "SoulFragments" || parameters[1] == "s") iType = 5;
                 else if (parameters[1] == "notes" || parameters[1] == "n") iType = 6;
+                else if (parameters[1] == "LegendaryKeys" || parameters[1] == "k") iType = 7;
             }
 
             if (parameters.Length == 3 || parameters.Length == 4)
@@ -841,6 +861,9 @@ namespace ACE.Server.Command.Handlers
                         case 5: // Soul Fragments
                             session.Player.DepositSoulFragments();
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all soul fragments!", ChatMessageType.System));
+                            break;
+                        case 7: // Legendary Keys
+                            session.Player.DepositLegendaryKeys();
                             break;
                     }
                 }
@@ -922,31 +945,66 @@ namespace ACE.Server.Command.Handlers
                         session.Player.WithdrawSoulFragments(amount);
                         break;
                     case 6: // Withdraw trade notes
-                        const int TradeNoteWeenieId = 20630;
-                        const long TradeNoteValue = 250000;
-                        const int TradeNoteMaxStack = 250;
-
-                        if (amount <= 0)
+                        // Trade note denominations: /b w n <denomination> <amount> OR /b w n <amount> (defaults to 250k)
+                        // Denominations: I=100, V=500, X=1000, L=5000, C=10000, CL=15000, CC=20000, CCL=25000, D=50000, DCCL=75000, M=100000, MD=150000, MM=200000, MMD=250000
+                        var tradeNoteDenominations = new Dictionary<string, (uint weenieId, long value, string name)>(StringComparer.OrdinalIgnoreCase)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify number of trade notes to withdraw.", ChatMessageType.System));
+                            { "I", (2621, 100, "100 pyreal") },
+                            { "V", (2622, 500, "500 pyreal") },
+                            { "X", (2623, 1000, "1,000 pyreal") },
+                            { "L", (2624, 5000, "5,000 pyreal") },
+                            { "C", (2625, 10000, "10,000 pyreal") },
+                            { "CL", (7374, 15000, "15,000 pyreal") },
+                            { "CC", (7375, 20000, "20,000 pyreal") },
+                            { "CCL", (7376, 25000, "25,000 pyreal") },
+                            { "D", (2626, 50000, "50,000 pyreal") },
+                            { "DCCL", (7377, 75000, "75,000 pyreal") },
+                            { "M", (2627, 100000, "100,000 pyreal") },
+                            { "MD", (20628, 150000, "150,000 pyreal") },
+                            { "MM", (20629, 200000, "200,000 pyreal") },
+                            { "MMD", (20630, 250000, "250,000 pyreal") }
+                        };
+
+                        uint noteWeenieId = 20630; // Default to 250k notes
+                        long noteValue = 250000;
+                        string noteName = "250,000 pyreal";
+                        long noteAmount = amount;
+
+                        // Check if parameters[2] is a denomination rather than a number
+                        if (parameters.Length >= 4 && tradeNoteDenominations.TryGetValue(parameters[2].ToUpper(), out var denomInfo))
+                        {
+                            noteWeenieId = denomInfo.weenieId;
+                            noteValue = denomInfo.value;
+                            noteName = denomInfo.name;
+                            // parameters[3] should be the amount
+                            if (!long.TryParse(parameters[3], out noteAmount) || noteAmount <= 0)
+                            {
+                                session.Network.EnqueueSend(new GameMessageSystemChat($"Specify number of {noteName} trade notes to withdraw.", ChatMessageType.System));
+                                break;
+                            }
+                        }
+                        else if (noteAmount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: /b w n <amount> OR /b w n <denom> <amount>\nDenominations: I, V, X, L, C, CL, CC, CCL, D, DCCL, M, MD, MM, MMD", ChatMessageType.System));
                             break;
                         }
 
-                        long totalPyrealCost = amount * TradeNoteValue;
+                        const int TradeNoteMaxStack = 250;
+                        long totalPyrealCost = noteAmount * noteValue;
                         if (session.Player.BankedPyreals == null || session.Player.BankedPyreals < totalPyrealCost)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked pyreals. You need {totalPyrealCost:N0} pyreals for {amount:N0} trade notes.", ChatMessageType.System));
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked pyreals. You need {totalPyrealCost:N0} pyreals for {noteAmount:N0} {noteName} trade notes.", ChatMessageType.System));
                             break;
                         }
 
                         // Calculate how many stacks we need
-                        long notesRemaining = amount;
+                        long notesRemaining = noteAmount;
                         int notesCreated = 0;
 
                         while (notesRemaining > 0)
                         {
                             int stackSize = (int)Math.Min(notesRemaining, TradeNoteMaxStack);
-                            var tradeNote = WorldObjectFactory.CreateNewWorldObject((uint)TradeNoteWeenieId);
+                            var tradeNote = WorldObjectFactory.CreateNewWorldObject(noteWeenieId);
                             if (tradeNote == null)
                             {
                                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Error creating trade notes.", ChatMessageType.System));
@@ -968,13 +1026,26 @@ namespace ACE.Server.Command.Handlers
 
                         if (notesCreated > 0)
                         {
-                            long pyrealCost = (long)notesCreated * TradeNoteValue;
+                            long pyrealCost = (long)notesCreated * noteValue;
                             session.Player.BankedPyreals -= pyrealCost;
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Withdrew {notesCreated:N0} trade notes ({pyrealCost:N0} pyreals). Balance: {session.Player.BankedPyreals:N0}", ChatMessageType.System));
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Withdrew {notesCreated:N0} {noteName} trade notes ({pyrealCost:N0} pyreals). Balance: {session.Player.BankedPyreals:N0}", ChatMessageType.System));
 
                             // Log the transaction
-                            TransferLogger.LogBankTransfer(session.Player, session.Player.Name, $"Trade Note (250k)", notesCreated, "Trade Note Withdrawal");
+                            TransferLogger.LogBankTransfer(session.Player, session.Player.Name, $"Trade Note ({noteName})", notesCreated, "Trade Note Withdrawal");
                         }
+                        break;
+                    case 7: // Withdraw legendary keys
+                        if (session.Player.BankedLegendaryKeys != null && amount > session.Player.BankedLegendaryKeys)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked legendary keys.", ChatMessageType.System));
+                            break;
+                        }
+                        if (amount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to withdraw.", ChatMessageType.System));
+                            break;
+                        }
+                        session.Player.WithdrawLegendaryKeys(amount);
                         break;
                 }
             }
@@ -1038,6 +1109,22 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Event Tokens to {transferTargetName}", ChatMessageType.System));
                         }
                         break;
+                    case 7: // Transfer legendary keys
+                        if (session.Player.BankedLegendaryKeys != null && amount >= session.Player.BankedLegendaryKeys)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked legendary keys to transfer.", ChatMessageType.System));
+                            break;
+                        }
+                        if (amount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to transfer.", ChatMessageType.System));
+                            break;
+                        }
+                        if (!session.Player.TransferLegendaryKeys(amount, transferTargetName))
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Legendary Keys to {transferTargetName}", ChatMessageType.System));
+                        }
+                        break;
                 }
             }
 
@@ -1050,6 +1137,7 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Event Tokens (Dragon Coins): {session.Player.EventTokens:N0}", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Conquest Coins (non-transferable): {session.Player.ConquestCoins:N0}", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Soul Fragments (non-transferable): {session.Player.SoulFragments:N0}", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Legendary Keys: {session.Player.BankedLegendaryKeys:N0}", ChatMessageType.System));
             }
         }
 

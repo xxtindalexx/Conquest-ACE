@@ -94,5 +94,8 @@ namespace ACE.Entity.Enum.Properties
         LastTreasureMapLootResetTime = 9054, // Unix timestamp of last 24-hour reset (for looting)
         // CONQUEST: Mystery Egg Weekly Limit (2 eggs per week)
         LastMysteryEggWeeklyResetTime = 9055,  // Unix timestamp of last weekly reset
+
+        // CONQUEST: Gem of Soul Recovery cooldown (20 hour cooldown)
+        LastSoulRecoveryGemUseTime = 9056,  // Unix timestamp of last gem use
     }
 }

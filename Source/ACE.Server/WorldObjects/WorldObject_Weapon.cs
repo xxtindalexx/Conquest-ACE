@@ -470,7 +470,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Returns the resistance modifier or rending modifier
         /// </summary>
-        public static float GetWeaponResistanceModifier(WorldObject weapon, Creature wielder, CreatureSkill skill, DamageType damageType)
+        public static float GetWeaponResistanceModifier(WorldObject weapon, Creature wielder, CreatureSkill skill, DamageType damageType, Creature target = null)
         {
             float resistMod = defaultModifier;
 
@@ -487,7 +487,10 @@ namespace ACE.Server.WorldObjects
             if (rendDamageType == ImbuedEffectType.Undef)
                 log.DebugFormat("{0}.GetRendDamageType({1}) unexpected damage type for {2} ({3})", wielder.Name, damageType, weapon.Name, weapon.Guid);
 
-            if (rendDamageType != ImbuedEffectType.Undef && weapon.HasImbuedEffect(rendDamageType) && skill != null)
+            // CONQUEST: Disable Nether Rending in PvP (there are no Nether protection spells)
+            var isNetherPvP = damageType == DamageType.Nether && target is Player && wielder is Player;
+
+            if (rendDamageType != ImbuedEffectType.Undef && weapon.HasImbuedEffect(rendDamageType) && skill != null && !isNetherPvP)
             {
                 var rendingMod = GetRendingMod(skill);
 

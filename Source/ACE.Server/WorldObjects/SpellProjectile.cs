@@ -517,7 +517,7 @@ namespace ACE.Server.WorldObjects
                     critDamageBonus = lifeMagicDamage * 0.5f * weaponCritDamageMod;
                 }
 
-                weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType);
+                weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType, target);
 
                 // if attacker/weapon has IgnoreMagicResist directly, do not transfer to spell projectile
                 // only pass if SpellProjectile has it directly, such as 2637 - Invoking Aun Tanua
@@ -536,25 +536,9 @@ namespace ACE.Server.WorldObjects
                 {
                     // LifeProjectileDamage contains the pre-calculated chain damage
                     finalDamage = LifeProjectileDamage;
-
-                    // DEBUG: Log chain damage calculation
-                    if (sourcePlayer != null)
-                    {
-                        sourcePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
-                            $"[Chain Debug] PreCalc={LifeProjectileDamage}, Final={finalDamage:F0}",
-                            ChatMessageType.System));
-                    }
                 }
                 else
                 {
-                    // DEBUG: Check if chain spell is incorrectly going through normal path
-                    if (FromProc && sourcePlayer != null)
-                    {
-                        sourcePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
-                            $"[Chain BUG] FromProc=true but IsChainSpell={IsChainSpell} - going through normal damage calc!",
-                            ChatMessageType.System));
-                    }
-
                     if (criticalHit)
                     {
                         // Original:
@@ -601,7 +585,7 @@ namespace ACE.Server.WorldObjects
                     }
                     baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
 
-                    weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType);
+                    weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType, target);
 
                     // if attacker/weapon has IgnoreMagicResist directly, do not transfer to spell projectile
                     // only pass if SpellProjectile has it directly, such as 2637 - Invoking Aun Tanua
@@ -1124,11 +1108,6 @@ namespace ACE.Server.WorldObjects
                              ?? (int)DefaultSpellChainDamagePercent;
             var damageMultiplier = damagePercent / 100.0f;
             var chainDamage = originalDamage * damageMultiplier;
-
-            // DEBUG: Log chain damage setup
-            caster.Session.Network.EnqueueSend(new GameMessageSystemChat(
-                $"[Chain Setup] OrigDmg={originalDamage:F0}, Percent={damagePercent}%, Multiplier={damageMultiplier:F2}, ChainDmg={chainDamage:F0}",
-                ChatMessageType.System));
 
             // Create visual effect on primary target
             primaryTarget.EnqueueBroadcast(new GameMessageScript(primaryTarget.Guid, PlayScript.PortalStorm, 0.5f));

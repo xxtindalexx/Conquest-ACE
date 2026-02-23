@@ -123,6 +123,16 @@ namespace ACE.Server.WorldObjects
                             //Console.WriteLine($"{target.Name} taking {Math.Round(damage)} {damageType} damage from {Name}");
                             target.TakeDamage(this, damageEvent.DamageType, damageEvent.Damage);
 
+                            // CONQUEST: Notify pet owner of damage if ShowPetDamage is enabled
+                            if (combatPet?.P_PetOwner != null && (combatPet.P_PetOwner.GetProperty(PropertyBool.ShowPetDamage) ?? false))
+                            {
+                                var critText = damageEvent.IsCritical ? " (Critical)" : "";
+                                combatPet.P_PetOwner.Session.Network.EnqueueSend(
+                                    new Network.GameMessages.Messages.GameMessageSystemChat(
+                                        $"[Pet] {combatPet.Name} dealt {damageEvent.Damage:N0} {damageEvent.DamageType} damage to {target.Name}{critText}",
+                                        ChatMessageType.CombatSelf));
+                            }
+
                             EmitSplatter(target, damageEvent.Damage);
 
                             // handle Dirty Fighting

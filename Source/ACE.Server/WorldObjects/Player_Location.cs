@@ -263,6 +263,87 @@ namespace ACE.Server.WorldObjects
             mpChain.EnqueueChain();
         }
 
+        /// <summary>
+        /// CONQUEST: Teleports the player to their last corpse location using the Gem of Soul Recovery
+        /// </summary>
+        /// <param name="gem">The gem being used (for consumption)</param>
+        /// <returns>True if teleport was initiated, false otherwise</returns>
+        public bool TeleportToLastCorpse(WorldObject gem)
+        {
+            // Check if player has a stored corpse location
+            var lastCorpseLocation = GetPosition(PositionType.LastOutsideDeath);
+            if (lastCorpseLocation == null)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You have no recorded corpse location.", ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // Check 20-hour cooldown (72000 seconds)
+            var currentTime = (long)Time.GetUnixTime();
+            var lastUseTime = LastSoulRecoveryGemUseTime ?? 0;
+            var timeSinceLastUse = currentTime - lastUseTime;
+            var cooldownSeconds = 72000; // 20 hours
+
+            if (timeSinceLastUse < cooldownSeconds)
+            {
+                var remainingTime = cooldownSeconds - timeSinceLastUse;
+                var hours = (int)(remainingTime / 3600);
+                var minutes = (int)((remainingTime % 3600) / 60);
+                Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"The Gem of Soul Recovery is still recharging. Time remaining: {hours}h {minutes}m",
+                    ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // Check standard recall restrictions
+            if (PKTimerActive)
+            {
+                Session.Network.EnqueueSend(new GameEventWeenieError(Session, WeenieError.YouHaveBeenInPKBattleTooRecently));
+                return false;
+            }
+
+            if (TooBusyToRecall)
+            {
+                Session.Network.EnqueueSend(new GameEventWeenieError(Session, WeenieError.YoureTooBusy));
+                return false;
+            }
+
+            // Start the recall animation
+            EnqueueBroadcast(new GameMessageSystemChat($"{Name} is recalling to their last corpse location.", ChatMessageType.Recall), LocalBroadcastRange, ChatMessageType.Recall);
+
+            SendMotionAsCommands(MotionCommand.LifestoneRecall, MotionStance.NonCombat);
+
+            var startPos = new Position(Location);
+
+            ActionChain recallChain = new ActionChain();
+            recallChain.AddDelaySeconds(DatManager.PortalDat.ReadFromDat<MotionTable>(MotionTableId).GetAnimationLength(MotionCommand.LifestoneRecall));
+
+            IsBusy = true;
+            recallChain.AddAction(this, ActionType.PlayerLocation_TeleportToCorpse, () =>
+            {
+                IsBusy = false;
+                var endPos = new Position(Location);
+                if (startPos.SquaredDistanceTo(endPos) > RecallMoveThresholdSq)
+                {
+                    Session.Network.EnqueueSend(new GameEventWeenieError(Session, WeenieError.YouHaveMovedTooFar));
+                    return;
+                }
+
+                // Set cooldown timestamp
+                LastSoulRecoveryGemUseTime = currentTime;
+
+                // Teleport to corpse location
+                Teleport(lastCorpseLocation);
+
+                Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "The Gem of Soul Recovery has teleported you to your last corpse location.",
+                    ChatMessageType.Broadcast));
+            });
+
+            recallChain.EnqueueChain();
+            return true;
+        }
+
         private static readonly Motion motionAllegianceHometownRecall = new Motion(MotionStance.NonCombat, MotionCommand.AllegianceHometownRecall);
 
         public void HandleActionRecallAllegianceHometown()
