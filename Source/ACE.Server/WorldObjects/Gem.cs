@@ -64,13 +64,11 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            // CONQUEST: Gem of Soul Recovery - Teleports player to their last corpse location (20 hour cooldown)
+            // CONQUEST: Gem of Soul Recovery - Teleports player to their last corpse location
+            // Gem is consumed on use, 20-hour cooldown before another gem can be used
             if (WeenieClassId == 13370301)
             {
-                if (player.TeleportToLastCorpse(this))
-                {
-                    // Gem is not consumed - it's reusable with a cooldown
-                }
+                player.TeleportToLastCorpse(this);
                 return;
             }
 

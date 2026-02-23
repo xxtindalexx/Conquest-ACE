@@ -266,7 +266,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// CONQUEST: Teleports the player to their last corpse location using the Gem of Soul Recovery
         /// </summary>
-        /// <param name="gem">The gem being used (for consumption)</param>
+        /// <param name="gem">The gem being used (will be consumed on success)</param>
         /// <returns>True if teleport was initiated, false otherwise</returns>
         public bool TeleportToLastCorpse(WorldObject gem)
         {
@@ -290,7 +290,7 @@ namespace ACE.Server.WorldObjects
                 var hours = (int)(remainingTime / 3600);
                 var minutes = (int)((remainingTime % 3600) / 60);
                 Session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"The Gem of Soul Recovery is still recharging. Time remaining: {hours}h {minutes}m",
+                    $"You cannot use another Gem of Soul Recovery yet. Time remaining: {hours}h {minutes}m",
                     ChatMessageType.Broadcast));
                 return false;
             }
@@ -331,6 +331,12 @@ namespace ACE.Server.WorldObjects
 
                 // Set cooldown timestamp
                 LastSoulRecoveryGemUseTime = currentTime;
+
+                // Consume the gem
+                if (gem != null && !gem.IsDestroyed)
+                {
+                    TryConsumeFromInventoryWithNetworking(gem, 1);
+                }
 
                 // Teleport to corpse location
                 Teleport(lastCorpseLocation);
