@@ -747,6 +747,8 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit pyreals 100 (or /b d p 100) - Deposit specific amount", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw pyreals 100 (or /b w p 100) - Withdraw 100 pyreals", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw notes 5 (or /b w n 5) - Withdraw 5 trade notes (250k each)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw notes D 10 (or /b w n d 10) - Withdraw 10 D notes (50k each)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  Note denominations: I=100, V=500, X=1k, L=5k, C=10k, D=50k, M=100k, MM=200k, MMD=250k", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank transfer pyreals 100 CharName - Transfer 100 pyreals to CharName", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank balance (or /b b) - View your bank balance", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s), Eventtokens (e), Notes (n), LegendaryKeys (k)", ChatMessageType.System));
@@ -791,12 +793,20 @@ namespace ACE.Server.Command.Handlers
 
             if (parameters.Length == 3 || parameters.Length == 4)
             {
+                // For trade notes (iType 6), parameters[2] might be a denomination letter instead of a number
+                // e.g., /b w n d 10 where "d" is the denomination and "10" is the amount
                 if (!long.TryParse(parameters[2], out amount))
                 {
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid amount. Please provide a number.", ChatMessageType.System));
-                    return;
+                    // Only error if this isn't a trade note with denomination syntax
+                    if (iType != 6 || parameters.Length < 4)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid amount. Please provide a number.", ChatMessageType.System));
+                        return;
+                    }
+                    // For trade notes with denomination, amount will be parsed later from parameters[3]
+                    amount = 0;
                 }
-                if (amount <= 0)
+                if (amount < 0)
                 {
                     session.Network.EnqueueSend(new GameMessageSystemChat($"Amount must be positive.", ChatMessageType.System));
                     return;
