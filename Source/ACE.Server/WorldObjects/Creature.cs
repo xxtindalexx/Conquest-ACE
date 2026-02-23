@@ -394,106 +394,96 @@ namespace ACE.Server.WorldObjects
 
         /// <summary>
         /// Initiates enrage leap attack - selects target, announces, schedules leap
+        /// Called from async task, so we defer everything via ActionChain to avoid thread conflicts
         /// </summary>
         public void TriggerEnrageLeap()
         {
+            // Capture values before deferring
             var minRange = GetProperty(PropertyFloat.EnrageLeapMinRange) ?? 10.0f;
             var maxRange = GetProperty(PropertyFloat.EnrageLeapMaxRange) ?? 35.0f;
-
-            // Get all players in range using GetPlayersInRange helper
-            var allPlayers = GetPlayersInRange((double)maxRange);
-            var players = new List<Player>();
-            foreach (var player in allPlayers)
-            {
-                var dist = Location.Distance2D(player.Location);
-                if (dist >= minRange && dist <= maxRange)
-                {
-                    // Don't select players already targeted by grapple
-                    if (EnrageGrappleTargetGuid.HasValue && player.Guid.Full == EnrageGrappleTargetGuid.Value)
-                        continue;
-
-                    players.Add(player);
-                }
-            }
-
-            if (players.Count == 0)
-                return;
-
-            // Select random target
-            var targetPlayer = players[ThreadSafeRandom.Next(0, players.Count - 1)];
-
-            // Lock position
-            var positionLock = GetProperty(PropertyBool.EnrageLeapPositionLock) ?? true;
-            if (positionLock)
-            {
-                EnrageLeapTargetPosition = new Position(targetPlayer.Location);
-            }
-            else
-            {
-                EnrageLeapTargetPosition = new Position(targetPlayer.Location);
-            }
-
-            EnrageLeapTargetPlayerName = targetPlayer.Name;
-            EnrageLeapInProgress = true;
-
-            // Broadcast warning
-            var msg = $"{Name} begins to lunge toward {targetPlayer.Name}!";
-            var nearbyPlayers = GetPlayersInRange(250.0);
-            foreach (var player in nearbyPlayers)
-            {
-                player.Session.Network.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat(msg, ChatMessageType.Combat));
-            }
-
-            // Spawn ground marker
-            SpawnLeapGroundMarker(EnrageLeapTargetPosition);
-
-            // Schedule leap execution
             var warningTime = GetProperty(PropertyFloat.EnrageLeapWarningTime) ?? 5.0f;
-            var actionChain = new ACE.Server.Entity.Actions.ActionChain();
-            actionChain.AddDelaySeconds(warningTime);
-            actionChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () => ExecuteEnrageLeap());
-            actionChain.EnqueueChain();
+            var bossName = Name;
+
+            // Defer all operations to game tick to avoid thread conflicts with physics tick
+            var initChain = new ACE.Server.Entity.Actions.ActionChain();
+            initChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
+            {
+                if (!IsAlive) return;
+
+                // Get all players in range using GetPlayersInRange helper
+                var allPlayers = GetPlayersInRange((double)maxRange);
+                var players = new List<Player>();
+                foreach (var player in allPlayers)
+                {
+                    var dist = Location.Distance2D(player.Location);
+                    if (dist >= minRange && dist <= maxRange)
+                    {
+                        // Don't select players already targeted by grapple
+                        if (EnrageGrappleTargetGuid.HasValue && player.Guid.Full == EnrageGrappleTargetGuid.Value)
+                            continue;
+
+                        players.Add(player);
+                    }
+                }
+
+                if (players.Count == 0)
+                    return;
+
+                // Select random target
+                var targetPlayer = players[ThreadSafeRandom.Next(0, players.Count - 1)];
+
+                EnrageLeapTargetPosition = new Position(targetPlayer.Location);
+                EnrageLeapTargetPlayerName = targetPlayer.Name;
+                EnrageLeapInProgress = true;
+
+                // Broadcast warning
+                var msg = $"{bossName} begins to lunge toward {targetPlayer.Name}!";
+                var nearbyPlayers = GetPlayersInRange(250.0);
+                foreach (var player in nearbyPlayers)
+                {
+                    player.Session.Network.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat(msg, ChatMessageType.Combat));
+                }
+
+                // Spawn ground marker
+                SpawnLeapGroundMarker(EnrageLeapTargetPosition);
+
+                // Schedule leap execution
+                var leapChain = new ACE.Server.Entity.Actions.ActionChain();
+                leapChain.AddDelaySeconds(warningTime);
+                leapChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () => ExecuteEnrageLeap());
+                leapChain.EnqueueChain();
+            });
+            initChain.EnqueueChain();
         }
 
         /// <summary>
         /// Spawns visual ground marker at leap target position
+        /// Deferred to next tick to avoid collection modification during physics tick
         /// </summary>
         public void SpawnLeapGroundMarker(Position targetPos)
         {
             var warningTime = GetProperty(PropertyFloat.EnrageLeapWarningTime) ?? 5.0;
             var markerWCID = GetProperty(PropertyInt.EnrageGroundMarkerWCID) ?? 0;
 
-            WorldObject groundMarker = null;
+            if (markerWCID <= 0)
+                return;
 
-            if (markerWCID > 0)
+            // Defer ground marker spawn to next tick to avoid collection modification
+            var spawnChain = new ACE.Server.Entity.Actions.ActionChain();
+            spawnChain.AddDelaySeconds(0.1);
+            spawnChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
             {
-                // Use custom weenie (e.g., a non-hotspot marker object)
-                groundMarker = WorldObjectFactory.CreateNewWorldObject((uint)markerWCID);
-            }
+                if (!IsAlive) return;
 
+                var groundMarker = WorldObjectFactory.CreateNewWorldObject((uint)markerWCID);
+                if (groundMarker == null) return;
 
-
-
-
-
-            if (groundMarker != null)
-            {
-                // Properly set location with landblock data
                 groundMarker.Location = new Position(targetPos);
 
-
-
-
-
-                // Use LandblockManager to properly add the object
                 if (groundMarker.EnterWorld())
-
-
                 {
-                    // Apply visual effect
                     groundMarker.PlayParticleEffect(PlayScript.Explode, groundMarker.Guid);
 
-                    // Despawn after warning time
                     var despawnChain = new ACE.Server.Entity.Actions.ActionChain();
                     despawnChain.AddDelaySeconds(warningTime);
                     despawnChain.AddAction(groundMarker, ACE.Server.Entity.Actions.ActionType.WorldObject_Destroy, () =>
@@ -502,7 +492,8 @@ namespace ACE.Server.WorldObjects
                     });
                     despawnChain.EnqueueChain();
                 }
-            }
+            });
+            spawnChain.EnqueueChain();
         }
 
         /// <summary>
@@ -669,55 +660,67 @@ namespace ACE.Server.WorldObjects
 
         /// <summary>
         /// Triggers mirror image enrage - spawns clones, makes boss immune
+        /// Called from async task, so we defer everything via ActionChain to avoid thread conflicts
         /// </summary>
         public void TriggerEnrageMirrorImage()
         {
+            // Capture values before deferring
             var cloneCount = GetProperty(PropertyInt.EnrageMirrorImageCount) ?? 3;
             var spawnRadius = (float)(GetProperty(PropertyFloat.EnrageMirrorImageSpawnRadius) ?? 5.0);
             var immuneDuringClones = GetProperty(PropertyBool.EnrageMirrorImmuneDuringClones) ?? true;
+            var bossName = Name;
 
             EnrageMirrorImageTriggered = true;
 
-            // Make boss immune if configured
-            if (immuneDuringClones)
+            // Defer all operations to game tick to avoid thread conflicts with physics tick
+            var actionChain = new ACE.Server.Entity.Actions.ActionChain();
+            actionChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
             {
-                EnrageMirrorImageImmune = true;
+                if (!IsAlive) return;
 
-                var immuneMsg = $"{Name} becomes invulnerable and splits into mirror images!";
-                var nearbyPlayers = GetPlayersInRange(250.0);
-                foreach (var player in nearbyPlayers)
+                // Make boss immune if configured
+                if (immuneDuringClones)
                 {
-                    player.Session.Network.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat(immuneMsg, ChatMessageType.Magic));
+                    EnrageMirrorImageImmune = true;
+
+                    var immuneMsg = $"{bossName} becomes invulnerable and splits into mirror images!";
+                    var nearbyPlayers = GetPlayersInRange(250.0);
+                    foreach (var player in nearbyPlayers)
+                    {
+                        player.Session.Network.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat(immuneMsg, ChatMessageType.Magic));
+                    }
                 }
-            }
-            else
-            {
-                var splitMsg = $"{Name} splits into mirror images!";
-                var nearbyPlayers = GetPlayersInRange(250.0);
-                foreach (var player in nearbyPlayers)
+                else
                 {
-                    player.Session.Network.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat(splitMsg, ChatMessageType.Magic));
+                    var splitMsg = $"{bossName} splits into mirror images!";
+                    var nearbyPlayers = GetPlayersInRange(250.0);
+                    foreach (var player in nearbyPlayers)
+                    {
+                        player.Session.Network.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat(splitMsg, ChatMessageType.Magic));
+                    }
                 }
-            }
 
-            // Spawn clones
-            for (int i = 0; i < cloneCount; i++)
-            {
-                SpawnMirrorImageClone(spawnRadius, i);
-            }
+                // Spawn clones
+                for (int i = 0; i < cloneCount; i++)
+                {
+                    SpawnMirrorImageClone(spawnRadius, i);
+                }
 
-            // Reset triggered flag to allow future triggers
-            var resetChain = new ACE.Server.Entity.Actions.ActionChain();
-            resetChain.AddDelaySeconds(5.0);
-            resetChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
-            {
-                EnrageMirrorImageTriggered = false;
+                // Reset triggered flag to allow future triggers
+                var resetChain = new ACE.Server.Entity.Actions.ActionChain();
+                resetChain.AddDelaySeconds(5.0);
+                resetChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
+                {
+                    EnrageMirrorImageTriggered = false;
+                });
+                resetChain.EnqueueChain();
             });
-            resetChain.EnqueueChain();
+            actionChain.EnqueueChain();
         }
 
         /// <summary>
         /// Spawns a single mirror image clone
+        /// Deferred to next tick to avoid collection modification during physics tick
         /// </summary>
         private void SpawnMirrorImageClone(float radius, int index)
         {
@@ -732,52 +735,63 @@ namespace ACE.Server.WorldObjects
             clonePos.PositionX += (float)offsetX;
             clonePos.PositionY += (float)offsetY;
 
-            // Create clone using same WeenieClassId
-            var clone = WorldObjectFactory.CreateNewWorldObject(WeenieClassId) as Creature;
-            if (clone == null)
-            {
-                log.Error($"[ENRAGE MIRROR IMAGE] Failed to create clone for {Name} (WCID: {WeenieClassId})");
-                return;
-            }
-
-            // Set clone position
-            clone.Location = clonePos;
-
-            // Modify clone stats
+            // Capture values needed for deferred spawn
             var healthPercent = GetProperty(PropertyInt.EnrageMirrorImageHealthPercent) ?? 50;
             var damagePercent = GetProperty(PropertyInt.EnrageMirrorImageDamagePercent) ?? 75;
+            var maxHealth = Health.MaxValue;
+            var bossName = Name;
+            var wcid = WeenieClassId;
 
-            // Set HP to percentage of original (MaxValue is read-only, so we just set Current)
-            var cloneMaxHP = (uint)((Health.MaxValue * healthPercent) / 100);
-            clone.Health.Current = cloneMaxHP;
-
-            // Reduce damage output using DamageMod property
-            if (damagePercent < 100)
+            // Defer clone spawn to next tick to avoid collection modification during physics tick
+            var actionChain = new ACE.Server.Entity.Actions.ActionChain();
+            actionChain.AddDelaySeconds(0.1);
+            actionChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
             {
-                var damageMod = damagePercent / 100.0f;
+                if (!IsAlive) return;
 
-                clone.DamageMod = damageMod;
-            }
+                // Create clone using same WeenieClassId
+                var clone = WorldObjectFactory.CreateNewWorldObject(wcid) as Creature;
+                if (clone == null)
+                {
+                    log.Error($"[ENRAGE MIRROR IMAGE] Failed to create clone for {bossName} (WCID: {wcid})");
+                    return;
+                }
 
-            // Set clone name to indicate it's a mirror
-            clone.Name = $"{Name} (Mirror Image)";
+                // Set clone position
+                clone.Location = clonePos;
 
-            // Prevent clones from dropping loot
-            clone.DeathTreasureType = null;
-            clone.GeneratorProfiles = null;
-            clone.NoCorpse = true;
-            clone.TimeToRot = 10; // Corpse disappears quickly
+                // Set HP to percentage of original
+                var cloneMaxHP = (uint)((maxHealth * healthPercent) / 100);
+                clone.Health.Current = cloneMaxHP;
 
-            // Spawn clone into world
-            clone.EnterWorld();
+                // Reduce damage output using DamageMod property
+                if (damagePercent < 100)
+                {
+                    var damageMod = damagePercent / 100.0f;
+                    clone.DamageMod = damageMod;
+                }
 
-            // Track clone
-            EnrageMirrorImageClones.Add(clone);
+                // Set clone name to indicate it's a mirror
+                clone.Name = $"{bossName} (Mirror Image)";
 
-            // Visual effect on spawn
-            clone.PlayParticleEffect(PlayScript.RestrictionEffectBlue, clone.Guid);
+                // Prevent clones from dropping loot
+                clone.DeathTreasureType = null;
+                clone.GeneratorProfiles = null;
+                clone.NoCorpse = true;
+                clone.TimeToRot = 10; // Corpse disappears quickly
 
-            log.Info($"[ENRAGE MIRROR IMAGE] Spawned clone #{index + 1} for {Name} at {clonePos}");
+                // Spawn clone into world
+                clone.EnterWorld();
+
+                // Track clone
+                EnrageMirrorImageClones.Add(clone);
+
+                // Visual effect on spawn
+                clone.PlayParticleEffect(PlayScript.RestrictionEffectBlue, clone.Guid);
+
+                log.Info($"[ENRAGE MIRROR IMAGE] Spawned clone #{index + 1} for {bossName} at {clonePos}");
+            });
+            actionChain.EnqueueChain();
         }
     }
 }

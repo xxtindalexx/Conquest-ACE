@@ -35,6 +35,200 @@ namespace ACE.Server.WorldObjects
             90000116,
         };
 
+        /// <summary>
+        /// Converts a landblock ID (0xXXYY format) to map coordinates (NS, EW).
+        /// Returns the center point of the landblock.
+        /// XX = East-West position (0x00 = far west, 0xFF = far east)
+        /// YY = North-South position (0x00 = far south, 0xFF = far north)
+        /// </summary>
+        private static (float NS, float EW) LandblockToCoords(ushort landblockId)
+        {
+            // Extract X (EW) and Y (NS) from landblock ID
+            int landblockX = (landblockId >> 8) & 0xFF;  // East-West
+            int landblockY = landblockId & 0xFF;         // North-South
+
+            // Convert to global position (center of landblock)
+            // Each landblock is 192 meters, add 96 to get center
+            float globalX = landblockX * 192 + 96;
+            float globalY = landblockY * 192 + 96;
+
+            // Convert to map coordinates
+            // 1 map unit = 240 meters, offset by -102 to center the map
+            float ew = globalX / 240 - 102;  // East-West coordinate
+            float ns = globalY / 240 - 102;  // North-South coordinate
+
+            return (ns, ew);
+        }
+
+        /// <summary>
+        /// Gets the corner coordinates of a landblock for building exclusion zones.
+        /// Returns (SW corner, SE corner, NE corner, NW corner)
+        /// </summary>
+        private static ((float NS, float EW) SW, (float NS, float EW) SE, (float NS, float EW) NE, (float NS, float EW) NW) GetLandblockCorners(ushort landblockId)
+        {
+            int landblockX = (landblockId >> 8) & 0xFF;
+            int landblockY = landblockId & 0xFF;
+
+            // Calculate corners in global coords, then convert to map coords
+            float swGlobalX = landblockX * 192;
+            float swGlobalY = landblockY * 192;
+            float neGlobalX = (landblockX + 1) * 192;
+            float neGlobalY = (landblockY + 1) * 192;
+
+            float swEW = swGlobalX / 240 - 102;
+            float swNS = swGlobalY / 240 - 102;
+            float neEW = neGlobalX / 240 - 102;
+            float neNS = neGlobalY / 240 - 102;
+
+            return ((swNS, swEW), (swNS, neEW), (neNS, neEW), (neNS, swEW));
+        }
+
+        /// <summary>
+        /// List of individual landblocks to exclude from treasure map generation.
+        /// Format: 0xXXYY where XX = East-West, YY = North-South
+        /// Get landblock IDs from Thwargle maps: http://www.thwargle.com/derethMaps/derethMaps.html
+        /// </summary>
+        private static readonly HashSet<ushort> ExcludedLandblocks = new HashSet<ushort>
+        {
+            // Example: 0xE74E would exclude the landblock at that position
+            // Add landblock IDs here for admin islands, inaccessible areas, etc.
+        };
+
+        /// <summary>
+        /// Triangular exclusion zones for treasure map generation.
+        /// Each zone is defined by 3 coordinate points (NS, EW) forming a triangle.
+        /// Any coordinates inside these triangles will be excluded from treasure map generation.
+        /// Coordinates use the same format as in-game: NS (latitude), EW (longitude)
+        /// Example: To exclude an area, add 3 corner points that encompass the region.
+        /// You can also use LandblockToCoords(0xXXYY) to convert a landblock ID to coordinates.
+        /// </summary>
+        private static readonly List<((float NS, float EW) P1, (float NS, float EW) P2, (float NS, float EW) P3, string Name)> ExclusionZones = new List<((float NS, float EW), (float NS, float EW), (float NS, float EW), string)>
+        {
+            // Admin Island (Northeast corner of map)
+            // Rectangle corners: 0xDAFF (NW), 0xFFFF (NE), 0xFFE1 (SE), 0xDAE1 (SW)
+            // Split into 2 triangles to cover the rectangle
+            (LandblockToCoords(0xDAFF), LandblockToCoords(0xFFFF), LandblockToCoords(0xDAE1), "Admin Island Triangle 1"),
+            (LandblockToCoords(0xFFFF), LandblockToCoords(0xFFE1), LandblockToCoords(0xDAE1), "Admin Island Triangle 2"),
+
+            // Secondary Admin Island
+            // Rectangle corners: 0xF0E0 (NW), 0xFFE0 (NE), 0xFFD5 (SE), 0xF0D5 (SW)
+            (LandblockToCoords(0xF0E0), LandblockToCoords(0xFFE0), LandblockToCoords(0xF0D5), "Secondary Admin Island Triangle 1"),
+            (LandblockToCoords(0xFFE0), LandblockToCoords(0xFFD5), LandblockToCoords(0xF0D5), "Secondary Admin Island Triangle 2"),
+
+            // Olthoi Island Starter Area
+            // Rectangle corners: 0xE1D8 (NW), 0xECD8 (NE), 0xECCC (SE), 0xE1CC (SW)
+            (LandblockToCoords(0xE1D8), LandblockToCoords(0xECD8), LandblockToCoords(0xE1CC), "Olthoi Island Starter Triangle 1"),
+            (LandblockToCoords(0xECD8), LandblockToCoords(0xECCC), LandblockToCoords(0xE1CC), "Olthoi Island Starter Triangle 2"),
+
+            // NW Hidden Island
+            // Rectangle corners: 0x00FF (NW), 0x09FF (NE), 0x09F8 (SE), 0x00F8 (SW)
+            (LandblockToCoords(0x00FF), LandblockToCoords(0x09FF), LandblockToCoords(0x00F8), "NW Hidden Island Triangle 1"),
+            (LandblockToCoords(0x09FF), LandblockToCoords(0x09F8), LandblockToCoords(0x00F8), "NW Hidden Island Triangle 2"),
+
+            // SW Hidden Admin Island
+            // Rectangle corners: 0x0002 (NW), 0x0202 (NE), 0x0200 (SE), 0x0000 (SW)
+            (LandblockToCoords(0x0002), LandblockToCoords(0x0202), LandblockToCoords(0x0000), "SW Hidden Admin Island Triangle 1"),
+            (LandblockToCoords(0x0202), LandblockToCoords(0x0200), LandblockToCoords(0x0000), "SW Hidden Admin Island Triangle 2"),
+
+            // SW Hidden Admin Island 2
+            // Rectangle corners: 0x0A01 (NW), 0x1A01 (NE), 0x1A00 (SE), 0x0A00 (SW)
+            (LandblockToCoords(0x0A01), LandblockToCoords(0x1A01), LandblockToCoords(0x0A00), "SW Hidden Admin Island 2 Triangle 1"),
+            (LandblockToCoords(0x1A01), LandblockToCoords(0x1A00), LandblockToCoords(0x0A00), "SW Hidden Admin Island 2 Triangle 2"),
+
+            // SW Small Island
+            // Rectangle corners: 0x1104 (NW), 0x1304 (NE), 0x1302 (SE), 0x1102 (SW)
+            (LandblockToCoords(0x1104), LandblockToCoords(0x1304), LandblockToCoords(0x1102), "SW Small Island Triangle 1"),
+            (LandblockToCoords(0x1304), LandblockToCoords(0x1302), LandblockToCoords(0x1102), "SW Small Island Triangle 2"),
+
+            // SW Small Island 2
+            // Rectangle corners: 0x1D0A (NW), 0x1F0A (NE), 0x1F08 (SE), 0x1D08 (SW)
+            (LandblockToCoords(0x1D0A), LandblockToCoords(0x1F0A), LandblockToCoords(0x1D08), "SW Small Island 2 Triangle 1"),
+            (LandblockToCoords(0x1F0A), LandblockToCoords(0x1F08), LandblockToCoords(0x1D08), "SW Small Island 2 Triangle 2"),
+
+            // South Small Island
+            // Rectangle corners: 0x7707 (NW), 0x7907 (NE), 0x7905 (SE), 0x7705 (SW)
+            (LandblockToCoords(0x7707), LandblockToCoords(0x7907), LandblockToCoords(0x7705), "South Small Island Triangle 1"),
+            (LandblockToCoords(0x7907), LandblockToCoords(0x7905), LandblockToCoords(0x7705), "South Small Island Triangle 2"),
+
+            // East Admin Island
+            // Rectangle corners: 0xF56C (NW), 0xFF6C (NE), 0xFF61 (SE), 0xF561 (SW)
+            (LandblockToCoords(0xF56C), LandblockToCoords(0xFF6C), LandblockToCoords(0xF561), "East Admin Island Triangle 1"),
+            (LandblockToCoords(0xFF6C), LandblockToCoords(0xFF61), LandblockToCoords(0xF561), "East Admin Island Triangle 2"),
+        };
+
+        /// <summary>
+        /// Checks if a point (NS, EW) is inside a triangle defined by 3 points.
+        /// Uses the sign of cross products (same-side test) method.
+        /// </summary>
+        private static bool IsPointInTriangle(float pointNS, float pointEW,
+            (float NS, float EW) p1, (float NS, float EW) p2, (float NS, float EW) p3)
+        {
+            // Calculate cross products for each edge
+            float Sign(float x1, float y1, float x2, float y2, float x3, float y3)
+            {
+                return (x1 - x3) * (y2 - y3) - (x2 - x3) * (y1 - y3);
+            }
+
+            float d1 = Sign(pointNS, pointEW, p1.NS, p1.EW, p2.NS, p2.EW);
+            float d2 = Sign(pointNS, pointEW, p2.NS, p2.EW, p3.NS, p3.EW);
+            float d3 = Sign(pointNS, pointEW, p3.NS, p3.EW, p1.NS, p1.EW);
+
+            bool hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+            bool hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+
+            // Point is inside if all signs are the same (all positive or all negative)
+            return !(hasNeg && hasPos);
+        }
+
+        /// <summary>
+        /// Converts map coordinates (NS, EW) back to a landblock ID.
+        /// </summary>
+        private static ushort CoordsToLandblock(float ns, float ew)
+        {
+            // Reverse the conversion: map coords -> global -> landblock
+            float globalX = (ew + 102) * 240;
+            float globalY = (ns + 102) * 240;
+
+            int landblockX = (int)(globalX / 192);
+            int landblockY = (int)(globalY / 192);
+
+            // Clamp to valid range
+            landblockX = Math.Clamp(landblockX, 0, 255);
+            landblockY = Math.Clamp(landblockY, 0, 255);
+
+            return (ushort)((landblockX << 8) | landblockY);
+        }
+
+        /// <summary>
+        /// Checks if coordinates fall within any exclusion zone or excluded landblock.
+        /// </summary>
+        private static bool IsInExclusionZone(float latitude, float longitude, out string zoneName)
+        {
+            zoneName = null;
+
+            // Check individual excluded landblocks first (fast lookup)
+            if (ExcludedLandblocks.Count > 0)
+            {
+                var landblock = CoordsToLandblock(latitude, longitude);
+                if (ExcludedLandblocks.Contains(landblock))
+                {
+                    zoneName = $"Excluded Landblock 0x{landblock:X4}";
+                    return true;
+                }
+            }
+
+            // Check triangular exclusion zones
+            foreach (var zone in ExclusionZones)
+            {
+                if (IsPointInTriangle(latitude, longitude, zone.P1, zone.P2, zone.P3))
+                {
+                    zoneName = zone.Name;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public static WorldObject TryCreateTreasureMap(Weenie creatureWeenie)
         {
             if (creatureWeenie.WeenieType != WeenieType.Creature)
@@ -110,6 +304,13 @@ namespace ACE.Server.WorldObjects
 
         public static bool AreCoordinatesValid(float latitude, float longitude)
         {
+            // Check exclusion zones first (admin islands, inaccessible areas, etc.)
+            if (IsInExclusionZone(latitude, longitude, out var zoneName))
+            {
+                //Console.WriteLine($"[DEBUG] Coordinates in exclusion zone '{zoneName}': Latitude {latitude}, Longitude {longitude}.");
+                return false;
+            }
+
             // Generate a Position object with the given latitude and longitude
             var position = new Position((float)latitude, (float)longitude, null);
 

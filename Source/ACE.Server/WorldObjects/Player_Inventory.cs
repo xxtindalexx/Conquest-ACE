@@ -1187,6 +1187,15 @@ namespace ACE.Server.WorldObjects
                     return;
                 }
 
+                // CONQUEST: Check IP quest restrictions for self-contained movements too
+                if (itemRootOwner != this && containerRootOwner == this)
+                {
+                    if (!HandleIPQuestItem(item, itemRootOwner, containerRootOwner, itemGuid))
+                    {
+                        return;
+                    }
+                }
+
                 var wieldedLocation = item.CurrentWieldedLocation ?? EquipMask.None;
 
                 // note that special sequence for swapping arrows while in missile combat
@@ -1199,6 +1208,14 @@ namespace ACE.Server.WorldObjects
                             out Container itemRootOwner, out WorldObject item, out Container containerRootOwner, out Container container, out bool itemWasEquipped))
                         {
                             return;
+                        }
+                        // CONQUEST: Check IP quest restrictions in combat mode change callback
+                        if (itemRootOwner != this && containerRootOwner == this)
+                        {
+                            if (!HandleIPQuestItem(item, itemRootOwner, containerRootOwner, item.Guid.Full))
+                            {
+                                return;
+                            }
                         }
                         DoHandleActionPutItemInContainer(item, itemRootOwner, itemWasEquipped, container, containerRootOwner, placement);
                     });
@@ -1779,6 +1796,16 @@ namespace ACE.Server.WorldObjects
                             // InventoryServerSaveFailed previously sent in QuestManager
                             EnqueuePickupDone(pickupMotion);
                             return;
+                        }
+
+                        // CONQUEST: Check IP quest restrictions when picking up and wielding from world
+                        if (rootOwner != this)
+                        {
+                            if (!HandleIPQuestItem(item, rootOwner, this, itemGuid))
+                            {
+                                EnqueuePickupDone(pickupMotion);
+                                return;
+                            }
                         }
 
                         if (DoHandleActionGetAndWieldItem(item, fromContainer, rootOwner, wasEquipped, wieldedLocation))
@@ -2502,6 +2529,16 @@ namespace ACE.Server.WorldObjects
                     return;
                 }
 
+                // CONQUEST: Check IP quest restrictions when splitting stack from world to inventory
+                if (stackRootOwner != this && containerRootOwner == this)
+                {
+                    if (!HandleIPQuestItem(stack, stackRootOwner, containerRootOwner, stackId))
+                    {
+                        Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, stackId));
+                        return;
+                    }
+                }
+
                 WorldObject moveToObject;
 
                 if (stackRootOwner == this)
@@ -2585,6 +2622,15 @@ namespace ACE.Server.WorldObjects
             }
             else // This is a self-contained movement
             {
+                // CONQUEST: Check IP quest restrictions for self-contained splits
+                if (stackRootOwner != this && containerRootOwner == this)
+                {
+                    if (!HandleIPQuestItem(stack, stackRootOwner, containerRootOwner, stackId))
+                    {
+                        return;
+                    }
+                }
+
                 var newStack = WorldObjectFactory.CreateNewWorldObject(stack.WeenieClassId);
 
                 if (newStack == null)
@@ -3253,6 +3299,8 @@ namespace ACE.Server.WorldObjects
 
                         // CONQUEST: Re-check IP quest item at execution time to prevent race conditions
                         // This handles cases where multiple merge requests are sent rapidly
+                        // Note: Use > instead of >= because this request already incremented the counter at request time.
+                        // If SolvesCount > maxAttempts, another request snuck in and pushed it over the limit.
                         if (sourceStackRootOwner != this && targetStackRootOwner == this)
                         {
                             var ipQuestName = sourceStack.GetProperty(PropertyString.IPQuest);
@@ -3264,6 +3312,8 @@ namespace ACE.Server.WorldObjects
                                 {
                                     string playerIp = new System.Net.IPAddress(Account.LastLoginIP).ToString();
                                     var ipTracking = DatabaseManager.ShardDB.GetQuestIpTracking(quest.Id, playerIp);
+                                    // Use > (not >=) because this request already counted itself at request time
+                                    // We only block if ANOTHER request pushed it OVER the limit
                                     if (ipTracking != null && ipTracking.SolvesCount > quest.IpLootLimit.GetValueOrDefault(1))
                                     {
                                         Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot loot this item. Your IP-wide limit has been reached.", ChatMessageType.Broadcast));
@@ -3318,6 +3368,15 @@ namespace ACE.Server.WorldObjects
             }
             else // This is a self-contained movement
             {
+                // CONQUEST: Check IP quest restrictions for self-contained stackable merges
+                if (sourceStackRootOwner != this && targetStackRootOwner == this)
+                {
+                    if (!HandleIPQuestItem(sourceStack, sourceStackRootOwner, targetStackRootOwner, mergeFromGuid))
+                    {
+                        return;
+                    }
+                }
+
                 if (DoHandleActionStackableMerge(sourceStack, targetStack, amount))
                 {
                     // Log transfer monitoring (self-contained path)

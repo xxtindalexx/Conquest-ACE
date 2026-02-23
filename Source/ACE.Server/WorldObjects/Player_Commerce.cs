@@ -174,7 +174,34 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            // verify player has enough pack slots / burden to receive these pyreals
+            // CONQUEST: If VendorBankMode is enabled, deposit directly to bank instead of creating coin stacks
+            if (VendorBankMode)
+            {
+                vendor.MoneyOutflow += payoutCoinAmount;
+
+                // remove sell items from player inventory
+                foreach (var item in sellList.Values)
+                {
+                    if (TryRemoveFromInventoryWithNetworking(item.Guid, out _, RemoveFromInventoryAction.SellItem) || TryDequipObjectWithNetworking(item.Guid, out _, DequipObjectAction.SellItem))
+                        Session.Network.EnqueueSend(new GameEventItemServerSaysContainId(Session, item, vendor));
+                    else
+                        log.WarnFormat("[VENDOR] Item 0x{0:X8}:{1} for player {2} not found in HandleActionSellItem.", item.Guid.Full, item.Name, Name);
+                }
+
+                // send the list of items to the vendor
+                vendor.ProcessItemsForPurchase(this, sellList);
+
+                // Deposit directly to bank
+                BankedPyreals = (BankedPyreals ?? 0) + payoutCoinAmount;
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited {payoutCoinAmount:N0} pyreals to your bank.", ChatMessageType.Broadcast));
+
+                UpdateCoinValue();
+                Session.Network.EnqueueSend(new GameMessageSound(Guid, Sound.PickUpItem));
+                SendUseDoneEvent();
+                return;
+            }
+
+            // Standard mode: verify player has enough pack slots / burden to receive these pyreals
             var itemsToReceive = new ItemsToReceive(this);
 
             itemsToReceive.Add((uint)ACE.Entity.Enum.WeenieClassName.W_COINSTACK_CLASS, payoutCoinAmount);
@@ -339,14 +366,83 @@ namespace ACE.Server.WorldObjects
 
             var cost = new List<WorldObject>();
 
+            // CONQUEST: Check if VendorBankMode is enabled for pyreal purchases
             if (currentWcid == coinStackWcid)
             {
-                if (amount > CoinValue)
+                if (VendorBankMode)
+                {
+                    // Bank mode: inventory + bank must cover the cost
+                    var totalAvailable = (CoinValue ?? 0) + (BankedPyreals ?? 0);
+                    if (amount > totalAvailable)
+                        return null;
+                }
+                else
+                {
+                    // Standard mode: only inventory
+                    if (amount > CoinValue)
+                        return null;
+                }
+            }
+            else if (VendorBankMode)
+            {
+                // CONQUEST: Bank mode for alternate currencies
+                var inventoryAmount = GetNumInventoryItemsOfWCID(currentWcid);
+                var bankedAmount = GetBankedAlternateCurrency(currentWcid);
+                var totalAvailable = inventoryAmount + bankedAmount;
+                if (amount > totalAvailable)
                     return null;
             }
+
             if (destroy)
             {
-                TryConsumeFromInventoryWithNetworking(currentWcid, (int)amount);
+                // CONQUEST: If VendorBankMode, consume from inventory first, then bank
+                if (VendorBankMode && currentWcid == coinStackWcid)
+                {
+                    var remaining = (int)amount;
+
+                    // First consume from inventory
+                    var inventoryAmount = Math.Min(remaining, CoinValue ?? 0);
+                    if (inventoryAmount > 0)
+                    {
+                        TryConsumeFromInventoryWithNetworking(currentWcid, inventoryAmount);
+                        remaining -= inventoryAmount;
+                    }
+
+                    // Then debit from bank if needed
+                    if (remaining > 0 && BankedPyreals >= remaining)
+                    {
+                        BankedPyreals -= remaining;
+                        Session.Network.EnqueueSend(new GameMessageSystemChat($"Debited {remaining:N0} pyreals from your bank.", ChatMessageType.Broadcast));
+                        UpdateCoinValue();
+                    }
+                }
+                else if (VendorBankMode)
+                {
+                    // CONQUEST: Bank mode for alternate currencies
+                    var remaining = (int)amount;
+
+                    // First consume from inventory
+                    var inventoryAmount = Math.Min(remaining, GetNumInventoryItemsOfWCID(currentWcid));
+                    if (inventoryAmount > 0)
+                    {
+                        TryConsumeFromInventoryWithNetworking(currentWcid, inventoryAmount);
+                        remaining -= inventoryAmount;
+                    }
+
+                    // Then debit from bank if needed
+                    if (remaining > 0)
+                    {
+                        var currencyName = DebitBankedAlternateCurrency(currentWcid, remaining);
+                        if (currencyName != null)
+                        {
+                            Session.Network.EnqueueSend(new GameMessageSystemChat($"Debited {remaining:N0} {currencyName} from your bank.", ChatMessageType.Broadcast));
+                        }
+                    }
+                }
+                else
+                {
+                    TryConsumeFromInventoryWithNetworking(currentWcid, (int)amount);
+                }
             }
             else
             {

@@ -1469,6 +1469,15 @@ namespace ACE.Server.WorldObjects
             set { if (!value) RemoveProperty(PropertyBool.ShowXpBreakdown); else SetProperty(PropertyBool.ShowXpBreakdown, value); }
         }
 
+        /// <summary>
+        /// CONQUEST: If true, vendor transactions integrate with bank (buy from bank, sell deposits to bank, no coin drop on death)
+        /// </summary>
+        public bool VendorBankMode
+        {
+            get => GetProperty(PropertyBool.VendorBankMode) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.VendorBankMode); else SetProperty(PropertyBool.VendorBankMode, value); }
+        }
+
         public long? LuminanceAugmentSpellDurationCount
         {
             get => GetProperty(PropertyInt64.LumAugDurationCount) ?? 0;

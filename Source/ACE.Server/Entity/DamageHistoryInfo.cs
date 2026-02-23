@@ -18,6 +18,11 @@ namespace ACE.Server.Entity
 
         public bool IsPlayer => Guid.IsPlayer();
 
+        /// <summary>
+        /// Returns true if the attacker is a player OR if it's a pet owned by a player
+        /// </summary>
+        public bool IsPlayerOrPetOfPlayer => IsPlayer || PetOwner != null;
+
         public readonly bool IsOlthoiPlayer;
 
         public DamageHistoryInfo(WorldObject attacker, float totalDamage = 0.0f)

@@ -215,5 +215,15 @@ namespace ACE.Entity.Enum.Properties
         /// CONQUEST: If TRUE, shows detailed XP breakdown when earning XP from kills/quests
         /// </summary>
         ShowXpBreakdown = 9041,
+
+        // CONQUEST: Champion Mutation System
+        ChampionEnabled = 9200,    // Generator property - enables champion spawns
+        IsChampion = 9201,         // Creature property - this is a champion
+
+        /// <summary>
+        /// CONQUEST: If TRUE, vendor transactions use bank balance (buy from bank, sell deposits to bank)
+        /// </summary>
+        [SendOnLogin]
+        VendorBankMode = 9210,
     }
 }

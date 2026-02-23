@@ -108,8 +108,8 @@ namespace ACE.Server.WorldObjects
         public void GrantXP(long amount, XpType xpType, ShareType shareType = ShareType.All)
         {
             // DEBUG: Log GrantXP entry for troubleshooting vitae issues
-            if (HasVitae)
-                //Console.WriteLine($"[VITAE DEBUG] {Name}: GrantXP entry - amount={amount:N0}, xpType={xpType}, shareType={shareType}, HasVitae=true");
+            //if (HasVitae)
+            //    Console.WriteLine($"[VITAE DEBUG] {Name}: GrantXP entry - amount={amount:N0}, xpType={xpType}, shareType={shareType}, HasVitae=true");
 
             if (IsOlthoiPlayer || IsMule)
             {
@@ -228,8 +228,6 @@ namespace ACE.Server.WorldObjects
             var maxPool = (int)VitaeCPPoolThreshold(vitaePenalty, DeathLevel.Value);
             var curPool = VitaeCpPool + amount;
 
-            // DEBUG: Log vitae update progress
-            //Console.WriteLine($"[VITAE DEBUG] {Name}: UpdateXpVitae - penalty={((1-vitaePenalty)*100):F1}%, DeathLevel={DeathLevel}, VitaeCpPool={VitaeCpPool:N0}, adding={amount:N0}, newPool={curPool:N0}, threshold={maxPool:N0}");
             while (curPool >= maxPool)
             {
                 curPool -= maxPool;

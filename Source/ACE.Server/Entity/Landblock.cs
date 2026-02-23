@@ -598,7 +598,8 @@ namespace ACE.Server.Entity
 
             ProcessPendingWorldObjectAdditionsAndRemovals();
 
-            foreach (WorldObject wo in worldObjects.Values)
+            // CONQUEST: Use ToList() to create a snapshot to avoid collection modification issues
+            foreach (WorldObject wo in worldObjects.Values.ToList())
             {
                 // set to TRUE if object changes landblock
                 var landblockUpdate = wo.UpdateObjectPhysics();

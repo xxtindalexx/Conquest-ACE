@@ -2515,6 +2515,73 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.EventTokens); else SetProperty(PropertyInt64.EventTokens, value.Value); }
         }
 
+        // CONQUEST: Vendor Bank Mode - Currency WCIDs
+        private const uint WCID_CONQUEST_COINS = 13370001;
+        private const uint WCID_SOUL_FRAGMENTS = 13370003;
+        private const uint WCID_EVENT_TOKENS = 13370002;  // Dragon Coins
+
+        /// <summary>
+        /// CONQUEST: Gets the banked amount of an alternate currency by its WCID
+        /// Used by vendor bank mode to include banked currency in purchase validation
+        /// </summary>
+        public long GetBankedAlternateCurrency(uint wcid)
+        {
+            return wcid switch
+            {
+                WCID_CONQUEST_COINS => ConquestCoins ?? 0,
+                WCID_SOUL_FRAGMENTS => SoulFragments ?? 0,
+                WCID_EVENT_TOKENS => EventTokens ?? 0,
+                _ => 0
+            };
+        }
+
+        /// <summary>
+        /// CONQUEST: Debits the specified amount from the banked alternate currency
+        /// Returns the currency name for messaging, or null if not a known alternate currency
+        /// </summary>
+        public string DebitBankedAlternateCurrency(uint wcid, int amount)
+        {
+            switch (wcid)
+            {
+                case WCID_CONQUEST_COINS:
+                    if ((ConquestCoins ?? 0) >= amount)
+                    {
+                        ConquestCoins -= amount;
+                        return "Conquest Coins";
+                    }
+                    break;
+                case WCID_SOUL_FRAGMENTS:
+                    if ((SoulFragments ?? 0) >= amount)
+                    {
+                        SoulFragments -= amount;
+                        return "Soul Fragments";
+                    }
+                    break;
+                case WCID_EVENT_TOKENS:
+                    if ((EventTokens ?? 0) >= amount)
+                    {
+                        EventTokens -= amount;
+                        return "Dragon Coins";
+                    }
+                    break;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// CONQUEST: Gets the display name for an alternate currency by its WCID
+        /// </summary>
+        public static string GetAlternateCurrencyName(uint wcid)
+        {
+            return wcid switch
+            {
+                WCID_CONQUEST_COINS => "Conquest Coins",
+                WCID_SOUL_FRAGMENTS => "Soul Fragments",
+                WCID_EVENT_TOKENS => "Dragon Coins",
+                _ => null
+            };
+        }
+
         // CONQUEST: Daily luminance transfer tracking
         public long? LuminanceTransferredToday
         {

@@ -46,6 +46,11 @@ namespace ACE.Server.Entity
         public QuestManager QuestManager;
 
         /// <summary>
+        /// CONQUEST: Queue of players waiting to join when a spot opens
+        /// </summary>
+        public List<WeakReference<Player>> WaitingQueue;
+
+        /// <summary>
         /// Called when a player first creates a Fellowship
         /// </summary>
         public Fellowship(Player leader, string fellowshipName, bool shareXP)
@@ -68,6 +73,7 @@ namespace ACE.Server.Entity
             IsLocked = false;
             DepartedMembers = new Dictionary<uint, int>();
             FellowshipLocks = new Dictionary<string, FellowshipLockData>();
+            WaitingQueue = new List<WeakReference<Player>>();
         }
 
         /// <summary>
@@ -111,12 +117,6 @@ namespace ACE.Server.Entity
             }
             else
             {
-                if (PropertyManager.GetBool("fellow_busy_no_recruit") && newMember.IsBusy)
-                {
-                    inviter.Session.Network.EnqueueSend(new GameMessageSystemChat($"{newMember.Name} is busy.", ChatMessageType.Broadcast));
-                    return;
-                }
-
                 if (newMember.GetCharacterOption(CharacterOption.AutomaticallyAcceptFellowshipRequests))
                 {
                     AddConfirmedMember(inviter, newMember, true);
@@ -145,6 +145,9 @@ namespace ACE.Server.Entity
                 // player clicked 'no' on the fellowship popup
                 inviter.Session.Network.EnqueueSend(new GameMessageSystemChat($"{player.Name} declines your invite", ChatMessageType.Fellowship));
                 inviter.Session.Network.EnqueueSend(new GameEventWeenieError(inviter.Session, WeenieError.FellowshipDeclined));
+
+                // CONQUEST: Try the next person in queue if someone declines
+                ProcessWaitingQueue();
                 return;
             }
 
@@ -178,8 +181,142 @@ namespace ACE.Server.Entity
 
             UpdateAllMembers();
 
-            if (inviter.CurrentMotionState.Stance == MotionStance.NonCombat) // only do this motion if inviter is at peace, other times motion is skipped. 
+            if (inviter.CurrentMotionState.Stance == MotionStance.NonCombat) // only do this motion if inviter is at peace, other times motion is skipped.
                 inviter.SendMotionAsCommands(MotionCommand.BowDeep, MotionStance.NonCombat);
+        }
+
+        /// <summary>
+        /// CONQUEST: Add a player to the waiting queue when fellowship is full
+        /// </summary>
+        public int AddToWaitingQueue(Player player)
+        {
+            if (player == null) return -1;
+
+            // Check if player is already in queue
+            foreach (var weakRef in WaitingQueue)
+            {
+                if (weakRef.TryGetTarget(out var queuedPlayer) && queuedPlayer.Guid.Full == player.Guid.Full)
+                {
+                    // Return their current position (1-indexed)
+                    return WaitingQueue.IndexOf(weakRef) + 1;
+                }
+            }
+
+            // Add to queue
+            WaitingQueue.Add(new WeakReference<Player>(player));
+            return WaitingQueue.Count;
+        }
+
+        /// <summary>
+        /// CONQUEST: Remove a player from the waiting queue
+        /// </summary>
+        public bool RemoveFromWaitingQueue(Player player)
+        {
+            if (player == null) return false;
+
+            for (int i = WaitingQueue.Count - 1; i >= 0; i--)
+            {
+                if (WaitingQueue[i].TryGetTarget(out var queuedPlayer) && queuedPlayer.Guid.Full == player.Guid.Full)
+                {
+                    WaitingQueue.RemoveAt(i);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// CONQUEST: Process the waiting queue when a spot opens - invite the next player
+        /// </summary>
+        public void ProcessWaitingQueue()
+        {
+            if (WaitingQueue.Count == 0) return;
+            if (FellowshipMembers.Count >= MaxFellows) return;
+            if (IsLocked) return;
+
+            // Clean up stale references and find the first valid player
+            while (WaitingQueue.Count > 0)
+            {
+                var weakRef = WaitingQueue[0];
+                WaitingQueue.RemoveAt(0);
+
+                if (!weakRef.TryGetTarget(out var player))
+                    continue; // Player no longer online, skip
+
+                if (player.Session == null || player.Session.Player == null)
+                    continue; // Player disconnected, skip
+
+                if (player.Fellowship != null)
+                {
+                    // Player already joined another fellowship
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"[FSHIP]: You were next in queue for {FellowshipName}, but you're already in a fellowship.",
+                        ChatMessageType.Broadcast));
+                    continue;
+                }
+
+                // Found a valid player - get the leader to invite them
+                var leader = GetLeader();
+                if (leader == null)
+                {
+                    // No leader available, put player back at front of queue
+                    WaitingQueue.Insert(0, weakRef);
+                    return;
+                }
+
+                // Notify the player they're being invited
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"[FSHIP]: A spot opened in {FellowshipName}! Sending you an invite...",
+                    ChatMessageType.Broadcast));
+
+                // Send the fellowship invite
+                AddFellowshipMember(leader, player);
+
+                // Notify remaining queue members of their new position
+                NotifyQueuePositions();
+                return;
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Get the fellowship leader player object
+        /// </summary>
+        public Player GetLeader()
+        {
+            var members = GetFellowshipMembers();
+            if (members.TryGetValue(FellowshipLeaderGuid, out var leader))
+                return leader;
+            return null;
+        }
+
+        /// <summary>
+        /// CONQUEST: Notify all players in queue of their current position
+        /// </summary>
+        public void NotifyQueuePositions()
+        {
+            for (int i = 0; i < WaitingQueue.Count; i++)
+            {
+                if (WaitingQueue[i].TryGetTarget(out var player) && player.Session != null)
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"[FSHIP]: You are now #{i + 1} in queue for {FellowshipName}.",
+                        ChatMessageType.Broadcast));
+                }
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Get current queue count (cleaning up stale references)
+        /// </summary>
+        public int GetWaitingQueueCount()
+        {
+            // Clean up stale references
+            for (int i = WaitingQueue.Count - 1; i >= 0; i--)
+            {
+                if (!WaitingQueue[i].TryGetTarget(out var player) || player.Session == null || player.Fellowship != null)
+                    WaitingQueue.RemoveAt(i);
+            }
+            return WaitingQueue.Count;
         }
 
         public void RemoveFellowshipMember(Player player, Player leader)
@@ -220,6 +357,9 @@ namespace ACE.Server.Entity
             CalculateXPSharing();
 
             UpdateAllMembers();
+
+            // CONQUEST: Check if anyone is waiting in queue
+            ProcessWaitingQueue();
         }
 
         private void UpdateAllMembers()
@@ -290,6 +430,18 @@ namespace ACE.Server.Entity
             {
                 if (disband)
                 {
+                    // CONQUEST: Notify players in waiting queue that fellowship was disbanded
+                    foreach (var weakRef in WaitingQueue)
+                    {
+                        if (weakRef.TryGetTarget(out var queuedPlayer) && queuedPlayer.Session != null)
+                        {
+                            queuedPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                                $"[FSHIP]: {FellowshipName} has been disbanded. You have been removed from the queue.",
+                                ChatMessageType.Broadcast));
+                        }
+                    }
+                    WaitingQueue.Clear();
+
                     var fellowshipMembers = GetFellowshipMembers();
 
                     foreach (var member in fellowshipMembers.Values)
@@ -339,6 +491,9 @@ namespace ACE.Server.Entity
                     AssignNewLeader(null, null);
 
                     CalculateXPSharing();
+
+                    // CONQUEST: Check if anyone is waiting in queue
+                    ProcessWaitingQueue();
                 }
             }
             else if (!disband)
@@ -371,6 +526,9 @@ namespace ACE.Server.Entity
                 player.Fellowship = null;
 
                 CalculateXPSharing();
+
+                // CONQUEST: Check if anyone is waiting in queue
+                ProcessWaitingQueue();
             }
         }
 

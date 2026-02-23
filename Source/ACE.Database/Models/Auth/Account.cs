@@ -86,7 +86,11 @@ public partial class Account
                 return null;
             }
 
-            return QuestCountCache.Count + QuestCountCache.Where(x=>x.NumTimesCompleted>=1).Count();
+            // Filter out PKSoulLoot stamps - these are per-victim PvP cooldown trackers
+            // and should not contribute to the Quest Bonus XP multiplier
+            var validQuests = QuestCountCache.Where(x => !x.Quest.StartsWith("PKSoulLoot_")).ToList();
+
+            return validQuests.Count + validQuests.Where(x => x.NumTimesCompleted >= 1).Count();
         }
     }
 

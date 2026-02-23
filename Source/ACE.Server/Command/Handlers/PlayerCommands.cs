@@ -44,7 +44,8 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship leave", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship disband", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship list to see all fellowships looking for members", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: tell any fellowship member 'xp' to join their fellowship", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship queue to see your queue status, /fship queue leave to leave queues", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: tell any fellowship member 'xp' to join (or queue if full)", ChatMessageType.Broadcast));
                 return;
             }
 
@@ -181,6 +182,47 @@ namespace ACE.Server.Command.Handlers
                     return;
                 }
 
+                // CONQUEST: Show queue status for player
+                if (parameters[0] == "queue")
+                {
+                    // Find which fellowships the player is queued for
+                    var queuedFor = new List<(string fellowName, int position)>();
+                    var seenFellowships = new HashSet<uint>();
+
+                    foreach (var onlinePlayer in PlayerManager.GetAllOnline())
+                    {
+                        if (onlinePlayer.Fellowship != null && !seenFellowships.Contains(onlinePlayer.Fellowship.FellowshipLeaderGuid))
+                        {
+                            seenFellowships.Add(onlinePlayer.Fellowship.FellowshipLeaderGuid);
+                            var fellowship = onlinePlayer.Fellowship;
+
+                            for (int i = 0; i < fellowship.WaitingQueue.Count; i++)
+                            {
+                                if (fellowship.WaitingQueue[i].TryGetTarget(out var queuedPlayer) && queuedPlayer.Guid.Full == session.Player.Guid.Full)
+                                {
+                                    queuedFor.Add((fellowship.FellowshipName, i + 1));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (queuedFor.Count == 0)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You are not in any fellowship queue. Tell a fellowship member 'xp' to join their queue.", ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You are queued for the following fellowships:", ChatMessageType.Broadcast));
+                        foreach (var (fellowName, position) in queuedFor)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"  - {fellowName}: Position #{position}", ChatMessageType.Broadcast));
+                        }
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Use '/fship queue leave' to leave all queues.", ChatMessageType.Broadcast));
+                    }
+                    return;
+                }
+
                 if (parameters[0] == "landblock")
                 {
                     if (session.Player.CurrentLandblock == null)
@@ -261,6 +303,28 @@ namespace ACE.Server.Command.Handlers
                 if (parameters[0] == "create")
                 {
                     session.Player.FellowshipCreate(parameters[1], true);
+                    return;
+                }
+                // CONQUEST: Leave all fellowship queues
+                if (parameters[0] == "queue" && parameters[1].ToLower() == "leave")
+                {
+                    var removedCount = 0;
+                    var seenFellowships = new HashSet<uint>();
+
+                    foreach (var onlinePlayer in PlayerManager.GetAllOnline())
+                    {
+                        if (onlinePlayer.Fellowship != null && !seenFellowships.Contains(onlinePlayer.Fellowship.FellowshipLeaderGuid))
+                        {
+                            seenFellowships.Add(onlinePlayer.Fellowship.FellowshipLeaderGuid);
+                            if (onlinePlayer.Fellowship.RemoveFromWaitingQueue(session.Player))
+                                removedCount++;
+                        }
+                    }
+
+                    if (removedCount > 0)
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You have left {removedCount} fellowship queue(s).", ChatMessageType.Broadcast));
+                    else
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You were not in any fellowship queues.", ChatMessageType.Broadcast));
                     return;
                 }
                 if (parameters[0] == "add")
@@ -467,6 +531,33 @@ namespace ACE.Server.Command.Handlers
 
             var status = player.ShowXpBreakdown ? "enabled" : "disabled";
             session.Network.EnqueueSend(new GameMessageSystemChat($"XP breakdown display is now {status}.", ChatMessageType.Broadcast));
+        }
+
+        [CommandHandler("autobank", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Toggle bank integration with vendors (buy from bank, sell deposits to bank)")]
+        public static void HandleAutoBank(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            // Toggle the setting
+            var currentSetting = player.GetProperty(PropertyBool.VendorBankMode) ?? false;
+            player.SetProperty(PropertyBool.VendorBankMode, !currentSetting);
+
+            var newSetting = player.GetProperty(PropertyBool.VendorBankMode) ?? false;
+            var status = newSetting ? "ENABLED" : "DISABLED";
+
+            if (newSetting)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Vendor Bank Mode is now {status}.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  - Purchases will use your bank balance if inventory funds are insufficient", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  - Sales will deposit directly to your bank", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  - You will not drop coins on death", ChatMessageType.Broadcast));
+            }
+            else
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Vendor Bank Mode is now {status}.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  - Purchases will only use inventory funds", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  - Sales will create coin stacks in your inventory", ChatMessageType.Broadcast));
+            }
         }
 
         [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]

@@ -284,28 +284,28 @@ namespace ACE.Server.WorldObjects
                     {
                         var reward = rewardString.Split(',');
                         var rewardCode = reward[0];
-                        int rewardCount = 0;
-                        int.TryParse(reward[1], out rewardCount);
+                        double rewardCount = 0;
+                        double.TryParse(reward[1], out rewardCount);
                         if (rewardCount <= 0)
                             continue;
 
                         switch (rewardCode)
                         {
                             case "LUM":
-                                msg = $"Reward: {rewardCount} Luminance";
+                                msg = $"Reward: {(int)rewardCount} Luminance";
                                 Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.System));
-                                this.GrantLuminance(rewardCount, XpType.Quest);
+                                this.GrantLuminance((long)rewardCount, XpType.Quest);
                                 break;
                             case "XP%":
                                 msg = $"Reward: {rewardCount}% of XP to next level";
                                 Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.System));
-                                double xpPercent = (double)rewardCount / 100d;
+                                double xpPercent = rewardCount / 100d;
                                 this.GrantLevelProportionalXp(xpPercent, 1, long.MaxValue, true);
                                 break;
                             case "LEGENDKEY":
-                                msg = $"Reward: {rewardCount} Aged Legendary Key{(rewardCount > 1 ? "s" : "")}";
+                                msg = $"Reward: {(int)rewardCount} Aged Legendary Key{(rewardCount > 1 ? "s" : "")}";
                                 Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.System));
-                                for (int i = 0; i < rewardCount; i++)
+                                for (int i = 0; i < (int)rewardCount; i++)
                                 {
                                     var legendKey = WorldObjectFactory.CreateNewWorldObject(48746); //Aged Legendary Key
                                     this.TryCreateInInventoryWithNetworking(legendKey);
@@ -313,10 +313,10 @@ namespace ACE.Server.WorldObjects
                                 }
                                 break;
                             case "SOULFRAG":
-                                msg = $"Reward: {rewardCount} Soul Fragment{(rewardCount > 1 ? "s" : "")}";
+                                msg = $"Reward: {(int)rewardCount} Soul Fragment{(rewardCount > 1 ? "s" : "")}";
                                 Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.System));
                                 var soulFrag = WorldObjectFactory.CreateNewWorldObject(13370003); //Soul Fragment
-                                soulFrag.SetStackSize(Math.Min(rewardCount, (int)soulFrag.MaxStackSize));
+                                soulFrag.SetStackSize(Math.Min((int)rewardCount, (int)soulFrag.MaxStackSize));
                                 this.TryCreateInInventoryWithNetworking(soulFrag);
                                 Session.Network.EnqueueSend(new GameMessageCreateObject(soulFrag));
                                 break;

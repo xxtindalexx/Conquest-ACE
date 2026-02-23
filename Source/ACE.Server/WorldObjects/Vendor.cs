@@ -543,20 +543,47 @@ namespace ACE.Server.WorldObjects
             // verify player has enough currency
             if (AlternateCurrency == null)
             {
-                if (player.CoinValue < totalPrice)
+                // CONQUEST: If VendorBankMode is enabled, include banked pyreals in the check
+                if (player.VendorBankMode)
                 {
-                    CleanupCreatedItems(defaultItems);
-                    return false;
+                    var totalAvailable = (player.CoinValue ?? 0) + (player.BankedPyreals ?? 0);
+                    if (totalAvailable < totalPrice)
+                    {
+                        CleanupCreatedItems(defaultItems);
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (player.CoinValue < totalPrice)
+                    {
+                        CleanupCreatedItems(defaultItems);
+                        return false;
+                    }
                 }
             }
             else
             {
                 var playerAltCurrency = player.GetNumInventoryItemsOfWCID(AlternateCurrency.Value);
 
-                if (playerAltCurrency < totalPrice)
+                // CONQUEST: If VendorBankMode is enabled, include banked alternate currency
+                if (player.VendorBankMode)
                 {
-                    CleanupCreatedItems(defaultItems);
-                    return false;
+                    var bankedAltCurrency = player.GetBankedAlternateCurrency(AlternateCurrency.Value);
+                    var totalAvailable = playerAltCurrency + bankedAltCurrency;
+                    if (totalAvailable < totalPrice)
+                    {
+                        CleanupCreatedItems(defaultItems);
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (playerAltCurrency < totalPrice)
+                    {
+                        CleanupCreatedItems(defaultItems);
+                        return false;
+                    }
                 }
             }
 

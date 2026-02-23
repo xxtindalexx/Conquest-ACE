@@ -1304,23 +1304,24 @@ namespace ACE.Server.WorldObjects
             foreach (var enchantment in lifeEnchantments)
             {
                 // Only remove if self-cast (caster is this player)
-                if (enchantment.CasterObjectId == Guid.Full)
+                // IMPORTANT: Exclude vitae - it has CasterObjectId set to player but should never be removed here
+                if (enchantment.CasterObjectId == Guid.Full && enchantment.SpellId != (int)SpellId.Vitae)
                     enchantmentsToRemove.Add(enchantment);
             }
 
             var creatureEnchantments = EnchantmentManager.GetEnchantments(MagicSchool.CreatureEnchantment);
             foreach (var enchantment in creatureEnchantments)
             {
-                // Only remove if self-cast
-                if (enchantment.CasterObjectId == Guid.Full)
+                // Only remove if self-cast, exclude vitae
+                if (enchantment.CasterObjectId == Guid.Full && enchantment.SpellId != (int)SpellId.Vitae)
                     enchantmentsToRemove.Add(enchantment);
             }
 
             var itemEnchantments = EnchantmentManager.GetEnchantments(MagicSchool.ItemEnchantment);
             foreach (var enchantment in itemEnchantments)
             {
-                // Only remove if self-cast
-                if (enchantment.CasterObjectId == Guid.Full)
+                // Only remove if self-cast, exclude vitae
+                if (enchantment.CasterObjectId == Guid.Full && enchantment.SpellId != (int)SpellId.Vitae)
                     enchantmentsToRemove.Add(enchantment);
             }
 

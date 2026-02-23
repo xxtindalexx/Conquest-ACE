@@ -687,6 +687,16 @@ namespace ACE.Server.Network.Structure
                 PropertiesFloat[PropertyFloat.SplitArrowDamageMultiplier] = damageMultiplier;
             }
 
+            // Add spell chain properties to appraisal (for wands/casters)
+            var spellChainTargets = weapon.GetProperty(PropertyInt.SpellChainTargets);
+            if (spellChainTargets != null && spellChainTargets > 0)
+            {
+                PropertiesInt[PropertyInt.SpellChainTargets] = spellChainTargets.Value;
+
+                var chainDamagePercent = weapon.GetProperty(PropertyInt.SpellChainDamagePercent) ?? 50;
+                PropertiesInt[PropertyInt.SpellChainDamagePercent] = chainDamagePercent;
+            }
+
             // Build detailed weapon property descriptions
             BuildWeaponPropertyDescriptions(weapon);
 
@@ -756,6 +766,14 @@ namespace ACE.Server.Network.Structure
                 var splitDamage = weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? Creature.DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER;
                 var splitDamagePercent = splitDamage * 100;
                 descriptions.Add($"- Split Arrows: +{splitCount} targets, {splitRange:F0}m range, {splitDamagePercent:F0}% Dmg");
+            }
+
+            // Spell Chain (for wands/casters)
+            var spellChainTargets = weapon.GetProperty(PropertyInt.SpellChainTargets);
+            if (spellChainTargets != null && spellChainTargets > 0)
+            {
+                var chainDamagePercent = weapon.GetProperty(PropertyInt.SpellChainDamagePercent) ?? 50;
+                descriptions.Add($"- Spell Chain: +{spellChainTargets} targets, {chainDamagePercent}% Dmg");
             }
 
             // Imbued effects

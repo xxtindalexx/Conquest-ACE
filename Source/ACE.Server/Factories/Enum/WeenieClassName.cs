@@ -41889,36 +41889,38 @@ namespace ACE.Server.Factories.Enum
         // Treasure Map System (Conquest custom)
         treasureMap = 13370024,
 
-        // Nether Weapons - WCIDs matching LootTables.cs matrices (Conquest custom)
-        // Finesse Weapons (from FinesseWeaponsMatrix)
-        conquest_netherhatchet = 63370000,           // Finesse - Hatchet
-        conquest_nethershouono = 63370001,           // Finesse - Shou-ono
-        conquest_nethertungi = 63370002,             // Finesse - Tungi
-        conquest_netherknife = 63370003,             // Finesse - Knife (MS)
-        conquest_netherlancet = 63370004,            // Finesse - Lancet (MS)
-        conquest_netherponiard = 63370005,           // Finesse - Poniard
-        conquest_netherboardwithnail = 63370006,     // Finesse - Board with Nail
-        conquest_netherdabus = 63370007,             // Finesse - Dabus
-        conquest_netherjitte = 63370008,             // Finesse - Jitte
-        conquest_nethertofun = 63370009,             // Finesse - Tofun
-        conquest_netherbudiaq = 63370010,            // Finesse - Budiaq
-        conquest_nethernaginata = 63370011,          // Finesse - Naginata
-        conquest_netherbastone = 63370012,           // Finesse - Bastone
-        conquest_netherjo = 63370013,                // Finesse - Jo
-        conquest_nethersabra = 63370014,             // Finesse - Sabra
-        conquest_netherscimitar = 63370015,          // Finesse - Scimitar
-        conquest_nethershortsword = 63370016,        // Finesse - Short Sword
-        conquest_nethersimi = 63370017,              // Finesse - Simi
-        conquest_netherrapier = 63370018,            // Finesse - Rapier (MS)
-        conquest_netheryaoji = 63370019,             // Finesse - Yaoji
-        conquest_netherclaw = 63370020,              // Finesse - Claw
-        conquest_netherhandwraps = 63370021,         // Finesse - Hand Wraps
-        // Light Weapons (from LightWeaponsMatrix)
+        // Nether Weapons - WCIDs matching database (Conquest custom)
+        // Heavy Weapons
+        conquest_netherbattleaxe = 63370043,         // Heavy - Battle Axe
+        conquest_netherlugianhammer = 63370044,      // Heavy - Lugian Hammer
+        conquest_nethersilifi = 63370045,            // Heavy - Silifi
+        conquest_netherwaraxe = 63370046,            // Heavy - War Axe
+        conquest_netherdirk = 63370047,              // Heavy - Dirk
+        conquest_netherjambiya = 63370048,           // Heavy - Jambiya
+        conquest_netherstiletto = 63370049,          // Heavy - Stiletto
+        conquest_netherflangedmace = 63370050,       // Heavy - Flanged Mace
+        conquest_nethermace = 63370051,              // Heavy - Mace
+        conquest_nethermazule = 63370052,            // Heavy - Mazule
+        conquest_nethermorningstar = 63370053,       // Heavy - Morning Star
+        conquest_netherpartizan = 63370054,          // Heavy - Partizan
+        conquest_netherspineglaive = 63370055,       // Heavy - Spine Glaive
+        conquest_nethertrident = 63370056,           // Heavy - Trident
+        conquest_nethernabut = 63370058,             // Heavy - Nabut
+        conquest_netherstick = 63370059,             // Heavy - Stick
+        conquest_netherflamberge = 63370057,         // Heavy - Flamberge
+        conquest_netherken = 63370061,               // Heavy - Ken
+        conquest_netherlongsword = 63370060,         // Heavy - Long Sword
+        conquest_netherschlager = 63370040,          // Heavy - Schlager
+        conquest_nethertachi = 63370062,             // Heavy - Tachi
+        conquest_nethertakuba = 63370063,            // Heavy - Takuba
+        conquest_nethercestus = 63370064,            // Heavy - Cestus
+        conquest_nethernekode = 63370065,            // Heavy - Nekode
+        // Light Weapons
         conquest_netherdolabra = 63370022,           // Light - Dolabra
         conquest_netherhandaxe = 63370023,           // Light - Hand Axe
         conquest_netherono = 63370024,               // Light - Ono
         conquest_netherwarhammer = 63370025,         // Light - War Hammer
-        conquest_netherlightdagger = 63370026,       // Light - Dagger (MS)
+        conquest_netherlightdagger = 63370026,       // Light - Dagger
         conquest_netherkhanjar = 63370027,           // Light - Khanjar
         conquest_netherlightclub = 63370028,         // Light - Club
         conquest_netherkasrullah = 63370029,         // Light - Kasrullah
@@ -41928,38 +41930,37 @@ namespace ACE.Server.Factories.Enum
         conquest_netherquarterstaff = 63370033,      // Light - Quarter Staff
         conquest_netherbroadsword = 63370034,        // Light - Broad Sword
         conquest_netherdericostblade = 63370035,     // Light - Dericost Blade
-        conquest_netherepee = 63370036,              // Light - Epee (MS)
+        conquest_netherepee = 63370036,              // Light - Epee
         conquest_netherkaskara = 63370037,           // Light - Kaskara
         conquest_nethershamshir = 63370038,          // Light - Shamshir
         conquest_netherspada = 63370039,             // Light - Spada
-        conquest_netherschlager = 63370040,          // Heavy - Schlager (MS)
         conquest_netherkatar = 63370041,             // Light - Katar
         conquest_netherknuckles = 63370042,          // Light - Knuckles
-        // Heavy Weapons (from HeavyWeaponsMatrix)
-        conquest_netherbattleaxe = 63370043,         // Heavy - Battle Axe
-        conquest_netherlugianhammer = 63370044,      // Heavy - Lugian Hammer
-        conquest_nethersilifi = 63370045,            // Heavy - Silifi
-        conquest_netherwaraxe = 63370046,            // Heavy - War Axe
-        conquest_netherdirk = 63370047,              // Heavy - Dirk
-        conquest_netherjambiya = 63370048,           // Heavy - Jambiya (MS)
-        conquest_netherstiletto = 63370049,          // Heavy - Stiletto (MS)
-        conquest_netherflangedmace = 63370050,       // Heavy - Flanged Mace
-        conquest_nethermace = 63370051,              // Heavy - Mace
-        conquest_nethermazule = 63370052,            // Heavy - Mazule
-        conquest_nethermorningstar = 63370053,       // Heavy - Morning Star
-        conquest_netherpartizan = 63370054,          // Heavy - Partizan
-        conquest_netherspineglaive = 63370055,       // Heavy - Spine Glaive
-        conquest_nethertrident = 63370056,           // Heavy - Trident
-        conquest_netherflamberge = 63370057,         // Heavy - Flamberge
-        conquest_nethernabut = 63370058,             // Heavy - Nabut
-        conquest_netherstick = 63370059,             // Heavy - Stick
-        conquest_netherlongsword = 63370060,         // Heavy - Long Sword
-        conquest_netherken = 63370061,               // Heavy - Ken
-        conquest_nethertachi = 63370062,             // Heavy - Tachi
-        conquest_nethertakuba = 63370063,            // Heavy - Takuba
-        conquest_nethercestus = 63370064,            // Heavy - Cestus
-        conquest_nethernekode = 63370065,            // Heavy - Nekode
-        // Two-Handed Weapons (from TwoHandedWeaponsMatrix)
+        // Finesse Weapons
+        conquest_netherhatchet = 63370000,           // Finesse - Hatchet
+        conquest_nethershouono = 63370001,           // Finesse - Shou-ono
+        conquest_nethertungi = 63370002,             // Finesse - Tungi
+        conquest_netherknife = 63370003,             // Finesse - Knife
+        conquest_netherlancet = 63370004,            // Finesse - Lancet
+        conquest_netherponiard = 63370005,           // Finesse - Poniard
+        conquest_netherboardwithnail = 63370006,     // Finesse - Board with Nail
+        conquest_netherdabus = 63370007,             // Finesse - Dabus
+        conquest_netherjitte = 63370008,             // Finesse - Jitte
+        conquest_nethertofun = 63370009,             // Finesse - Tofun
+        conquest_netherbudiaq = 63370010,            // Finesse - Budiaq
+        conquest_nethernaginata = 63370011,           // Finesse - Naginata
+        conquest_netherswordstaff = 63370055,        // Finesse - Swordstaff
+        conquest_netherbastone = 63370012,           // Finesse - Bastone
+        conquest_netherjo = 63370013,                // Finesse - Jo
+        conquest_nethersabra = 63370014,             // Finesse - Sabra
+        conquest_netherscimitar = 63370015,          // Finesse - Scimitar
+        conquest_nethershortsword = 63370016,        // Finesse - Short Sword
+        conquest_nethersimi = 63370017,              // Finesse - Simi
+        conquest_netherrapier = 63370018,            // Finesse - Rapier
+        conquest_netheryaoji = 63370019,             // Finesse - Yaoji
+        conquest_netherclaw = 63370020,              // Finesse - Claw
+        conquest_netherhandwraps = 63370021,         // Finesse - Hand Wraps
+        // Two-Handed Weapons
         conquest_nethergreataxe = 63370066,          // TwoHanded - Great Axe
         conquest_nethergreatstarmace = 63370067,     // TwoHanded - Great Star Mace
         conquest_netherkhandahandledmace = 63370068, // TwoHanded - Khanda-handled Mace
@@ -41972,14 +41973,20 @@ namespace ACE.Server.Factories.Enum
         conquest_nethernodachi = 63370075,           // TwoHanded - Nodachi
         conquest_nethershashqa = 63370076,           // TwoHanded - Shashqa
         conquest_netherspadone = 63370077,           // TwoHanded - Spadone
-        // Missile Weapons (from ElementalMissileWeaponsMatrix)
+        // Missile Weapons
+        conquest_nethercrossbowarbalest = 63370078,  // Missile - Crossbow Arbalest
         conquest_nethercrossbowlight = 63370079,     // Missile - Crossbow Light
         conquest_nethercrossbowheavy = 63370080,     // Missile - Crossbow Heavy
         conquest_netheratlatl = 63370081,            // Missile - Atlatl
         conquest_netherroyalatlatl = 63370082,       // Missile - Royal Atlatl
         conquest_netherbowlong = 63370083,           // Missile - Long Bow
+        conquest_netherbowshort = 63370084,          // Missile - Short Bow
+        conquest_nethernayin = 63370085,             // Missile - Nayin
+        conquest_nethershouyumi = 63370086,          // Missile - Shouyumi
+        conquest_netheryag = 63370087,               // Missile - Yag
+        conquest_netheryumi = 63370088,              // Missile - Yumi
         conquest_netherbowwar = 63370089,            // Missile - War Bow
-        // Finesse Hammer (separate ID)
+        // Additional
         conquest_netherhammer = 63370097,            // Finesse - Hammer
         // CONQUEST: Yoroi armor with Celdon textures
         conquest_yoroisleeves = 53370014,

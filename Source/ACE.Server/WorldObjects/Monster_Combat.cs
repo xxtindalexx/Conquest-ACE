@@ -935,31 +935,41 @@ namespace ACE.Server.WorldObjects
                     // Wait for interval
                     await Task.Delay(TimeSpan.FromSeconds(interval), ct);
 
+                    if (ct.IsCancellationRequested || !IsAlive) break;
+
                     // Check if mirror hasn't triggered yet and random chance passes
                     if (!EnrageMirrorImageTriggered && random.NextDouble() <= chance)
                     {
                         TriggerEnrageMirrorImage();
                     }
 
-                    // Check if mirror clones are still alive
-                    if (EnrageMirrorImageImmune && EnrageMirrorImageClones.Count > 0)
+                    // Defer clone checking to game tick via ActionChain to avoid thread conflicts
+                    if (EnrageMirrorImageImmune && EnrageMirrorImageClones != null && EnrageMirrorImageClones.Count > 0)
                     {
-                        // Remove dead clones from list
-                        EnrageMirrorImageClones.RemoveAll(c => c.IsDead || c.IsDestroyed);
-
-                        // If all clones dead, remove immunity
-                        if (EnrageMirrorImageClones.Count == 0)
+                        var bossName = Name;
+                        var actionChain = new ActionChain();
+                        actionChain.AddAction(this, ActionType.MonsterCombat_SpawnHotspot, () =>
                         {
-                            EnrageMirrorImageImmune = false;
+                            if (!IsAlive || EnrageMirrorImageClones == null) return;
 
-                            // Broadcast that boss is vulnerable again
-                            var msg = $"{Name} becomes vulnerable as the last mirror image fades!";
-                            var players = GetPlayersInRange(250.0f);
-                            foreach (var player in players)
+                            // Remove dead clones from list
+                            EnrageMirrorImageClones.RemoveAll(c => c == null || c.IsDead || c.IsDestroyed);
+
+                            // If all clones dead, remove immunity
+                            if (EnrageMirrorImageClones.Count == 0)
                             {
-                                player.Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
+                                EnrageMirrorImageImmune = false;
+
+                                // Broadcast that boss is vulnerable again
+                                var msg = $"{bossName} becomes vulnerable as the last mirror image fades!";
+                                var players = GetPlayersInRange(250.0f);
+                                foreach (var player in players)
+                                {
+                                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
+                                }
                             }
-                        }
+                        });
+                        actionChain.EnqueueChain();
                     }
                 }
             }
@@ -967,6 +977,22 @@ namespace ACE.Server.WorldObjects
             {
                 // Expected on shutdown or despawn
             }
+        }
+
+        /// <summary>
+        /// Cancels all enrage-related async loops to prevent thread conflicts on death
+        /// </summary>
+        public void CancelEnrageLoops()
+        {
+            hotspotLoopCTS?.Cancel();
+            grappleLoopCTS?.Cancel();
+            leapLoopCTS?.Cancel();
+            mirrorLoopCTS?.Cancel();
+
+            // Clear any pending mirror image state
+            EnrageMirrorImageImmune = false;
+            EnrageMirrorImageTriggered = false;
+            EnrageMirrorImageClones?.Clear();
         }
 
         /// <summary>

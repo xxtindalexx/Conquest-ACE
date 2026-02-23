@@ -4,6 +4,7 @@ using System.Numerics;
 
 using log4net;
 
+using ACE.Common;
 using ACE.Database;
 using ACE.Entity;
 using ACE.Entity.Enum;
@@ -280,6 +281,10 @@ namespace ACE.Server.Entity
                 obj.Generator = Generator;
                 obj.GeneratorId = Generator.Guid.Full;
 
+                // CONQUEST: Apply champion mutation BEFORE entering world so clients see mutated stats
+                if (obj is Creature creature)
+                    TryApplyChampionMutation(creature);
+
                 var success = false;
 
                 if (RegenLocationType.HasFlag(RegenLocationType.Specific))
@@ -299,7 +304,13 @@ namespace ACE.Server.Entity
 
                 // if first spawn fails, don't continually attempt to retry
                 if (success || FirstSpawn)
+                {
                     spawned.Add(obj);
+
+                    // CONQUEST: Announce champion spawn after successful entry to world
+                    if (success && obj is Creature spawnedCreature && spawnedCreature.IsChampion)
+                        spawnedCreature.AnnounceChampionSpawn();
+                }
 
                 // If the object failed to spawn, we still destroy it. This cleans up the object and releases the GUID.
                 // This object still may be returned in the spawned collection if FirstSpawn is true. This is to prevent retry spam.
@@ -312,6 +323,30 @@ namespace ACE.Server.Entity
             }
 
             return spawned;
+        }
+
+        /// <summary>
+        /// CONQUEST: Attempts to apply champion mutation to a spawned creature
+        /// </summary>
+        private void TryApplyChampionMutation(Creature creature)
+        {
+            // Check if generator has champion spawns enabled
+            var championEnabled = Generator.GetProperty(PropertyBool.ChampionEnabled) ?? false;
+            if (!championEnabled)
+                return;
+
+            // Get spawn chance (default 10%)
+            var spawnChance = Generator.GetProperty(PropertyInt.ChampionSpawnChance) ?? 10;
+            if (spawnChance <= 0)
+                return;
+
+            // Roll for champion spawn
+            var roll = ThreadSafeRandom.Next(1, 100);
+            if (roll > spawnChance)
+                return;
+
+            // Apply champion mutation
+            creature.ApplyChampionMutation();
         }
 
         /// <summary>

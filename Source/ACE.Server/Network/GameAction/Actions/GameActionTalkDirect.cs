@@ -65,7 +65,12 @@ namespace ACE.Server.Network.GameAction.Actions
                     // Check if fellowship is full
                     if (fellowship.FellowshipMembers.Count >= ACE.Server.Entity.Fellowship.MaxFellows)
                     {
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {targetPlayer.Name}'s fellowship is full ({fellowship.FellowshipMembers.Count}/{ACE.Server.Entity.Fellowship.MaxFellows}).", ChatMessageType.Broadcast));
+                        // CONQUEST: Add to waiting queue instead of rejecting
+                        var position = fellowship.AddToWaitingQueue(session.Player);
+                        var queueCount = fellowship.GetWaitingQueueCount();
+                        session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"[FSHIP]: {targetPlayer.Name}'s fellowship is full ({fellowship.FellowshipMembers.Count}/{ACE.Server.Entity.Fellowship.MaxFellows}). You are #{position} in queue. You will be notified when a spot opens.",
+                            ChatMessageType.Broadcast));
                         return;
                     }
 

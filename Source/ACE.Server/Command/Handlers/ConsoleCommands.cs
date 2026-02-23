@@ -30,28 +30,11 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        [CommandHandler("queuereport", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Write out all tasks in the Shard Database Queue")]
+        [CommandHandler("queuereport", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Show current Shard Database Queue count")]
         public static void QueueReport(Session session, params string[] parameters)
         {
-            var tasks = DatabaseManager.Shard.QueueReport();
-            Console.WriteLine($"QueueReport, Currently {tasks.Count} Shard Database Tasks");
-            foreach (var task in tasks)
-            {
-                Console.WriteLine(task);
-            }
-            Console.WriteLine("End QueueReport");
-        }
-
-        [CommandHandler("readonlyqueuereport", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Write out all tasks in the Shard Database Queue")]
-        public static void ReadOnlyQueueReport(Session session, params string[] parameters)
-        {
-            var tasks = DatabaseManager.Shard.ReadOnlyQueueReport();
-            Console.WriteLine($"ReadOnlyQueueReport, Currently {tasks.Count} Shard Database Tasks");
-            foreach (var task in tasks)
-            {
-                Console.WriteLine(task);
-            }
-            Console.WriteLine("End ReadOnlyQueueReport");
+            var queueCount = DatabaseManager.Shard.QueueCount;
+            Console.WriteLine($"QueueReport: Currently {queueCount} pending Shard Database Tasks");
         }
         [CommandHandler("version", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Show server version information.", "")]
         public static void ShowVersion(Session session, params string[] parameters)

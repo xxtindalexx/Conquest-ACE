@@ -276,5 +276,10 @@ namespace ACE.Entity.Enum.Properties
         ArenaDailyRewardTimestamp = 9041,
         ArenaDailyRewardCount = 9042,
         ArenaSameClanDailyRewardCount = 9043,
+        // CONQUEST: Champion Mutation System
+        ChampionHealthMod = 9400,      // Health multiplier (e.g., 1.5 = +50%)
+        ChampionXpMod = 9401,          // XP multiplier
+        ChampionLuminanceMod = 9402,   // Luminance multiplier
+        ChampionLootQualityMod = 9403, // Loot quality modifier
     }
 }

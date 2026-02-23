@@ -40,8 +40,8 @@ namespace ACE.Server.WorldObjects
             IsTurning = false;
             IsMoving = false;
 
-            grappleLoopCTS?.Cancel();
-            hotspotLoopCTS?.Cancel();
+            // Cancel all enrage async loops to prevent thread conflicts
+            CancelEnrageLoops();
 
             // Reset fog to Clear upon death only if the creature was enraged
             if (IsEnraged && CurrentLandblock != null)
@@ -204,12 +204,19 @@ namespace ACE.Server.WorldObjects
 
                 var totalXP = (XpOverride ?? 0) * damagePercent;
 
+                // CONQUEST: Apply champion XP multiplier
+                totalXP *= GetChampionXpMultiplier();
+
                 playerDamager.EarnXP((long)Math.Round(totalXP), XpType.Kill);
 
                 // handle luminance
                 if (LuminanceAward != null)
                 {
                     var totalLuminance = (long)Math.Round(LuminanceAward.Value * damagePercent);
+
+                    // CONQUEST: Apply champion luminance multiplier
+                    totalLuminance = (long)(totalLuminance * GetChampionLuminanceMultiplier());
+
                     playerDamager.EarnLuminance(totalLuminance, XpType.Kill);
                 }
             }
@@ -680,7 +687,7 @@ namespace ACE.Server.WorldObjects
                 // CONQUEST: Soul Fragment drops in PK-only dungeon variants
                 GenerateSoulFragments_PKDungeon(killer, corpse);
 
-                if (killer != null && killer.IsPlayer && !killer.IsOlthoiPlayer)
+                if (killer != null && killer.IsPlayerOrPetOfPlayer && !killer.IsOlthoiPlayer)
                 {
                     if (Level >= 100)
                     {
@@ -688,7 +695,8 @@ namespace ACE.Server.WorldObjects
                     }
                     else
                     {
-                        var killerPlayer = killer.TryGetAttacker();
+                        // Get the actual player (pet owner if applicable)
+                        var killerPlayer = killer.TryGetPetOwnerOrAttacker();
                         if (killerPlayer != null && Level > killerPlayer.Level)
                             CanGenerateRare = true;
                     }
@@ -740,7 +748,8 @@ namespace ACE.Server.WorldObjects
             var droppedItems = new List<WorldObject>();
 
             // Treasure Map Drop Logic (adjust drop rate as needed: 0.01f = 1%, 0.10f = 10%)
-            if (IsMonster && ThreadSafeRandom.Next(0.0f, 1.0f) < 0.01f)  // 1% chance
+            // Don't drop treasure maps for mobs that have NoCorpse set (they don't leave a corpse to loot)
+            if (IsMonster && !NoCorpse && ThreadSafeRandom.Next(0.0f, 1.0f) < 0.01f)  // 1% chance
             {
                 var map = TreasureMap.TryCreateTreasureMap(this);
 
@@ -844,21 +853,14 @@ namespace ACE.Server.WorldObjects
             if (!IsMonster)
                 return;
 
-            // Must have a valid player killer
-            if (killer == null || !killer.IsPlayer)
+            // Must have a valid player killer (or pet owned by a player)
+            if (killer == null || !killer.IsPlayerOrPetOfPlayer)
                 return;
 
-            var killerPlayer = killer.TryGetAttacker() as Player;
+            // Get the actual player (pet owner if applicable)
+            var killerPlayer = killer.TryGetPetOwnerOrAttacker() as Player;
             if (killerPlayer == null)
                 return;
-
-            // Handle pet owners - credit goes to the pet's owner
-            if (killer.PetOwner != null)
-            {
-                killerPlayer = killer.TryGetPetOwner();
-                if (killerPlayer == null)
-                    return;
-            }
 
             // Check minimum mob level requirement
             var minMobLevel = (int)PropertyManager.GetLong("mystery_egg_min_mob_level", 50);
@@ -935,11 +937,12 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         private void GenerateSoulFragments_PKDungeon(DamageHistoryInfo killer, Corpse corpse)
         {
-            // Must have a player killer
-            if (killer == null || !killer.IsPlayer)
+            // Must have a player killer (or pet owned by a player)
+            if (killer == null || !killer.IsPlayerOrPetOfPlayer)
                 return;
 
-            var killerPlayer = killer.TryGetAttacker() as Player;
+            // Get the actual player (pet owner if applicable)
+            var killerPlayer = killer.TryGetPetOwnerOrAttacker() as Player;
             if (killerPlayer == null || corpse == null)
                 return;
 

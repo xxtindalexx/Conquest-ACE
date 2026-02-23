@@ -889,6 +889,9 @@ namespace ACE.Server.WorldObjects
             // Check for all 4 tinkering skills and add them if missing
             GrantFreeTinkeringSkills();
 
+            // CONQUEST: Apply War Magic spell chain bonus for existing characters
+            ApplyWarMagicSpellChainBonus();
+
             EnqueueBroadcastPhysicsState();
 
             // hijacking this for both start/end on portal teleport

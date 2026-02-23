@@ -384,10 +384,11 @@ namespace ACE.Server.WorldObjects
 
                     if (canChain)
                     {
-                        // Total chain targets = base SpellChainTargets + EnlightenmentSpellChainBonus
+                        // Total chain targets = base SpellChainTargets + EnlightenmentSpellChainBonus + weapon bonus
                         var baseChainTargets = player.GetProperty(PropertyInt.SpellChainTargets) ?? 0;
                         var enlightenmentBonus = player.GetProperty(PropertyInt.EnlightenmentSpellChainBonus) ?? 0;
-                        var totalChainTargets = baseChainTargets + enlightenmentBonus;
+                        var weaponChainBonus = ProjectileLauncher?.GetProperty(PropertyInt.SpellChainTargets) ?? 0;
+                        var totalChainTargets = baseChainTargets + enlightenmentBonus + weaponChainBonus;
 
                         if (totalChainTargets > 0)
                         {
@@ -528,21 +529,32 @@ namespace ACE.Server.WorldObjects
             // war/void magic projectiles
             else
             {
-                // CONQUEST: Chain spells use pre-calculated damage (30% of original)
-                // Skip normal damage calculation for chain spells
+                // CONQUEST: Chain spells use pre-calculated damage (50% of original)
+                // The original damage already had the primary target's resistance applied,
+                // so we don't apply resistance again - chain damage is simply 50% of what the primary took
                 if (IsChainSpell)
                 {
                     // LifeProjectileDamage contains the pre-calculated chain damage
                     finalDamage = LifeProjectileDamage;
 
-                    // Still apply resistance and absorb mods
-                    weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType);
-                    resistanceMod = (float)Math.Max(0.0f, target.GetResistanceMod(resistanceType, this, null, weaponResistanceMod));
-
-                    finalDamage *= resistanceMod * absorbMod;
+                    // DEBUG: Log chain damage calculation
+                    if (sourcePlayer != null)
+                    {
+                        sourcePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"[Chain Debug] PreCalc={LifeProjectileDamage}, Final={finalDamage:F0}",
+                            ChatMessageType.System));
+                    }
                 }
                 else
                 {
+                    // DEBUG: Check if chain spell is incorrectly going through normal path
+                    if (FromProc && sourcePlayer != null)
+                    {
+                        sourcePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"[Chain BUG] FromProc=true but IsChainSpell={IsChainSpell} - going through normal damage calc!",
+                            ChatMessageType.System));
+                    }
+
                     if (criticalHit)
                     {
                         // Original:
@@ -1094,7 +1106,7 @@ namespace ACE.Server.WorldObjects
 
         // CONQUEST: Spell Chain constants
         private const float SpellChainRange = 10.0f;  // Range to find chain targets (meters)
-        private const float DefaultSpellChainDamagePercent = 30;  // Default 30% of original damage
+        private const float DefaultSpellChainDamagePercent = 50;  // Default 50% of original damage
 
         /// <summary>
         /// CONQUEST: Attempts to create chain spells that jump from the primary target to nearby secondary targets
@@ -1106,10 +1118,17 @@ namespace ACE.Server.WorldObjects
             if (chainTargets == null || chainTargets.Count == 0)
                 return;
 
-            // Get damage percentage from property or use default (30%)
-            var damagePercent = caster.GetProperty(PropertyInt.SpellChainDamagePercent) ?? (int)DefaultSpellChainDamagePercent;
+            // Get damage percentage from weapon first, then player, then default (50%)
+            var damagePercent = ProjectileLauncher?.GetProperty(PropertyInt.SpellChainDamagePercent)
+                             ?? caster.GetProperty(PropertyInt.SpellChainDamagePercent)
+                             ?? (int)DefaultSpellChainDamagePercent;
             var damageMultiplier = damagePercent / 100.0f;
             var chainDamage = originalDamage * damageMultiplier;
+
+            // DEBUG: Log chain damage setup
+            caster.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"[Chain Setup] OrigDmg={originalDamage:F0}, Percent={damagePercent}%, Multiplier={damageMultiplier:F2}, ChainDmg={chainDamage:F0}",
+                ChatMessageType.System));
 
             // Create visual effect on primary target
             primaryTarget.EnqueueBroadcast(new GameMessageScript(primaryTarget.Guid, PlayScript.PortalStorm, 0.5f));

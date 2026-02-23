@@ -698,6 +698,13 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         SpellChainTargets = 9331,              // Base number of additional targets for spell chain
         SpellChainDamagePercent = 9332,        // Damage percentage dealt to chain targets (e.g., 30 = 30%)
+                                               // CONQUEST: Champion Mutation System
+        ChampionSpawnChance = 9400,            // Generator property - % chance (0-100)
+        ChampionTier = 9401,                   // Creature property - tier (1-8)
+        ChampionMutationFlags = 9402,          // Creature property - ChampionMutationType flags
+        ChampionBonusDamageRating = 9403,      // Bonus DR from mutation
+        ChampionBonusDefenseRating = 9404,     // Bonus defense from mutation
+        ChampionBonusCritDamageRating = 9405,  // Bonus crit DR from mutation
         // CONQUEST: Morph gem weapon element randomization
         WeenieSwapClassId = 19001, // Tracks the weenie class ID when weapon element has been swapped
         AppearanceWeenieClassId = 19002, // Tracks the visual appearance WCID for tailored/morphed weapons

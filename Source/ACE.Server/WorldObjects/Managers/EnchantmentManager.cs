@@ -397,58 +397,32 @@ namespace ACE.Server.WorldObjects.Managers
         }
 
 
+        /// <summary>
+        /// CONQUEST: Calculates life augmentation protection bonus using exponential decay formula.
+        /// Formula: max_bonus * (1.0 - (1.0 - r)^LifeAugAmt)
+        /// This provides diminishing returns where you can never reach 100% protection.
+        /// With default r=0.0034597, you cover half the remaining distance every ~200 augs.
+        /// Example progression: 200 augs ≈ 16%, 400 augs ≈ 24%, 600 augs ≈ 28%, 1000+ augs → 32% max
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float GetLifeAugProtectRating(long LifeAugAmt)
         {
-            float bonus = 0;
-            for (int x = 0; x < LifeAugAmt; x++)
-            {
-                if (x < 10)
-                {
-                    bonus += 0.01f;
-                }
-                else if (x < 30)
-                {
-                    bonus += 0.005f;
-                }
-                else if (x < 50)
-                {
-                    bonus += 0.0025f;
-                }
-                else if (x < 70)
-                {
-                    bonus += 0.00125f;
-                }
-                else if (x < 100)
-                {
-                    bonus += 0.000625f;
-                }
-                else if (x < 120)
-                {
-                    bonus += 0.000312f;
-                }
-                else if (x < 150)
-                {
-                    bonus += 0.000156f;
-                }
-                else if (x < 175)
-                {
-                    bonus += 0.000078f;
-                }
-                else if (x < 200)
-                {
-                    bonus += 0.000039f;
-                }
-                else if (x < 225)
-                {
-                    bonus += 0.0000195f;
-                }
-                else
-                {
-                    bonus += 0.0000100f;
-                }
-            }
-            return bonus;
+            if (LifeAugAmt <= 0)
+                return 0f;
+
+            // Get configurable constants from server properties
+            var maxBonus = (float)PropertyManager.GetDouble("life_aug_prot_max_bonus", 0.32);
+            var tuningConstant = PropertyManager.GetDouble("life_aug_prot_tuning_constant", 0.0034597);
+
+            // Clamp tuning constant to valid range (0, 1) to prevent math errors
+            tuningConstant = Math.Clamp(tuningConstant, 0.0001, 0.9999);
+
+            // Formula: max_bonus * (1.0 - (1.0 - r)^a)
+            // As LifeAugAmt approaches infinity, bonus approaches max_bonus asymptotically
+            var bonus = maxBonus * (float)(1.0 - Math.Pow(1.0 - tuningConstant, LifeAugAmt));
+
+            // Ensure result is clamped to valid range
+            return Math.Clamp(bonus, 0f, maxBonus);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -715,9 +689,13 @@ namespace ACE.Server.WorldObjects.Managers
 
             var vitae = GetVitae();
 
-            //Console.WriteLine($"[VITAE DEBUG] {Player.Name}: RemoveVitae called, vitae={vitae?.StatModValue}");
+            if (vitae == null)
+                return;
 
             Remove(vitae);
+
+            // Clear vitae-related properties
+            Player.VitaeCpPool = 0;
         }
 
 
@@ -1710,6 +1688,29 @@ namespace ACE.Server.WorldObjects.Managers
             //Console.WriteLine($"[VITAE DEBUG] {Player.Name}: SendUpdateVitae - sending penalty={((1-vitae.StatModValue)*100):F1}% to client");
             Player.Session.Network.EnqueueSend(new GameEventMagicUpdateEnchantment(Player.Session, vitae));
         }
+
+        /// <summary>
+        /// CONQUEST: Re-sends all active enchantments to the client
+        /// Used after death for players with AugmentationSpellsRemainPastDeath to resync client display
+        /// </summary>
+        public void SendAllEnchantments()
+        {
+            if (Player == null) return;
+
+            var enchantments = WorldObject.Biota.PropertiesEnchantmentRegistry.Clone(WorldObject.BiotaDatabaseLock);
+            if (enchantments == null || enchantments.Count == 0) return;
+
+            foreach (var entry in enchantments)
+            {
+                // Skip cooldowns (spellId > short.MaxValue)
+                if (entry.SpellId > short.MaxValue)
+                    continue;
+
+                var enchantment = new Enchantment(Player, entry);
+                Player.Session.Network.EnqueueSend(new GameEventMagicUpdateEnchantment(Player.Session, enchantment));
+            }
+        }
+
 
         /// <summary>
         /// Returns the number of ticks for a DoT enchantment

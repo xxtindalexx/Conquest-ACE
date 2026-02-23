@@ -212,6 +212,15 @@ namespace ACE.Server.WorldObjects
             if (IsSkillSpecializedViaAugmentation(skill, out var playerHasAugmentation) && playerHasAugmentation)
                 SpecializeSkill(skill, 0, false);
 
+            // CONQUEST: War Magic training grants +1 Spell Chain with 50% chain damage
+            if (skill == Skill.WarMagic)
+            {
+                var currentChain = GetProperty(PropertyInt.SpellChainTargets) ?? 0;
+                SetProperty(PropertyInt.SpellChainTargets, currentChain + 1);
+                SetProperty(PropertyInt.SpellChainDamagePercent, 50);  // Chain targets take 50% damage
+                Session?.Network.EnqueueSend(new GameMessageSystemChat("Your knowledge of War Magic grants you +1 Spell Chain!", ChatMessageType.Advancement));
+            }
+
             return true;
         }
 
@@ -299,6 +308,22 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: If Void Magic is now untrained, also reset Summoning if trained/specialized
             if (skill == Skill.VoidMagic && creatureSkill.AdvancementClass == SkillAdvancementClass.Untrained)
                 ResetSummoningIfTrained();
+
+            // CONQUEST: War Magic untraining removes Spell Chain bonus
+            if (skill == Skill.WarMagic)
+            {
+                var currentChain = GetProperty(PropertyInt.SpellChainTargets) ?? 0;
+                if (currentChain > 0)
+                {
+                    SetProperty(PropertyInt.SpellChainTargets, currentChain - 1);
+                    Session?.Network.EnqueueSend(new GameMessageSystemChat("You have lost -1 Spell Chain due to untraining War Magic.", ChatMessageType.Advancement));
+                }
+                if ((GetProperty(PropertyInt.SpellChainTargets) ?? 0) == 0)
+                {
+                    RemoveProperty(PropertyInt.SpellChainTargets);
+                    RemoveProperty(PropertyInt.SpellChainDamagePercent);
+                }
+            }
 
             return true;
         }
@@ -430,6 +455,44 @@ namespace ACE.Server.WorldObjects
                     Session.Network.EnqueueSend(new GameMessagePrivateUpdateSkill(this, skill));
                 }
                 Session.Network.EnqueueSend(new GameMessageSystemChat("Tinkering skills have been removed from your mule character.", ChatMessageType.Broadcast));
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Applies the War Magic spell chain bonus on login
+        /// Players with War Magic trained/specialized get +1 to SpellChainTargets with 50% chain damage
+        /// This ensures existing characters get the bonus without needing to retrain
+        /// </summary>
+        public void ApplyWarMagicSpellChainBonus()
+        {
+            var warMagic = GetCreatureSkill(Skill.WarMagic);
+            var currentChain = GetProperty(PropertyInt.SpellChainTargets) ?? 0;
+            var enlightenmentBonus = GetProperty(PropertyInt.EnlightenmentSpellChainBonus) ?? 0;
+            var shouldHaveBonus = warMagic?.AdvancementClass >= SkillAdvancementClass.Trained;
+
+            // Calculate what the base chain targets should be (excluding enlightenment bonus)
+            // War Magic trained = 1 base chain target
+            var expectedBaseChain = shouldHaveBonus ? 1 : 0;
+
+            // Only modify if the current value doesn't match expected
+            // This preserves any enlightenment bonuses
+            if (shouldHaveBonus && currentChain == 0)
+            {
+                SetProperty(PropertyInt.SpellChainTargets, 1);
+                SetProperty(PropertyInt.SpellChainDamagePercent, 50);  // Chain targets take 50% damage
+                Session?.Network.EnqueueSend(new GameMessageSystemChat("Your War Magic training has granted you +1 Spell Chain!", ChatMessageType.Advancement));
+            }
+            else if (!shouldHaveBonus && currentChain > 0 && enlightenmentBonus == 0)
+            {
+                // Only remove if there's no enlightenment bonus keeping it
+                RemoveProperty(PropertyInt.SpellChainTargets);
+                RemoveProperty(PropertyInt.SpellChainDamagePercent);
+            }
+
+            // Ensure SpellChainDamagePercent is set if player has spell chain but it's missing
+            if ((GetProperty(PropertyInt.SpellChainTargets) ?? 0) > 0 && GetProperty(PropertyInt.SpellChainDamagePercent) == null)
+            {
+                SetProperty(PropertyInt.SpellChainDamagePercent, 50);
             }
         }
 

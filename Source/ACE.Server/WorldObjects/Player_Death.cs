@@ -242,6 +242,8 @@ namespace ACE.Server.WorldObjects
             }
 
             var hadVitae = HasVitae;
+            // CONQUEST: Capture arena death status before the death chain teleports us
+            var isArenaDeath = CurrentLandblock?.IsArenaLandblock ?? false;
 
             // update vitae
             // players who died in a PKLite fight do not accrue vitae
@@ -263,9 +265,9 @@ namespace ACE.Server.WorldObjects
             }
             else
             {
-                var msgPurgeBadEnchantments = new GameEventMagicPurgeBadEnchantments(Session);
-                EnchantmentManager.RemoveAllBadEnchantments();
-                Session.Network.EnqueueSend(msgPurgeBadEnchantments, new GameMessageSystemChat("Your augmentation prevents the tides of death from ripping away your current enchantments!", ChatMessageType.Broadcast));
+                // CONQUEST: Player has augmentation and it's not a PK death - keep ALL enchantments (buffs and debuffs)
+                // Simply notify them their augmentation worked
+                Session.Network.EnqueueSend(new GameMessageSystemChat("Your augmentation prevents the tides of death from ripping away your current enchantments!", ChatMessageType.Broadcast));
             }
 
             // wait for the death animation to finish
@@ -283,7 +285,7 @@ namespace ACE.Server.WorldObjects
                 ThreadSafeTeleportOnDeath(); // enter portal space
 
                 if (IsPKDeath(topDamager) || IsPKLiteDeath(topDamager))
-                    SetMinimumTimeSincePK();
+                    SetMinimumTimeSincePK(isArenaDeath);
 
                 IsBusy = false;
             });
@@ -730,6 +732,10 @@ namespace ACE.Server.WorldObjects
 
         public int GetNumCoinsDropped()
         {
+            // CONQUEST: If VendorBankMode is enabled, don't drop any coins on death
+            if (VendorBankMode)
+                return 0;
+
             // if level > 5, lose half coins
             // (trade notes excluded)
             var level = Level ?? 1;
@@ -1004,7 +1010,7 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyFloat.MinimumTimeSincePk); else SetProperty(PropertyFloat.MinimumTimeSincePk, value.Value); }
         }
 
-        public void SetMinimumTimeSincePK()
+        public void SetMinimumTimeSincePK(bool isArenaDeath = false)
         {
             if (IsOlthoiPlayer)
                 return;
@@ -1014,7 +1020,17 @@ namespace ACE.Server.WorldObjects
 
             var prevStatus = PlayerKillerStatus;
 
-            MinimumTimeSincePk = 0;
+            // CONQUEST: Arena deaths have a reduced respite timer (1 minute instead of 5 minutes)
+            // Set starting value to 240 so only 60 seconds remain until the 300-second threshold
+            if (isArenaDeath)
+            {
+                var pkRespiteTimer = PropertyManager.GetDouble("pk_respite_timer");
+                MinimumTimeSincePk = pkRespiteTimer - 60; // 60 seconds of respite for arena deaths
+            }
+            else
+            {
+                MinimumTimeSincePk = 0;
+            }
             PlayerKillerStatus = PlayerKillerStatus.NPK;
 
             if (prevStatus == PlayerKillerStatus.PK)

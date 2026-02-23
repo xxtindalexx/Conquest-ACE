@@ -814,8 +814,8 @@ namespace ACE.Server.Entity
                             case "1v1":
                             case "2v2":
 
-                                //Give 5% xp to next level
-                                player.GrantLevelProportionalXp(0.05, 0, 0, true);
+                                //Give 3% xp to next level
+                                player.GrantLevelProportionalXp(0.03, 0, 0, true);
 
                                 //Give 15k lum
                                 player.GrantLuminance(15000, XpType.Quest, ShareType.None);
@@ -854,8 +854,8 @@ namespace ACE.Server.Entity
 
                                 //This is the first place player only
 
-                                //Give 5% xp to next level
-                                player.GrantLevelProportionalXp(0.05, 0, 0, true);
+                                //Give 3% xp to next level
+                                player.GrantLevelProportionalXp(0.03, 0, 0, true);
 
                                 //Give 15k lum
                                 player.GrantLuminance(15000, XpType.Quest, ShareType.None);
@@ -891,8 +891,8 @@ namespace ACE.Server.Entity
 
                             case "group":
 
-                                //Give 5% xp to next level
-                                player.GrantLevelProportionalXp(0.05, 0, 0, true);
+                                //Give 3% xp to next level
+                                player.GrantLevelProportionalXp(0.03, 0, 0, true);
 
                                 //Give 15k lum
                                 player.GrantLuminance(15000, XpType.Quest, ShareType.None);
@@ -1022,8 +1022,8 @@ namespace ACE.Server.Entity
                             case "1v1":
                             case "2v2":
 
-                                //Give 2% xp to next level
-                                player.GrantLevelProportionalXp(0.02, 0, 0, true);
+                                //Give 1.5% xp to next level
+                                player.GrantLevelProportionalXp(0.015, 0, 0, true);
 
                                 //Give 5k lum
                                 player.GrantLuminance(5000, XpType.Quest, ShareType.None);
@@ -1033,8 +1033,8 @@ namespace ACE.Server.Entity
                             case "ffa":
                             case "tugak":
 
-                                //Give 2% xp to next level
-                                player.GrantLevelProportionalXp(0.02, 0, 0, true);
+                                //Give 1.5% xp to next level
+                                player.GrantLevelProportionalXp(0.015, 0, 0, true);
 
                                 //Give 5k lum
                                 player.GrantLuminance(5000, XpType.Quest, ShareType.None);
@@ -1043,8 +1043,8 @@ namespace ACE.Server.Entity
 
                             case "group":
 
-                                //Give 2% xp to next level
-                                player.GrantLevelProportionalXp(0.02, 0, 0, true);
+                                //Give 1.5% xp to next level
+                                player.GrantLevelProportionalXp(0.015, 0, 0, true);
 
                                 //Give 5k lum
                                 player.GrantLuminance(5000, XpType.Quest, ShareType.None);

@@ -1113,14 +1113,11 @@ namespace ACE.Database
         /// </summary>
         public (bool, string) IncrementAndCheckIPQuestAttempts(uint questId, string playerIp, uint characterId, int maxAttempts)
         {
-            Console.WriteLine($"[IPQuest][DB] IncrementAndCheckIPQuestAttempts called: questId={questId}, playerIp={playerIp}, characterId={characterId}, maxAttempts={maxAttempts}");
             using (var context = new WorldDbContext())
             using (var shardContext = new ShardDbContext())
             {
                 // First, attempt to find the quest in the main database (timed quests)
-                Console.WriteLine($"[IPQuest][DB] Looking up quest with ID={questId} in ace_world.quest table...");
                 var quest = context.Quest.FirstOrDefault(q => q.Id == questId);
-                Console.WriteLine($"[IPQuest][DB] Quest lookup result: {(quest != null ? $"Found - Name={quest.Name}" : "NOT FOUND")}");
 
                 // If the quest is missing from the database, check if the player has it as a flag
                 if (quest == null)
@@ -1149,11 +1146,16 @@ namespace ACE.Database
                 // This prevents duplicate key errors when multiple characters from same IP loot the item.
 
                 // IP-wide solve count enforcement
-                Console.WriteLine($"[IPQuest][DB] Checking quest_ip_tracking for questId={questId}, playerIp={playerIp}...");
                 var ipTracking = shardContext.QuestIpTracking.FirstOrDefault(q => q.QuestId == questId && q.IpAddress == playerIp);
+
                 if (ipTracking == null)
                 {
-                    Console.WriteLine($"[IPQuest][DB] No existing IP tracking found, creating new entry...");
+                    // Check if limit allows ANY loots before creating record
+                    if (maxAttempts <= 0)
+                    {
+                        return (false, "You cannot loot this item. Your IP-wide limit has been reached.");
+                    }
+
                     ipTracking = new QuestIpTracking
                     {
                         QuestId = questId,
@@ -1162,43 +1164,51 @@ namespace ACE.Database
                         LastSolveTime = DateTime.UtcNow
                     };
                     shardContext.QuestIpTracking.Add(ipTracking);
-                    Console.WriteLine($"[IPQuest][DB] Created new IP tracking entry with SolvesCount=1");
+
+                    // Save immediately to prevent race conditions with concurrent requests
+                    try
+                    {
+                        shardContext.SaveChanges();
+                    }
+                    catch (Exception)
+                    {
+                        // If save fails (likely due to concurrent insert), re-query and check
+                        using (var freshContext = new ShardDbContext())
+                        {
+                            var existingRecord = freshContext.QuestIpTracking.FirstOrDefault(q => q.QuestId == questId && q.IpAddress == playerIp);
+                            if (existingRecord != null && existingRecord.SolvesCount >= maxAttempts)
+                            {
+                                return (false, "You cannot loot this item. Your IP-wide limit has been reached.");
+                            }
+                        }
+                    }
                 }
                 else
                 {
-                    Console.WriteLine($"[IPQuest][DB] Found existing IP tracking: SolvesCount={ipTracking.SolvesCount}, LastSolveTime={ipTracking.LastSolveTime}");
                     // Only reset the count if there's a cooldown AND it has expired
                     if (quest.MinDelta > 0)
                     {
                         var timeSinceLastSolve = (DateTime.UtcNow - ipTracking.LastSolveTime)?.TotalSeconds ?? double.MaxValue;
-                        Console.WriteLine($"[IPQuest][DB] Quest has cooldown: MinDelta={quest.MinDelta}s, TimeSinceLastSolve={timeSinceLastSolve}s");
                         if (timeSinceLastSolve >= quest.MinDelta)
                         {
-                            Console.WriteLine($"[IPQuest][DB] Cooldown expired, resetting counter to 0");
                             ipTracking.SolvesCount = 0; // Reset solves count if cooldown expired
                             ipTracking.LastSolveTime = DateTime.UtcNow;
                         }
                     }
 
-                    // Check if limit reached
-                    Console.WriteLine($"[IPQuest][DB] Checking limit: SolvesCount={ipTracking.SolvesCount} vs maxAttempts={maxAttempts}");
+                    // Check if limit reached BEFORE incrementing
                     if (ipTracking.SolvesCount >= maxAttempts)
                     {
-                        Console.WriteLine($"[IPQuest][DB] LIMIT REACHED! Blocking loot.");
                         return (false, "You cannot loot this item. Your IP-wide limit has been reached.");
                     }
 
                     // Increment the count
                     ipTracking.SolvesCount++;
                     ipTracking.LastSolveTime = DateTime.UtcNow;
-                    Console.WriteLine($"[IPQuest][DB] Incremented counter to {ipTracking.SolvesCount}");
-                }
 
-                // Save changes to the database
-                Console.WriteLine($"[IPQuest][DB] Saving changes to database...");
-                shardContext.SaveChanges();
-                context.SaveChanges();
-                Console.WriteLine($"[IPQuest][DB] Database saved successfully! Returning success=true");
+                    // Save the increment
+                    shardContext.SaveChanges();
+                }
 
                 return (true, string.Empty);
             }

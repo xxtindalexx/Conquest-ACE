@@ -3984,25 +3984,9 @@ namespace ACE.Server.Command.Handlers
             try
             {
                 var queueCount = DatabaseManager.Shard.QueueCount;
-                var queueReport = DatabaseManager.Shard.QueueReport();
-                var readOnlyReport = DatabaseManager.Shard.ReadOnlyQueueReport();
 
                 session.Network.EnqueueSend(new GameMessageSystemChat($"=== Database Queue Status ===", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Save Queue: {queueCount} pending operations", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Read-Only Queue: {readOnlyReport.Count} pending operations", ChatMessageType.Broadcast));
-
-                if (queueCount > 0)
-                {
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"\nTop 10 pending saves:", ChatMessageType.Broadcast));
-                    var top10 = queueReport.Take(10);
-                    foreach (var item in top10)
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"  - {item}", ChatMessageType.Broadcast));
-                    }
-
-                    if (queueCount > 10)
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"  ... and {queueCount - 10} more", ChatMessageType.Broadcast));
-                }
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Queue: {queueCount} pending operations", ChatMessageType.Broadcast));
 
                 // Get queue wait time
                 DatabaseManager.Shard.GetCurrentQueueWaitTime(waitTime =>

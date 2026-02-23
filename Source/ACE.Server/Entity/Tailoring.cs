@@ -398,6 +398,8 @@ namespace ACE.Server.Entity
 
         /// <summary>
         /// Reduces the coverage for a piece of armor
+        /// IMPORTANT: Only works on MULTI-SLOT armor (armor covering 2+ body parts)
+        /// Single-slot armor like pauldrons, bracers, tassets cannot be reduced further
         /// </summary>
         public static void TailorReduceArmor(Player player, WorldObject source, WorldObject target)
         {
@@ -413,52 +415,82 @@ namespace ACE.Server.Entity
             var validLocations = target.ValidLocations ?? EquipMask.None;
             var clothingPriority = CoverageMask.Unknown;
 
+            // Helper flags for multi-slot detection
+            bool hasChest = validLocations.HasFlag(EquipMask.ChestArmor);
+            bool hasUpperArm = validLocations.HasFlag(EquipMask.UpperArmArmor);
+            bool hasLowerArm = validLocations.HasFlag(EquipMask.LowerArmArmor);
+            bool hasAbdomen = validLocations.HasFlag(EquipMask.AbdomenArmor);
+            bool hasUpperLeg = validLocations.HasFlag(EquipMask.UpperLegArmor);
+            bool hasLowerLeg = validLocations.HasFlag(EquipMask.LowerLegArmor);
+            bool hasFeet = validLocations.HasFlag(EquipMask.FootWear);
+
+            // Check if this is multi-slot armor (covers more than one body part)
+            bool isMultiSlotChest = hasChest && (hasUpperArm || hasAbdomen);  // Hauberk/Coat/Cuirass
+            bool isMultiSlotSleeves = hasUpperArm && hasLowerArm;              // Full Sleeves
+            bool isMultiSlotLeggings = hasAbdomen && (hasUpperLeg || hasLowerLeg) ||
+                                       hasUpperLeg && hasLowerLeg;              // Leggings (various combinations)
+            bool isMultiSlotBoots = hasLowerLeg && hasFeet;                    // Boots with greaves
+
             switch (source.WeenieClassId)
             {
                 case ArmorMainReductionTool:
+                    // Main Reduction Tool:
+                    // - Hauberk/Coats/Cuirass → Breastplate (chest only)
+                    // - Sleeves → Pauldron (upper arm only)
+                    // - Leggings → Girth (abdomen only)
 
-                    if (validLocations.HasFlag(EquipMask.ChestArmor))
+                    if (isMultiSlotChest)
                     {
+                        // Reduce chest multi-slot to breastplate
                         player.UpdateProperty(target, PropertyInt.ValidLocations, (int)EquipMask.ChestArmor);
                         clothingPriority = CoverageMask.OuterwearChest;
                     }
-                    else if (validLocations.HasFlag(EquipMask.UpperArmArmor))
+                    else if (isMultiSlotSleeves)
                     {
+                        // Reduce sleeves to pauldron (upper arm only)
                         player.UpdateProperty(target, PropertyInt.ValidLocations, (int)EquipMask.UpperArmArmor);
                         clothingPriority = CoverageMask.OuterwearUpperArms;
                     }
-                    else if (validLocations.HasFlag(EquipMask.AbdomenArmor))
+                    else if (isMultiSlotLeggings && hasAbdomen)
                     {
+                        // Reduce leggings to girth (abdomen only)
                         player.UpdateProperty(target, PropertyInt.ValidLocations, (int)EquipMask.AbdomenArmor);
                         clothingPriority = CoverageMask.OuterwearAbdomen;
                     }
                     break;
 
                 case ArmorLowerReductionTool:
-                    // Can't reduce Chest Armor to anything but chest!
-                    if (validLocations.HasFlag(EquipMask.ChestArmor))
-                        break;
+                    // Lower Reduction Tool:
+                    // - Sleeves → Bracers (lower arm only)
+                    // - Leggings → Greaves (lower leg only)
 
-                    if (validLocations.HasFlag(EquipMask.UpperArmArmor))
+                    if (isMultiSlotSleeves)
                     {
+                        // Reduce sleeves to bracers (lower arm only)
                         player.UpdateProperty(target, PropertyInt.ValidLocations, (int)EquipMask.LowerArmArmor);
                         clothingPriority = CoverageMask.OuterwearLowerArms;
                     }
-                    else if (validLocations.HasFlag(EquipMask.UpperLegArmor))
+                    else if (isMultiSlotLeggings && hasLowerLeg)
                     {
+                        // Reduce leggings to greaves (lower leg only)
                         player.UpdateProperty(target, PropertyInt.ValidLocations, (int)EquipMask.LowerLegArmor);
                         clothingPriority = CoverageMask.OuterwearLowerLegs;
                     }
-                    else if (validLocations.HasFlag(EquipMask.LowerLegArmor | EquipMask.FootWear))
+                    else if (isMultiSlotBoots)
                     {
+                        // Reduce boots with greaves to feet only
                         player.UpdateProperty(target, PropertyInt.ValidLocations, (int)EquipMask.FootWear);
                         clothingPriority = CoverageMask.Feet;
                     }
                     break;
 
                 case ArmorMiddleReductionTool:
-                    if (validLocations.HasFlag(EquipMask.UpperLegArmor))
+                    // Middle Reduction Tool:
+                    // - Leggings → Tasset (upper leg only)
+
+                    if (isMultiSlotLeggings && hasUpperLeg)
                     {
+                        // Reduce leggings to tasset (upper leg only)
                         player.UpdateProperty(target, PropertyInt.ValidLocations, (int)EquipMask.UpperLegArmor);
                         clothingPriority = CoverageMask.OuterwearUpperLegs;
                     }
@@ -467,12 +499,13 @@ namespace ACE.Server.Entity
 
             if (clothingPriority == CoverageMask.Unknown)
             {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("This tool can only be used on multi-slot armor.", ChatMessageType.Craft));
                 player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
                 return;
             }
 
             player.Session.Network.EnqueueSend(new GameMessageSystemChat("You modify your armor.", ChatMessageType.Broadcast));
-            
+
             player.UpdateProperty(target, PropertyInt.ClothingPriority, (int)clothingPriority);
             player.TryConsumeFromInventoryWithNetworking(source, 1);
 
