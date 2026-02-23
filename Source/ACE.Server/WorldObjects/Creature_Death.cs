@@ -572,11 +572,13 @@ namespace ACE.Server.WorldObjects
                     if (dropped.Count > 0)
                         saveCorpse = true;
 
+                    // CONQUEST: Always save corpse location for Gem of Soul Recovery (works in dungeons too)
+                    player.SetPosition(PositionType.LastOutsideDeath, new Position(corpse.Location));
+                    player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePosition(player, PositionType.LastOutsideDeath, corpse.Location));
+
+                    // Only show map coordinates for outdoor deaths (dungeons don't have map coords)
                     if ((player.Location.Cell & 0xFFFF) < 0x100)
                     {
-                        player.SetPosition(PositionType.LastOutsideDeath, new Position(corpse.Location));
-                        player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePosition(player, PositionType.LastOutsideDeath, corpse.Location));
-
                         if (dropped.Count > 0)
                             player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your corpse is located at ({corpse.Location.GetMapCoordStr()}).", ChatMessageType.Broadcast));
                     }
