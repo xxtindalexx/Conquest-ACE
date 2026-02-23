@@ -932,7 +932,8 @@ namespace ACE.Server.Entity
 
                     //Handle PK quests
                     var hasWhitelistedOpponent = losers.FirstOrDefault(x => x.MonarchId != winner.MonarchId && TownControl.TownControlAllegiances.IsAllowedAllegiance((int)x.MonarchId)) != null && TownControl.TownControlAllegiances.IsAllowedAllegiance((int)winner.MonarchId);
-                    if (hasWhitelistedOpponent || ActiveEvent.EventType.ToLower().Equals("1v1"))
+                    var eventType = ActiveEvent.EventType.ToLower();
+                    if (hasWhitelistedOpponent || eventType.Equals("1v1") || eventType.Equals("2v2"))
                     {
                         player.CompletePkQuestTasks(PKQuests.PKQuests.PKQuests_ParticipateAnyArena);
                         player.CompletePkQuestTasks(PKQuests.PKQuests.PKQuests_WinAnyArena);
@@ -1057,7 +1058,8 @@ namespace ACE.Server.Entity
 
                     //Handle PK quests
                     var hasWhitelistedOpponent = winners.FirstOrDefault(x => x.MonarchId != loser.MonarchId && TownControl.TownControlAllegiances.IsAllowedAllegiance((int)x.MonarchId)) != null && TownControl.TownControlAllegiances.IsAllowedAllegiance((int)loser.MonarchId);
-                    if (hasWhitelistedOpponent || ActiveEvent.EventType.ToLower().Equals("1v1"))
+                    var eventType = ActiveEvent.EventType.ToLower();
+                    if (hasWhitelistedOpponent || eventType.Equals("1v1") || eventType.Equals("2v2"))
                     {
                         player.CompletePkQuestTasks(PKQuests.PKQuests.PKQuests_ParticipateAnyArena);
                         player.CompletePkQuestTask("ARENA_DMG20K", (int)loser.TotalDmgDealt);
