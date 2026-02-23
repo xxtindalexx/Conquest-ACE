@@ -954,6 +954,10 @@ namespace ACE.Server.WorldObjects
                     if (p.CurrentLandblock != null && Landblock.connectionExemptLandblocks.Contains(p.CurrentLandblock.Id.Landblock))
                         continue;
 
+                    // CONQUEST: Skip arena observers - they're spectating and shouldn't count against the limit
+                    if (p.IsArenaObserver || p.IsPendingArenaObserver)
+                        continue;
+
                     outsideMarketplaceCount++;
                 }
 

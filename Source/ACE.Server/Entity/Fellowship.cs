@@ -105,7 +105,25 @@ namespace ACE.Server.Entity
                 }
             }
 
-            if (FellowshipMembers.Count >= MaxFellows)
+            // CONQUEST: Check if player is a recent departure (within 2 minutes) - they can rejoin even if full
+            var isRecentDeparture = false;
+            if (DepartedMembers.TryGetValue(newMember.Guid.Full, out var departureTime))
+            {
+                var departedAt = Time.GetDateTimeFromTimestamp(departureTime);
+                var rejoinWindow = departedAt.AddSeconds(120); // 2 minute window
+                if (DateTime.UtcNow <= rejoinWindow)
+                {
+                    isRecentDeparture = true;
+                    DepartedMembers.Remove(newMember.Guid.Full); // Clear from departed list
+                }
+                else
+                {
+                    // Window expired, remove from departed list
+                    DepartedMembers.Remove(newMember.Guid.Full);
+                }
+            }
+
+            if (FellowshipMembers.Count >= MaxFellows && !isRecentDeparture)
             {
                 inviter.Session.Network.EnqueueSend(new GameEventWeenieError(inviter.Session, WeenieError.YourFellowshipIsFull));
                 return;
@@ -233,6 +251,32 @@ namespace ACE.Server.Entity
             if (WaitingQueue.Count == 0) return;
             if (FellowshipMembers.Count >= MaxFellows) return;
             if (IsLocked) return;
+
+            // CONQUEST: Check if any recent departures exist (within 2 minutes)
+            // If so, delay queue processing to give them time to rejoin
+            var currentTime = (int)Time.GetUnixTime();
+            var hasRecentDepartures = DepartedMembers.Any(kvp =>
+            {
+                var departedAt = Time.GetDateTimeFromTimestamp(kvp.Value);
+                var rejoinWindow = departedAt.AddSeconds(120); // 2 minute window
+                return DateTime.UtcNow <= rejoinWindow;
+            });
+
+            if (hasRecentDepartures)
+            {
+                // Clean up expired departures but don't process queue yet
+                var expiredDepartures = DepartedMembers.Where(kvp =>
+                {
+                    var departedAt = Time.GetDateTimeFromTimestamp(kvp.Value);
+                    var rejoinWindow = departedAt.AddSeconds(120);
+                    return DateTime.UtcNow > rejoinWindow;
+                }).Select(kvp => kvp.Key).ToList();
+
+                foreach (var key in expiredDepartures)
+                    DepartedMembers.Remove(key);
+
+                return; // Don't process queue - wait for potential rejoin
+            }
 
             // Clean up stale references and find the first valid player
             while (WaitingQueue.Count > 0)
@@ -500,13 +544,10 @@ namespace ACE.Server.Entity
             {
                 FellowshipMembers.Remove(player.Guid.Full);
 
-                if (IsLocked)
-                {
-                    var timestamp = (int)Time.GetUnixTime();
-
-                    if (!DepartedMembers.TryAdd(player.Guid.Full, timestamp))
-                        DepartedMembers[player.Guid.Full] = timestamp;
-                }
+                // CONQUEST: Always track departure time for 2-minute rejoin window (not just locked fellowships)
+                var timestamp = (int)Time.GetUnixTime();
+                if (!DepartedMembers.TryAdd(player.Guid.Full, timestamp))
+                    DepartedMembers[player.Guid.Full] = timestamp;
 
                 player.Session.Network.EnqueueSend(new GameEventFellowshipQuit(player.Session, player.Guid.Full));
 
@@ -527,7 +568,7 @@ namespace ACE.Server.Entity
 
                 CalculateXPSharing();
 
-                // CONQUEST: Check if anyone is waiting in queue
+                // CONQUEST: Process queue - it will delay if recent departures exist
                 ProcessWaitingQueue();
             }
         }
