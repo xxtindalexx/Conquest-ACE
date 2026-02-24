@@ -7927,11 +7927,12 @@ namespace ACE.Server.Command.Handlers
 
         // CONQUEST: Exempt Landblock Management Command
         [CommandHandler("exemptlandblock", AccessLevel.Admin, CommandHandlerFlag.None, 1,
-            "Manage landblocks exempt from IP character restrictions (runtime only).",
-            "add <landblock> - Add a landblock to exemptions\n" +
+            "Manage landblocks exempt from IP character restrictions.",
+            "add <landblock> [description] - Add a landblock to exemptions\n" +
             "remove <landblock> - Remove a landblock from exemptions\n" +
             "list - List all exempt landblocks\n" +
-            "check <landblock> - Check if a landblock is exempt")]
+            "check <landblock> - Check if a landblock is exempt\n" +
+            "reload - Reload exempt landblocks from database")]
         public static void HandleExemptLandblock(Session session, params string[] parameters)
         {
             if (parameters.Length < 1)
@@ -7956,6 +7957,9 @@ namespace ACE.Server.Command.Handlers
                 case "check":
                     HandleExemptLandblockCheck(session, parameters);
                     break;
+                case "reload":
+                    HandleExemptLandblockReload(session);
+                    break;
                 default:
                     session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown subcommand: {subcommand}", ChatMessageType.Broadcast));
                     ShowExemptLandblockUsage(session);
@@ -7974,20 +7978,35 @@ namespace ACE.Server.Command.Handlers
 
         private static void ShowExemptLandblockUsage(Session session)
         {
-            session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /exemptlandblock <add|remove|list|check> or /elb", ChatMessageType.Help));
-            session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> - Add a landblock (e.g., 0x5756 or 22358)", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /exemptlandblock <add|remove|list|check|reload> or /elb", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> [description] - Add a landblock (e.g., 0x5756 Marketplace)", ChatMessageType.Help));
             session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> - Remove a landblock", ChatMessageType.Help));
             session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all exempt landblocks", ChatMessageType.Help));
             session.Network.EnqueueSend(new GameMessageSystemChat("  check <landblock> - Check if a landblock is exempt", ChatMessageType.Help));
-            session.Network.EnqueueSend(new GameMessageSystemChat("Note: Changes are runtime only and will not persist after restart.", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  reload - Reload exempt landblocks from database", ChatMessageType.Help));
+        }
+
+        private static void HandleExemptLandblockReload(Session session)
+        {
+            try
+            {
+                Landblock.LoadExemptLandblocksFromDatabase();
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Reloaded {Landblock.connectionExemptLandblocks.Count} exempt landblock(s) from database.", ChatMessageType.Broadcast));
+                log.Info($"[ADMIN] {session.Player.Name} reloaded exempt landblocks from database");
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error reloading exempt landblocks: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error reloading exempt landblocks: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         private static void HandleExemptLandblockAdd(Session session, string[] parameters)
         {
             if (parameters.Length < 2)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /exemptlandblock add <landblock>", ChatMessageType.Help));
-                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /exemptlandblock add 0x5756", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /exemptlandblock add <landblock> [description]", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /exemptlandblock add 0x5756 Marketplace", ChatMessageType.Help));
                 return;
             }
 
@@ -7998,15 +8017,44 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            if (Landblock.connectionExemptLandblocks.Contains(landblock))
-            {
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is already in the exempt list.", ChatMessageType.Broadcast));
-                return;
-            }
+            // Optional description
+            string description = parameters.Length > 2 ? string.Join(" ", parameters.Skip(2)) : null;
 
-            Landblock.connectionExemptLandblocks.Add(landblock);
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Added landblock 0x{landblock:X4} to exempt list. ({Landblock.connectionExemptLandblocks.Count} total)", ChatMessageType.Broadcast));
-            log.Info($"[ADMIN] {session.Player.Name} added landblock 0x{landblock:X4} to connection exempt list (runtime)");
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var existing = context.ExemptLandblocks.Find(landblock);
+                    if (existing != null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is already in the exempt list.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var newEntry = new ACE.Database.Models.World.ExemptLandblock
+                    {
+                        Landblock = landblock,
+                        Description = description
+                    };
+
+                    context.ExemptLandblocks.Add(newEntry);
+                    context.SaveChanges();
+
+                    // Update in-memory cache
+                    Landblock.connectionExemptLandblocks.Add(landblock);
+                    if (!string.IsNullOrWhiteSpace(description))
+                        Landblock.exemptLandblockDescriptions[landblock] = description;
+
+                    var descText = string.IsNullOrWhiteSpace(description) ? "" : $" ({description})";
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Added landblock 0x{landblock:X4}{descText} to exempt list. ({Landblock.connectionExemptLandblocks.Count} total)", ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} added landblock 0x{landblock:X4}{descText} to connection exempt list (persisted)");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error adding exempt landblock: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error adding exempt landblock: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         private static void HandleExemptLandblockRemove(Session session, string[] parameters)
@@ -8023,15 +8071,33 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            if (!Landblock.connectionExemptLandblocks.Contains(landblock))
+            try
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is not in the exempt list.", ChatMessageType.Broadcast));
-                return;
-            }
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var existing = context.ExemptLandblocks.Find(landblock);
+                    if (existing == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is not in the exempt list.", ChatMessageType.Broadcast));
+                        return;
+                    }
 
-            Landblock.connectionExemptLandblocks.Remove(landblock);
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Removed landblock 0x{landblock:X4} from exempt list. ({Landblock.connectionExemptLandblocks.Count} remaining)", ChatMessageType.Broadcast));
-            log.Info($"[ADMIN] {session.Player.Name} removed landblock 0x{landblock:X4} from connection exempt list (runtime)");
+                    context.ExemptLandblocks.Remove(existing);
+                    context.SaveChanges();
+
+                    // Update in-memory cache
+                    Landblock.connectionExemptLandblocks.Remove(landblock);
+                    Landblock.exemptLandblockDescriptions.Remove(landblock);
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Removed landblock 0x{landblock:X4} from exempt list. ({Landblock.connectionExemptLandblocks.Count} remaining)", ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} removed landblock 0x{landblock:X4} from connection exempt list (persisted)");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error removing exempt landblock: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error removing exempt landblock: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         private static void HandleExemptLandblockList(Session session)
@@ -8046,20 +8112,10 @@ namespace ACE.Server.Command.Handlers
 
             session.Network.EnqueueSend(new GameMessageSystemChat($"=== Exempt Landblocks ({landblocks.Count}) ===", ChatMessageType.Broadcast));
 
-            // Display in groups of 8 per line for readability
-            var sb = new StringBuilder();
-            for (int i = 0; i < landblocks.Count; i++)
+            foreach (var lb in landblocks)
             {
-                sb.Append($"0x{landblocks[i]:X4}");
-                if ((i + 1) % 8 == 0 || i == landblocks.Count - 1)
-                {
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"  {sb}", ChatMessageType.Broadcast));
-                    sb.Clear();
-                }
-                else
-                {
-                    sb.Append(", ");
-                }
+                var desc = Landblock.exemptLandblockDescriptions.TryGetValue(lb, out var d) ? $" - {d}" : "";
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{lb:X4}{desc}", ChatMessageType.Broadcast));
             }
         }
 
