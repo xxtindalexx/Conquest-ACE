@@ -9,6 +9,7 @@ using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Entity.PKQuests;
+using ACE.Server.Entity.TownControl;
 using ACE.Server.Factories;
 using ACE.Server.Factories.Entity;
 using ACE.Server.Managers;
@@ -8135,6 +8136,223 @@ namespace ACE.Server.Command.Handlers
 
             var isExempt = Landblock.connectionExemptLandblocks.Contains(landblock);
             session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is {(isExempt ? "EXEMPT" : "NOT exempt")} from IP restrictions.", ChatMessageType.Broadcast));
+        }
+
+        // CONQUEST: Allegiance Whitelist Management Command
+        [CommandHandler("allegwhitelist", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Manage whitelisted allegiances for PK quest credit.",
+            "add <monarchname> - Add an allegiance by monarch name\n" +
+            "remove <monarchname> - Remove an allegiance\n" +
+            "list - List all whitelisted allegiances\n" +
+            "addid <monarchid> - Add by character ID directly\n" +
+            "removeid <monarchid> - Remove by character ID directly")]
+        public static void HandleAllegWhitelist(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                ShowAllegWhitelistUsage(session);
+                return;
+            }
+
+            var subcommand = parameters[0].ToLower();
+
+            switch (subcommand)
+            {
+                case "add":
+                    HandleAllegWhitelistAdd(session, parameters);
+                    break;
+                case "remove":
+                    HandleAllegWhitelistRemove(session, parameters);
+                    break;
+                case "list":
+                    HandleAllegWhitelistList(session);
+                    break;
+                case "addid":
+                    HandleAllegWhitelistAddId(session, parameters);
+                    break;
+                case "removeid":
+                    HandleAllegWhitelistRemoveId(session, parameters);
+                    break;
+                default:
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown subcommand: {subcommand}", ChatMessageType.Broadcast));
+                    ShowAllegWhitelistUsage(session);
+                    break;
+            }
+        }
+
+        // Shorthand alias
+        [CommandHandler("awl", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Shorthand for /allegwhitelist",
+            "add <monarchname> | remove <monarchname> | list | addid <id> | removeid <id>")]
+        public static void HandleAwl(Session session, params string[] parameters)
+        {
+            HandleAllegWhitelist(session, parameters);
+        }
+
+        private static void ShowAllegWhitelistUsage(Session session)
+        {
+            session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist <add|remove|list|addid|removeid> or /awl", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  add <monarchname> - Add allegiance by monarch name", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  remove <monarchname> - Remove allegiance by monarch name", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all whitelisted allegiances", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  addid <monarchid> - Add by character ID directly", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  removeid <monarchid> - Remove by character ID directly", ChatMessageType.Help));
+        }
+
+        private static void HandleAllegWhitelistAdd(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist add <monarchname>", ChatMessageType.Help));
+                return;
+            }
+
+            var monarchName = string.Join(" ", parameters.Skip(1));
+
+            // Find the player by name
+            var monarch = PlayerManager.FindByName(monarchName);
+            if (monarch == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Player '{monarchName}' not found.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Check if they are a monarch
+            if (monarch.MonarchId != monarch.Guid.Full)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"'{monarchName}' is not a monarch. They are in {(monarch.MonarchId > 0 ? "another allegiance" : "no allegiance")}.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            AddMonarchToWhitelist(session, (int)monarch.Guid.Full, monarch.Name);
+        }
+
+        private static void HandleAllegWhitelistAddId(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist addid <monarchid>", ChatMessageType.Help));
+                return;
+            }
+
+            if (!int.TryParse(parameters[1], out int monarchId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid monarch ID: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Try to find the player name for display
+            var monarch = PlayerManager.FindByGuid((uint)monarchId);
+            var monarchName = monarch?.Name ?? $"ID:{monarchId}";
+
+            AddMonarchToWhitelist(session, monarchId, monarchName);
+        }
+
+        private static void AddMonarchToWhitelist(Session session, int monarchId, string monarchName)
+        {
+            var currentList = TownControlAllegiances.AllowedAllegianceList;
+
+            if (currentList.Contains(monarchId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Allegiance '{monarchName}' (ID: {monarchId}) is already whitelisted.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Build new comma-separated string
+            var newList = new List<int>(currentList) { monarchId };
+            var newListString = string.Join(",", newList);
+
+            // Update the property
+            PropertyManager.ModifyString("town_control_alleglist", newListString);
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Added allegiance '{monarchName}' (ID: {monarchId}) to whitelist. ({newList.Count} total)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} added allegiance '{monarchName}' (ID: {monarchId}) to PK quest whitelist");
+        }
+
+        private static void HandleAllegWhitelistRemove(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist remove <monarchname>", ChatMessageType.Help));
+                return;
+            }
+
+            var monarchName = string.Join(" ", parameters.Skip(1));
+
+            // Find the player by name
+            var monarch = PlayerManager.FindByName(monarchName);
+            if (monarch == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Player '{monarchName}' not found.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            RemoveMonarchFromWhitelist(session, (int)monarch.Guid.Full, monarch.Name);
+        }
+
+        private static void HandleAllegWhitelistRemoveId(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist removeid <monarchid>", ChatMessageType.Help));
+                return;
+            }
+
+            if (!int.TryParse(parameters[1], out int monarchId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid monarch ID: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Try to find the player name for display
+            var monarch = PlayerManager.FindByGuid((uint)monarchId);
+            var monarchName = monarch?.Name ?? $"ID:{monarchId}";
+
+            RemoveMonarchFromWhitelist(session, monarchId, monarchName);
+        }
+
+        private static void RemoveMonarchFromWhitelist(Session session, int monarchId, string monarchName)
+        {
+            var currentList = TownControlAllegiances.AllowedAllegianceList;
+
+            if (!currentList.Contains(monarchId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Allegiance '{monarchName}' (ID: {monarchId}) is not in the whitelist.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Build new comma-separated string without this ID
+            var newList = currentList.Where(id => id != monarchId).ToList();
+            var newListString = string.Join(",", newList);
+
+            // Update the property
+            PropertyManager.ModifyString("town_control_alleglist", newListString);
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Removed allegiance '{monarchName}' (ID: {monarchId}) from whitelist. ({newList.Count} remaining)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} removed allegiance '{monarchName}' (ID: {monarchId}) from PK quest whitelist");
+        }
+
+        private static void HandleAllegWhitelistList(Session session)
+        {
+            var currentList = TownControlAllegiances.AllowedAllegianceList;
+
+            if (currentList.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("No allegiances are currently whitelisted for PK quests.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Use /allegwhitelist add <monarchname> to add allegiances.", ChatMessageType.Help));
+                return;
+            }
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"=== Whitelisted Allegiances ({currentList.Count}) ===", ChatMessageType.Broadcast));
+
+            foreach (var monarchId in currentList)
+            {
+                var monarch = PlayerManager.FindByGuid((uint)monarchId);
+                var monarchName = monarch?.Name ?? "Unknown";
+                var memberCount = monarch?.AllegianceNode?.Allegiance?.Members?.Count ?? 0;
+
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  {monarchName} (ID: {monarchId}) - {memberCount} members", ChatMessageType.Broadcast));
+            }
         }
     }
 }
