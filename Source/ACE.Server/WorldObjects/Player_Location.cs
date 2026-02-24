@@ -308,6 +308,13 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
+            // Check PK dungeon lockout - can't use gem to get back into a dungeon you died in
+            if (IsLockedOutOfPKDungeon(lastCorpseLocation, out var lockoutMessage))
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat(lockoutMessage, ChatMessageType.Broadcast));
+                return false;
+            }
+
             // Start the recall animation
             EnqueueBroadcast(new GameMessageSystemChat($"{Name} is recalling to their last corpse location.", ChatMessageType.Recall), LocalBroadcastRange, ChatMessageType.Recall);
 
