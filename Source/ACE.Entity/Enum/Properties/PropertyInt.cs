@@ -708,6 +708,20 @@ namespace ACE.Entity.Enum.Properties
         // CONQUEST: Morph gem weapon element randomization
         WeenieSwapClassId = 19001, // Tracks the weenie class ID when weapon element has been swapped
         AppearanceWeenieClassId = 19002, // Tracks the visual appearance WCID for tailored/morphed weapons
+
+        // CONQUEST: Enlightenment Token System
+        EnlightenmentTokens = 9340,             // Currency for general enlightenment perks
+        EnlightenmentCombatTrophies = 9341,     // Currency for combat ability perks (cleave/split/chain/aetheria)
+        EnlightenmentBonusDamageRating = 9342,  // Purchased +DR from tokens (max 4)
+        EnlightenmentBonusDamageReduction = 9343, // Purchased +DRR from tokens (max 4)
+        EnlightenmentBonusCritDamageRating = 9344, // Purchased +CD from tokens (max 4)
+        EnlightenmentBonusCritDamageReduction = 9345, // Purchased +CDR from tokens (max 4)
+        EnlightenmentImbueBonus = 9346,         // Purchased +imbue % from tokens (max 10, each = +1%)
+        EnlightenmentSalvageBonus = 9347,       // Purchased +salvage % from tokens (max 10, each = +1%)
+        EnlightenmentSkillCreditsPurchased = 9348, // Purchased skill credits from tokens (max 5)
+        EnlightenmentStaminaBenediction = 9349, // 1 if purchased stamina benediction
+        EnlightenmentManaBenediction = 9350,    // 1 if purchased mana benediction
+        EnlightenmentGemType = 9351,            // Identifies type of enlightenment gem (1-13, see EnlightenmentGemType enum)
     }
 
     public static class PropertyIntExtensions

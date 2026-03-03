@@ -20,7 +20,7 @@ namespace ACE.Common
         public long EventsChannelId { get; set; }
         public long ExportsChannelId { get; set; }
         public long WeenieUploadsChannelId { get; set; }
-        public long RaffleChannelId { get; set; }
+        public long ServerStatus { get; set; }
         public long AdminChannelId { get; set; }
         public string WebhookURL { get; set; }
         public long ClothingModUploadChannelId { get; set; }

@@ -470,7 +470,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Returns the resistance modifier or rending modifier
         /// </summary>
-        public static float GetWeaponResistanceModifier(WorldObject weapon, Creature wielder, CreatureSkill skill, DamageType damageType)
+        public static float GetWeaponResistanceModifier(WorldObject weapon, Creature wielder, CreatureSkill skill, DamageType damageType, Creature target = null)
         {
             float resistMod = defaultModifier;
 
@@ -478,7 +478,10 @@ namespace ACE.Server.WorldObjects
                 return defaultModifier;
 
             // handle quest weapon fixed resistance cleaving
-            if (weapon.ResistanceModifierType != null && weapon.ResistanceModifierType == damageType)
+            // CONQUEST: Disable Nether Resistance Cleaving in PvP (there are no Nether protection spells)
+            var isNetherCleavePvP = damageType == DamageType.Nether && target is Player && wielder is Player;
+
+            if (weapon.ResistanceModifierType != null && weapon.ResistanceModifierType == damageType && !isNetherCleavePvP)
                 resistMod = 1.0f + (float)(weapon.ResistanceModifier ?? defaultModifier);       // 1.0 in the data, equivalent to a level 5 vuln
 
             // handle elemental resistance rending
@@ -487,7 +490,10 @@ namespace ACE.Server.WorldObjects
             if (rendDamageType == ImbuedEffectType.Undef)
                 log.DebugFormat("{0}.GetRendDamageType({1}) unexpected damage type for {2} ({3})", wielder.Name, damageType, weapon.Name, weapon.Guid);
 
-            if (rendDamageType != ImbuedEffectType.Undef && weapon.HasImbuedEffect(rendDamageType) && skill != null)
+            // CONQUEST: Disable Nether Rending in PvP (there are no Nether protection spells)
+            var isNetherPvP = damageType == DamageType.Nether && target is Player && wielder is Player;
+
+            if (rendDamageType != ImbuedEffectType.Undef && weapon.HasImbuedEffect(rendDamageType) && skill != null && !isNetherPvP)
             {
                 var rendingMod = GetRendingMod(skill);
 

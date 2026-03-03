@@ -1,5 +1,4 @@
 using System;
-
 using ACE.Database;
 using ACE.Entity.Models;
 using ACE.Server.WorldObjects;
@@ -61,6 +60,7 @@ namespace ACE.Server.Network.GameEvent.Events
                     var bankedAltCurrency = session.Player.GetBankedAlternateCurrency(vendor.AlternateCurrency.Value);
                     var totalFunds = altCurrencyInInventory + (uint)bankedAltCurrency;
                     Writer.Write(totalFunds + altCurrencySpent);
+
                 }
                 else
                 {
@@ -79,6 +79,7 @@ namespace ACE.Server.Network.GameEvent.Events
 
                 Writer.Write(totalFunds);
                 Writer.WriteString16L("Pyreals");
+
             }
             else
             {

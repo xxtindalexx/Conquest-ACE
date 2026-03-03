@@ -14,6 +14,7 @@ using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Factories;
 using ACE.Server.Network.GameEvent.Events;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Managers;
 
 namespace ACE.Server.WorldObjects
@@ -529,6 +530,23 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
+            // CONQUEST: Check enlightenment gem purchase restrictions
+            foreach (var item in purchaseItems)
+            {
+                var enlightenmentGemType = item.GetProperty(PropertyInt.EnlightenmentGemType);
+                if (enlightenmentGemType != null)
+                {
+                    var canPurchase = CanPurchaseEnlightenmentGem(player, enlightenmentGemType.Value, out var errorMessage);
+                    if (!canPurchase)
+                    {
+                        player.Session.Network.EnqueueSend(new GameEventCommunicationTransientString(player.Session, errorMessage));
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat(errorMessage, ChatMessageType.Broadcast));
+                        CleanupCreatedItems(defaultItems);
+                        return false;
+                    }
+                }
+            }
+
             // calculate price
             uint totalPrice = 0;
 
@@ -858,6 +876,203 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyInt.MoneyOutflow) ?? 0;
             set { if (value == 0) RemoveProperty(PropertyInt.MoneyOutflow); else SetProperty(PropertyInt.MoneyOutflow, value); }
+        }
+
+        /// <summary>
+        /// CONQUEST: Checks if a player can purchase an enlightenment gem based on their current perk levels
+        /// Gem types match Gem.cs HandleEnlightenmentGem():
+        /// 1 = Cleave, 2 = Arrow Split, 3 = Spell Chain, 4 = Aetheria Surge (Combat Trophy gems)
+        /// 5 = +1 DR, 6 = +1 DRR, 7 = +1 CD, 8 = +1 CDR (Token gems, max 4 each)
+        /// 9 = +1% Imbue, 10 = +1% Salvage (Token gems, max 10 each)
+        /// 11 = +1 Skill Credit (Token gem, max 5)
+        /// 12 = Stamina Benediction, 13 = Mana Benediction (Token gems, max 1 each)
+        /// </summary>
+        private bool CanPurchaseEnlightenmentGem(Player player, int gemType, out string errorMessage)
+        {
+            errorMessage = null;
+
+            switch (gemType)
+            {
+                // Combat Trophy Gems (one-time purchases) - also check inventory
+                case 1: // Cleave (max 1)
+                    var hasCleave = (player.GetProperty(PropertyInt.EnlightenmentCleaveBonus) ?? 0) > 0;
+                    var invCleave = CountEnlightenmentGemsInInventory(player, 1);
+                    if (hasCleave || invCleave > 0)
+                    {
+                        errorMessage = hasCleave
+                            ? "You have already acquired the Cleave ability."
+                            : "You already have an unused Cleave gem in your inventory.";
+                        return false;
+                    }
+                    break;
+
+                case 2: // Arrow Split (max 1)
+                    var hasSplit = (player.GetProperty(PropertyInt.EnlightenmentSplitArrowBonus) ?? 0) > 0;
+                    var invSplit = CountEnlightenmentGemsInInventory(player, 2);
+                    if (hasSplit || invSplit > 0)
+                    {
+                        errorMessage = hasSplit
+                            ? "You have already acquired the Missile Split ability."
+                            : "You already have an unused Missile Split gem in your inventory.";
+                        return false;
+                    }
+                    break;
+
+                case 3: // Spell Chain (max 1)
+                    var hasChain = (player.GetProperty(PropertyInt.EnlightenmentSpellChainBonus) ?? 0) > 0;
+                    var invChain = CountEnlightenmentGemsInInventory(player, 3);
+                    if (hasChain || invChain > 0)
+                    {
+                        errorMessage = hasChain
+                            ? "You have already acquired the Spell Chain ability."
+                            : "You already have an unused Spell Chain gem in your inventory.";
+                        return false;
+                    }
+                    break;
+
+                case 4: // Aetheria Surge (max 1)
+                    var hasAetheriaSurge = (player.GetProperty(PropertyInt.EnlightenmentAetheriaSurgeBonus) ?? 0) > 0;
+                    var invAetheria = CountEnlightenmentGemsInInventory(player, 4);
+                    if (hasAetheriaSurge || invAetheria > 0)
+                    {
+                        errorMessage = hasAetheriaSurge
+                            ? "You have already acquired the Aetheria Surge ability."
+                            : "You already have an unused Aetheria Surge gem in your inventory.";
+                        return false;
+                    }
+                    break;
+
+                // Rating Gems (max 4 each) - also count gems already in inventory
+                case 5: // +1 Damage Rating (max 4)
+                    var currentDR = player.GetProperty(PropertyInt.EnlightenmentBonusDamageRating) ?? 0;
+                    var invDR = CountEnlightenmentGemsInInventory(player, 5);
+                    if (currentDR + invDR >= 4)
+                    {
+                        errorMessage = currentDR >= 4
+                            ? "You have already reached the maximum Damage Rating bonus from Enlightenment."
+                            : $"You already have {invDR} unused gem(s) in your inventory. Use them first.";
+                        return false;
+                    }
+                    break;
+
+                case 6: // +1 Damage Reduction (max 4)
+                    var currentDRR = player.GetProperty(PropertyInt.EnlightenmentBonusDamageReduction) ?? 0;
+                    var invDRR = CountEnlightenmentGemsInInventory(player, 6);
+                    if (currentDRR + invDRR >= 4)
+                    {
+                        errorMessage = currentDRR >= 4
+                            ? "You have already reached the maximum Damage Reduction bonus from Enlightenment."
+                            : $"You already have {invDRR} unused gem(s) in your inventory. Use them first.";
+                        return false;
+                    }
+                    break;
+
+                case 7: // +1 Crit Damage (max 4)
+                    var currentCD = player.GetProperty(PropertyInt.EnlightenmentBonusCritDamageRating) ?? 0;
+                    var invCD = CountEnlightenmentGemsInInventory(player, 7);
+                    if (currentCD + invCD >= 4)
+                    {
+                        errorMessage = currentCD >= 4
+                            ? "You have already reached the maximum Critical Damage Rating bonus from Enlightenment."
+                            : $"You already have {invCD} unused gem(s) in your inventory. Use them first.";
+                        return false;
+                    }
+                    break;
+
+                case 8: // +1 Crit Damage Reduction (max 4)
+                    var currentCDR = player.GetProperty(PropertyInt.EnlightenmentBonusCritDamageReduction) ?? 0;
+                    var invCDR = CountEnlightenmentGemsInInventory(player, 8);
+                    if (currentCDR + invCDR >= 4)
+                    {
+                        errorMessage = currentCDR >= 4
+                            ? "You have already reached the maximum Critical Damage Reduction bonus from Enlightenment."
+                            : $"You already have {invCDR} unused gem(s) in your inventory. Use them first.";
+                        return false;
+                    }
+                    break;
+
+                // Crafting Gems (max 10 each) - also count gems already in inventory
+                case 9: // +1% Imbue Chance (max 10)
+                    var currentImbue = player.GetProperty(PropertyInt.EnlightenmentImbueBonus) ?? 0;
+                    var invImbue = CountEnlightenmentGemsInInventory(player, 9);
+                    if (currentImbue + invImbue >= 10)
+                    {
+                        errorMessage = currentImbue >= 10
+                            ? "You have already reached the maximum Imbue Chance bonus from Enlightenment."
+                            : $"You already have {invImbue} unused gem(s) in your inventory. Use them first.";
+                        return false;
+                    }
+                    break;
+
+                case 10: // +1% Salvage Bonus (max 10)
+                    var currentSalvage = player.GetProperty(PropertyInt.EnlightenmentSalvageBonus) ?? 0;
+                    var invSalvage = CountEnlightenmentGemsInInventory(player, 10);
+                    if (currentSalvage + invSalvage >= 10)
+                    {
+                        errorMessage = currentSalvage >= 10
+                            ? "You have already reached the maximum Salvage bonus from Enlightenment."
+                            : $"You already have {invSalvage} unused gem(s) in your inventory. Use them first.";
+                        return false;
+                    }
+                    break;
+
+                // Skill Credit Gem (max 5) - also count gems already in inventory
+                case 11: // +1 Skill Credit (max 5)
+                    var currentSkillCredits = player.GetProperty(PropertyInt.EnlightenmentSkillCreditsPurchased) ?? 0;
+                    var invSkillCredits = CountEnlightenmentGemsInInventory(player, 11);
+                    if (currentSkillCredits + invSkillCredits >= 5)
+                    {
+                        errorMessage = currentSkillCredits >= 5
+                            ? "You have already reached the maximum Skill Credits from Enlightenment."
+                            : $"You already have {invSkillCredits} unused gem(s) in your inventory. Use them first.";
+                        return false;
+                    }
+                    break;
+
+                // Benediction Gems (one-time purchase, creates reusable spell gem) - also check inventory
+                case 12: // Stamina Benediction (max 1)
+                    var hasStaminaBenediction = (player.GetProperty(PropertyInt.EnlightenmentStaminaBenediction) ?? 0) > 0;
+                    var invStamina = CountEnlightenmentGemsInInventory(player, 12);
+                    if (hasStaminaBenediction || invStamina > 0)
+                    {
+                        errorMessage = hasStaminaBenediction
+                            ? "You have already received the Gem of Stamina Benediction."
+                            : "You already have an unused Stamina Benediction gem in your inventory.";
+                        return false;
+                    }
+                    break;
+
+                case 13: // Mana Benediction (max 1)
+                    var hasManaBenediction = (player.GetProperty(PropertyInt.EnlightenmentManaBenediction) ?? 0) > 0;
+                    var invMana = CountEnlightenmentGemsInInventory(player, 13);
+                    if (hasManaBenediction || invMana > 0)
+                    {
+                        errorMessage = hasManaBenediction
+                            ? "You have already received the Gem of Mana Benediction."
+                            : "You already have an unused Mana Benediction gem in your inventory.";
+                        return false;
+                    }
+                    break;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Counts how many enlightenment gems of a specific type the player already has in their inventory
+        /// </summary>
+        private int CountEnlightenmentGemsInInventory(Player player, int gemType)
+        {
+            int count = 0;
+
+            foreach (var item in player.GetAllPossessions())
+            {
+                var itemGemType = item.GetProperty(PropertyInt.EnlightenmentGemType);
+                if (itemGemType == gemType)
+                    count += item.StackSize ?? 1;
+            }
+
+            return count;
         }
     }
 }

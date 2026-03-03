@@ -86,6 +86,16 @@ namespace ACE.Server.WorldObjects
                 if (lastDamager is Player playerKiller)
                     playerKiller.Session.Network.EnqueueSend(new GameEventKillerNotification(playerKiller.Session, killerMsg));
             }
+            // CONQUEST: If killed by a combat pet, send a message to the pet owner
+            else if (lastDamager is CombatPet combatPet && lastDamagerInfo.PetOwner != null)
+            {
+                var petOwner = lastDamagerInfo.TryGetPetOwner();
+                if (petOwner != null)
+                {
+                    var petName = combatPet.Name ?? "Your summon";
+                    petOwner.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your {petName} killed {Name}!", ChatMessageType.Broadcast));
+                }
+            }
             return deathMessage;
         }
 
@@ -572,11 +582,13 @@ namespace ACE.Server.WorldObjects
                     if (dropped.Count > 0)
                         saveCorpse = true;
 
+                    // CONQUEST: Always save corpse location for Gem of Soul Recovery (works in dungeons too)
+                    player.SetPosition(PositionType.LastOutsideDeath, new Position(corpse.Location));
+                    player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePosition(player, PositionType.LastOutsideDeath, corpse.Location));
+
+                    // Only show map coordinates for outdoor deaths (dungeons don't have map coords)
                     if ((player.Location.Cell & 0xFFFF) < 0x100)
                     {
-                        player.SetPosition(PositionType.LastOutsideDeath, new Position(corpse.Location));
-                        player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePosition(player, PositionType.LastOutsideDeath, corpse.Location));
-
                         if (dropped.Count > 0)
                             player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your corpse is located at ({corpse.Location.GetMapCoordStr()}).", ChatMessageType.Broadcast));
                     }

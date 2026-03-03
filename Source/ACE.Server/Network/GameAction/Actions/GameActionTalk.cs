@@ -2,9 +2,11 @@ using System;
 
 using log4net;
 
+using ACE.Common;
 using ACE.Common.Extensions;
 using ACE.Entity.Enum;
 using ACE.Server.Command;
+using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
 
 namespace ACE.Server.Network.GameAction.Actions
@@ -17,7 +19,21 @@ namespace ACE.Server.Network.GameAction.Actions
         public static void Handle(ClientMessage clientMessage, Session session)
         {
             var message = clientMessage.Payload.ReadString16L();
-            
+
+            // CONQUEST: Audit log /blink command usage (door transparency exploit plugin)
+            if (message.StartsWith("/blink", StringComparison.OrdinalIgnoreCase))
+            {
+                var player = session.Player;
+                var locationStr = player?.Location != null ? $"{player.Location.ToLOCString()}" : "Unknown";
+                var landblockName = player?.CurrentLandblock != null
+                    ? Entity.Landblock.GetLandblockName((ushort)player.CurrentLandblock.Id.Landblock)
+                    : "Unknown";
+
+                var auditMsg = $"[BLINK AUDIT] Player '{player?.Name}' (Account: {session.Account}) used /blink command at {landblockName} ({locationStr})";
+                log.Warn(auditMsg);
+                DiscordChatManager.SendDiscordMessage(player?.Name ?? "Unknown", auditMsg, ConfigManager.Config.Chat.TrackingAuditChannelId);
+            }
+
             if (message.StartsWith("@"))
             {
                 string commandRaw = message.Remove(0, 1);

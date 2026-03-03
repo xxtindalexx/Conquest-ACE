@@ -537,7 +537,10 @@ namespace ACE.Server.Entity
                 }
             }
             
-            // CONQUEST: Enlightenment Milestone Titles, Combat Bonuses, and Item Rewards
+            // CONQUEST: Award Enlightenment Token (physical item for vendor purchases)
+            AwardEnlightenmentToken(player);
+
+            // CONQUEST: Enlightenment Milestone Titles, Combat Trophies, and Item Rewards
             switch (player.Enlightenment)
             {
                 case 1:
@@ -549,33 +552,24 @@ namespace ACE.Server.Entity
                     player.AddTitle(CharacterTitle.Gimp);
                     break;
                 case 10:
-                    // +1 Cleave: Melee weapons hit an additional target (costs 10 base HP)
-                    player.SetProperty(PropertyInt.EnlightenmentCleaveBonus, 1);
-                    player.Vitals[PropertyAttribute2nd.MaxHealth].StartingValue -= 10;
-                    player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxHealth]));
-                    player.SendMessage("You have sacrificed 10 HP to gain +1 Cleave! Your melee weapons now hit an additional target.", ChatMessageType.Broadcast);
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria)
+                    AwardCombatTrophy(player);
                     break;
                 case 15:
                     // Title: Lots of Vitae (retired)
                     player.AddTitle(CharacterTitle.LotsofVitae);
                     break;
                 case 25:
-                    // +1 Arrow Split: Missile weapons hit an additional target (costs 25 base HP)
-                    player.SetProperty(PropertyInt.EnlightenmentSplitArrowBonus, 1);
-                    player.Vitals[PropertyAttribute2nd.MaxHealth].StartingValue -= 25;
-                    player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxHealth]));
-                    player.SendMessage("You have sacrificed 25 HP to gain +1 Arrow Split! Your missile weapons now split to hit an additional target.", ChatMessageType.Broadcast);
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria)
+                    AwardCombatTrophy(player);
                     break;
                 case 35:
                     // Title: Certified Ganksta (retired)
                     player.AddTitle(CharacterTitle.CertifiedGanksta);
                     break;
                 case 50:
-                    // +1 Aetheria Surge Level (costs 50 base HP) + Title + Item
-                    player.SetProperty(PropertyInt.EnlightenmentAetheriaSurgeBonus, 1);
-                    player.Vitals[PropertyAttribute2nd.MaxHealth].StartingValue -= 50;
-                    player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Vitals[PropertyAttribute2nd.MaxHealth]));
-                    player.SendMessage("You have sacrificed 50 HP to gain +1 Aetheria Surge Level! Your aetheria now surge as if they were 1 level higher.", ChatMessageType.Broadcast);
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria)
+                    AwardCombatTrophy(player);
                     // Title: Defender of Dereth (retired)
                     player.AddTitle(CharacterTitle.DefenderofDereth);
                     // Item: Helm of 50th Journey
@@ -586,9 +580,8 @@ namespace ACE.Server.Entity
                     player.AddTitle(CharacterTitle.BloodWarrior);
                     break;
                 case 75:
-                    // +1 Spell Chain: War magic spells chain to a nearby target for 30% damage
-                    player.SetProperty(PropertyInt.EnlightenmentSpellChainBonus, 1);
-                    player.SendMessage("You have gained +1 Spell Chain! Your war magic spells now chain to a nearby target for 30% damage.", ChatMessageType.Broadcast);
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria)
+                    AwardCombatTrophy(player);
                     // Title: Guardian of Dereth + Item
                     player.AddTitle(CharacterTitle.GuardianofDereth);
                     // Item: Robe of 75th Rebirth (Envoy Robe Tailor)
@@ -634,6 +627,63 @@ namespace ACE.Server.Entity
                 wo.Location = player.Location.InFrontOf(1.0f);
                 wo.EnterWorld();
                 player.SendMessage($"Your inventory was full. {wo.Name} has been placed at your feet.", ChatMessageType.Broadcast);
+            }
+        }
+
+        /// <summary>
+        /// Awards a Combat Trophy to the player (used to purchase combat abilities: Cleave/Split/Chain/Aetheria)
+        /// WCID 13370321
+        /// </summary>
+        private static void AwardCombatTrophy(Player player)
+        {
+            const uint CombatTrophyWcid = 13370321;
+
+            var wo = WorldObjectFactory.CreateNewWorldObject(CombatTrophyWcid);
+            if (wo == null)
+            {
+                player.SendMessage("Error creating Combat Trophy. Please contact an administrator.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            if (player.TryCreateInInventoryWithNetworking(wo))
+            {
+                player.SendMessage($"You have received 1 Combat Trophy!", ChatMessageType.Broadcast);
+                player.SendMessage("Visit the Enlightenment Combat Vendor to choose your combat ability.", ChatMessageType.Help);
+            }
+            else
+            {
+                // Inventory full - try to drop at player's feet
+                wo.Location = player.Location.InFrontOf(1.0f);
+                wo.EnterWorld();
+                player.SendMessage("Your inventory was full. Combat Trophy has been placed at your feet.", ChatMessageType.Broadcast);
+            }
+        }
+
+        /// <summary>
+        /// Awards an Enlightenment Token to the player (used for general perk purchases)
+        /// WCID 13370320
+        /// </summary>
+        private static void AwardEnlightenmentToken(Player player)
+        {
+            const uint EnlightenmentTokenWcid = 13370320;
+
+            var wo = WorldObjectFactory.CreateNewWorldObject(EnlightenmentTokenWcid);
+            if (wo == null)
+            {
+                player.SendMessage("Error creating Enlightenment Token. Please contact an administrator.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            if (player.TryCreateInInventoryWithNetworking(wo))
+            {
+                player.SendMessage($"You have received 1 Enlightenment Token!", ChatMessageType.Broadcast);
+            }
+            else
+            {
+                // Inventory full - try to drop at player's feet
+                wo.Location = player.Location.InFrontOf(1.0f);
+                wo.EnterWorld();
+                player.SendMessage("Your inventory was full. Enlightenment Token has been placed at your feet.", ChatMessageType.Broadcast);
             }
         }
     }

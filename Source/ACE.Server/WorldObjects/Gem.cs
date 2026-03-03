@@ -64,6 +64,13 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // CONQUEST: Gem of Soul Recovery - Teleports player to their last corpse location
+            // Gem is consumed on use, 20-hour cooldown before another gem can be used
+            if (WeenieClassId == 13370301)
+            {
+                player.TeleportToLastCorpse(this);
+                return;
+            }
 
             if (player.IsBusy || player.Teleporting || player.suicideInProgress)
             {
@@ -156,6 +163,17 @@ namespace ACE.Server.WorldObjects
             {
                 HatchMysteryEgg(player, eggRarity.Value);
                 return;
+            }
+
+            // CONQUEST: Handle Enlightenment Gems
+            var enlightenmentGemType = GetProperty(PropertyInt.EnlightenmentGemType);
+            if (enlightenmentGemType != null)
+            {
+                // HandleEnlightenmentGem returns true if we should continue normal gem processing
+                // (for benediction gems that use UseCreateItem to give the reusable gem)
+                if (!HandleEnlightenmentGem(player, enlightenmentGemType.Value))
+                    return;
+                // For benediction gems (12/13), fall through to UseCreateItem processing below
             }
 
             // trying to use a dispel potion while pk timer is active
@@ -472,6 +490,174 @@ namespace ACE.Server.WorldObjects
                     pet.SetProperty(secondRating, 1);
                 }
             }
+        }
+
+        /// <summary>
+        /// CONQUEST: Handles enlightenment gem usage based on gem type
+        /// Gem types:
+        /// 1 = Cleave, 2 = Arrow Split, 3 = Spell Chain, 4 = Aetheria Surge (Combat Trophies)
+        /// 5 = +1 DR, 6 = +1 DRR, 7 = +1 CD, 8 = +1 CDR (Tokens, max 4 each)
+        /// 9 = +1% Imbue (Tokens, max 10), 10 = +1% Salvage (Tokens, max 10)
+        /// 11 = +1 Skill Credit (Tokens, max 5), 12 = Stamina Benediction, 13 = Mana Benediction
+        /// Returns true if normal gem processing should continue (for UseCreateItem), false to stop
+        /// </summary>
+        private bool HandleEnlightenmentGem(Player player, int gemType)
+        {
+            string gemName = Name ?? "Enlightenment Gem";
+            bool success = false;
+
+            switch (gemType)
+            {
+                // Combat Trophy Gems (one-time purchases)
+                case 1: // Cleave
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentCleaveBonus, 1, 1, gemName,
+                        "Your melee weapons now cleave to hit an additional target!");
+                    break;
+                case 2: // Arrow Split
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentSplitArrowBonus, 1, 1, gemName,
+                        "Your missile weapons now split to hit an additional target!");
+                    break;
+                case 3: // Spell Chain
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentSpellChainBonus, 1, 1, gemName,
+                        "Your war magic spells now chain to a nearby target for 30% damage!");
+                    break;
+                case 4: // Aetheria Surge
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentAetheriaSurgeBonus, 1, 1, gemName,
+                        "Your aetheria now surge as if they were 1 level higher!");
+                    break;
+
+                // Rating Gems (max 4 each)
+                case 5: // +1 Damage Rating
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentBonusDamageRating, 1, 4, gemName,
+                        "You have gained +1 Damage Rating!");
+                    break;
+                case 6: // +1 Damage Reduction
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentBonusDamageReduction, 1, 4, gemName,
+                        "You have gained +1 Damage Reduction Rating!");
+                    break;
+                case 7: // +1 Crit Damage
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentBonusCritDamageRating, 1, 4, gemName,
+                        "You have gained +1 Critical Damage Rating!");
+                    break;
+                case 8: // +1 Crit Damage Reduction
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentBonusCritDamageReduction, 1, 4, gemName,
+                        "You have gained +1 Critical Damage Reduction Rating!");
+                    break;
+
+                // Crafting Gems (max 10 each)
+                case 9: // +1% Imbue
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentImbueBonus, 1, 10, gemName,
+                        "You have gained +1% Imbue Success Chance!");
+                    break;
+                case 10: // +1 Salvage Unit
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentSalvageBonus, 1, 10, gemName,
+                        "You have gained +1 Salvage Unit per item!");
+                    break;
+
+                // Skill Credit Gem (max 5)
+                case 11: // +1 Skill Credit
+                    success = TryApplySkillCreditGem(player, gemName);
+                    break;
+
+                // Benediction Gems (one-time purchase - weenie handles UseCreateItem to give reusable gem)
+                case 12: // Stamina Benediction
+                case 13: // Mana Benediction
+                    var trackingProp = gemType == 12 ? PropertyInt.EnlightenmentStaminaBenediction : PropertyInt.EnlightenmentManaBenediction;
+                    var benedictionName = gemType == 12 ? "Stamina Benediction" : "Mana Benediction";
+                    if (TryMarkBenedictionObtained(player, trackingProp, benedictionName))
+                    {
+                        player.PlayParticleEffect(PlayScript.EnchantUpBlue, player.Guid);
+                        // Return true to continue normal gem processing (UseCreateItem will give the reusable gem)
+                        return true;
+                    }
+                    return false; // Already has it, stop processing
+
+                default:
+                    player.SendMessage($"Unknown enlightenment gem type: {gemType}");
+                    return false;
+            }
+
+            if (success)
+            {
+                // Consume the gem and play effect
+                player.TryConsumeFromInventoryWithNetworking(this, 1);
+                player.PlayParticleEffect(PlayScript.EnchantUpBlue, player.Guid);
+            }
+
+            return false; // Stop normal processing, we handled everything
+        }
+
+        /// <summary>
+        /// Attempts to apply an enlightenment perk, checking max limits
+        /// </summary>
+        private bool TryApplyEnlightenmentPerk(Player player, PropertyInt property, int amount, int maxValue, string gemName, string successMessage)
+        {
+            var currentValue = player.GetProperty(property) ?? 0;
+
+            if (currentValue >= maxValue)
+            {
+                player.SendMessage($"You have already reached the maximum benefit from {gemName}.");
+                return false;
+            }
+
+            var newValue = Math.Min(currentValue + amount, maxValue);
+            player.SetProperty(property, newValue);
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, property, newValue));
+            player.SendMessage(successMessage, ChatMessageType.Broadcast);
+            player.SaveBiotaToDatabase();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Special handling for skill credit gem - adds to available skill credits
+        /// </summary>
+        private bool TryApplySkillCreditGem(Player player, string gemName)
+        {
+            var purchased = player.GetProperty(PropertyInt.EnlightenmentSkillCreditsPurchased) ?? 0;
+            const int maxPurchases = 5;
+
+            if (purchased >= maxPurchases)
+            {
+                player.SendMessage($"You have already purchased the maximum number of skill credits from enlightenment ({maxPurchases}).");
+                return false;
+            }
+
+            // Increment purchased count
+            player.SetProperty(PropertyInt.EnlightenmentSkillCreditsPurchased, purchased + 1);
+
+            // Add skill credit
+            player.AvailableSkillCredits = (player.AvailableSkillCredits ?? 0) + 1;
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.AvailableSkillCredits, player.AvailableSkillCredits ?? 0));
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.EnlightenmentSkillCreditsPurchased, purchased + 1));
+
+            player.SendMessage("You have gained +1 Skill Credit!", ChatMessageType.Broadcast);
+            player.SaveBiotaToDatabase();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Marks that the player has obtained a benediction gem (prevents re-purchase)
+        /// The actual reusable gem is created via the weenie's UseCreateItem property
+        /// </summary>
+        private bool TryMarkBenedictionObtained(Player player, PropertyInt trackingProperty, string benedictionName)
+        {
+            var alreadyHas = (player.GetProperty(trackingProperty) ?? 0) > 0;
+
+            if (alreadyHas)
+            {
+                player.SendMessage($"You have already received the {benedictionName}.");
+                return false;
+            }
+
+            // Mark as obtained so vendor won't sell another
+            player.SetProperty(trackingProperty, 1);
+            player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, trackingProperty, 1));
+            player.SaveBiotaToDatabase();
+
+            // Return true - let the normal gem UseCreateItem flow handle giving the reusable gem
+            return true;
         }
     }
 }

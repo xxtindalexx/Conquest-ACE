@@ -131,6 +131,9 @@ public partial class WorldDbContext : DbContext
     // CONQUEST: PK Dungeon configuration
     public virtual DbSet<PkDungeonLandblock> PkDungeonLandblocks { get; set; }
 
+    // CONQUEST: Exempt landblocks (IP restriction bypass)
+    public virtual DbSet<ExemptLandblock> ExemptLandblocks { get; set; }
+
     // CONQUEST: Pet palette randomization
     public virtual DbSet<PetPaletteOption> PetPaletteOptions { get; set; }
     public virtual DbSet<PetPaletteSubPalette> PetPaletteSubPalettes { get; set; }

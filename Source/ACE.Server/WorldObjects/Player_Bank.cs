@@ -2053,15 +2053,19 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Check daily transfer limit
             CheckAndResetLuminanceDailyLimits();
-            var transferLimit = PropertyManager.GetLong("luminance_transfer_daily_limit");
-            if (transferLimit > 0)
+            var baseTransferLimit = PropertyManager.GetLong("luminance_transfer_daily_limit");
+            // CONQUEST: Add enlightenment bonus (+20,000 per enlightenment level)
+            var enlightenmentBonus = Enlightenment * 20000;
+            var transferLimit = baseTransferLimit + enlightenmentBonus;
+            if (baseTransferLimit > 0)
             {
                 var alreadyTransferred = LuminanceTransferredToday ?? 0;
                 var remainingTransfer = transferLimit - alreadyTransferred;
 
                 if (Amount > remainingTransfer)
                 {
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Daily transfer limit: You can transfer {remainingTransfer:N0} more luminance today (limit: {transferLimit:N0}, already transferred: {alreadyTransferred:N0}). Resets at midnight EST.", ChatMessageType.System));
+                    var bonusText = enlightenmentBonus > 0 ? $" (+{enlightenmentBonus:N0} from ENL {Enlightenment})" : "";
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Daily transfer limit: You can transfer {remainingTransfer:N0} more luminance today (limit: {transferLimit:N0}{bonusText}, already transferred: {alreadyTransferred:N0}). Resets at midnight EST.", ChatMessageType.System));
                     return false;
                 }
             }
@@ -2074,22 +2078,25 @@ namespace ACE.Server.WorldObjects
             }
 
             // CONQUEST: Check receiver's daily limit
-            var receiveLimit = PropertyManager.GetLong("luminance_receive_daily_limit");
-            if (receiveLimit > 0)
+            var baseReceiveLimit = PropertyManager.GetLong("luminance_receive_daily_limit");
+            if (baseReceiveLimit > 0)
             {
                 long receiverAlreadyReceived = 0;
                 long receiverLastResetTime = 0;
+                int receiverEnlightenment = 0;
 
                 if (tarplayer is OfflinePlayer offlineCheck)
                 {
                     receiverAlreadyReceived = offlineCheck.GetProperty(PropertyInt64.LuminanceReceivedToday) ?? 0;
                     receiverLastResetTime = offlineCheck.GetProperty(PropertyInt64.LastLuminanceResetTime) ?? 0;
+                    receiverEnlightenment = offlineCheck.GetProperty(PropertyInt.Enlightenment) ?? 0;
                 }
                 else if (tarplayer is Player onlineCheck)
                 {
                     // Reset receiver's limits if needed
                     onlineCheck.CheckAndResetLuminanceDailyLimits();
                     receiverAlreadyReceived = onlineCheck.LuminanceReceivedToday ?? 0;
+                    receiverEnlightenment = onlineCheck.Enlightenment;
                 }
 
                 // Check if receiver's last reset needs updating (for offline players)
@@ -2098,10 +2105,15 @@ namespace ACE.Server.WorldObjects
                     receiverAlreadyReceived = 0; // Reset because it's a new day
                 }
 
+                // CONQUEST: Add enlightenment bonus (+20,000 per enlightenment level)
+                var receiverEnlightenmentBonus = receiverEnlightenment * 20000;
+                var receiveLimit = baseReceiveLimit + receiverEnlightenmentBonus;
+
                 var remainingReceive = receiveLimit - receiverAlreadyReceived;
                 if (Amount > remainingReceive)
                 {
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"{tarplayer.Name} can only receive {remainingReceive:N0} more luminance today (limit: {receiveLimit:N0}, already received: {receiverAlreadyReceived:N0}). Resets at midnight EST.", ChatMessageType.System));
+                    var bonusText = receiverEnlightenmentBonus > 0 ? $" (+{receiverEnlightenmentBonus:N0} from ENL {receiverEnlightenment})" : "";
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"{tarplayer.Name} can only receive {remainingReceive:N0} more luminance today (limit: {receiveLimit:N0}{bonusText}, already received: {receiverAlreadyReceived:N0}). Resets at midnight EST.", ChatMessageType.System));
                     return false;
                 }
             }

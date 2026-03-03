@@ -472,6 +472,11 @@ namespace ACE.Database
             return cachedEvents.TryRemove(eventName.ToLower(), out _);
         }
 
+        public void ClearAllCachedEvents()
+        {
+            cachedEvents.Clear();
+        }
+
 
         // =====================================
         // Event

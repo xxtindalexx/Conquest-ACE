@@ -176,7 +176,11 @@ namespace ACE.Server.WorldObjects
                 case DamageType.Electric:
                     return GetProperty(PropertyFloat.ArmorModVsElectric) ?? 1.0f;
                 case DamageType.Nether:
-                    return GetProperty(PropertyFloat.ArmorModVsNether) ?? 1.0f;
+                    // CONQUEST: Use configurable default for non-player creatures
+                    var netherArmorMod = GetProperty(PropertyFloat.ArmorModVsNether);
+                    if (netherArmorMod.HasValue)
+                        return netherArmorMod.Value;
+                    return !(this is Player) ? PropertyManager.GetDouble("creature_default_armor_mod_vs_nether") : 1.0f;
                 default:
                     return 1.0f;
             }
@@ -201,7 +205,9 @@ namespace ACE.Server.WorldObjects
                 case ResistanceType.Electric:
                     return (ResistElectric ?? 1.0) * GetResistanceMod(DamageType.Electric, attacker, weapon, weaponResistanceMod);
                 case ResistanceType.Nether:
-                    return (ResistNether ?? 1.0) * GetResistanceMod(DamageType.Nether, attacker, weapon, weaponResistanceMod);
+                    // CONQUEST: Use configurable default for non-player creatures
+                    var netherResist = ResistNether ?? (!(this is Player) ? PropertyManager.GetDouble("creature_default_resist_nether") : 1.0);
+                    return netherResist * GetResistanceMod(DamageType.Nether, attacker, weapon, weaponResistanceMod);
                 case ResistanceType.HealthBoost:
                     return (ResistHealthBoost ?? 1.0) * GetHealingRatingMod();
                 case ResistanceType.HealthDrain:
@@ -238,7 +244,8 @@ namespace ACE.Server.WorldObjects
         public double ResistColdMod => (ResistCold ?? 1.0) * EnchantmentManager.GetResistanceMod(DamageType.Cold);
         public double ResistAcidMod => (ResistAcid ?? 1.0) * EnchantmentManager.GetResistanceMod(DamageType.Acid);
         public double ResistElectricMod => (ResistElectric ?? 1.0) * EnchantmentManager.GetResistanceMod(DamageType.Electric);
-        public double ResistNetherMod => (ResistNether ?? 1.0) * EnchantmentManager.GetResistanceMod(DamageType.Nether);
+        // CONQUEST: Use configurable default for non-player creatures
+        public double ResistNetherMod => (ResistNether ?? (!(this is Player) ? PropertyManager.GetDouble("creature_default_resist_nether") : 1.0)) * EnchantmentManager.GetResistanceMod(DamageType.Nether);
 
         public bool NoCorpse
         {

@@ -263,6 +263,9 @@ namespace ACE.Server
             log.Info("Loading PK dungeon configurations...");
             ACE.Server.Entity.Landblock.LoadPKDungeonsFromDatabase();
 
+            log.Info("Loading exempt landblocks...");
+            ACE.Server.Entity.Landblock.LoadExemptLandblocksFromDatabase();
+
             log.Info("Loading landblock names...");
             ACE.Server.Entity.Landblock.LoadLandblockNamesFromDatabase();
 
@@ -343,6 +346,9 @@ namespace ACE.Server
 
             log.Info("Initializing PetPaletteManager...");
             Managers.PetPaletteManager.Initialize();
+
+            log.Info("Initializing ChampionManager...");
+            ChampionManager.Initialize();
 
             // Free up memory before the server goes online. This can free up 6 GB+ on larger servers.
             log.Info("Forcing .net garbage collection...");

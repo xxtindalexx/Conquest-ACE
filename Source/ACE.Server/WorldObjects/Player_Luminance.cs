@@ -17,13 +17,28 @@ namespace ACE.Server.WorldObjects
             if (IsOlthoiPlayer || IsMule)
                 return;
 
-            // following the same model as Player_Xp
+            // Apply server modifiers
             var questModifier = PropertyManager.GetDouble("quest_lum_modifier");
             var modifier = PropertyManager.GetDouble("luminance_modifier");
             if (xpType == XpType.Quest)
                 modifier *= questModifier;
 
-            // should this be passed upstream to fellowship?
+            // CONQUEST: Fellowship Luminance Sharing - share BASE amount only (no personal bonuses)
+            // This matches XP behavior - each member applies their own bonuses to their share
+            if (Fellowship != null && Fellowship.ShareXP && shareType.HasFlag(ShareType.Fellowship))
+            {
+                // Apply only server modifiers, not personal bonuses
+                var baseAmount = (long)Math.Round(amount * modifier);
+
+                if (baseAmount < 0)
+                    return;
+
+                // Share the base amount - each member will apply their own bonuses
+                GrantLuminance(baseAmount, xpType, shareType);
+                return;
+            }
+
+            // Solo player or non-shareable luminance - apply personal bonuses
             var enchantment = GetXPAndLuminanceModifier(xpType);
 
             var m_amount = (long)Math.Round(amount * enchantment * modifier);
@@ -44,9 +59,17 @@ namespace ACE.Server.WorldObjects
                 // this will divy up the luminance, and re-call this function
                 // with ShareType.Fellowship removed
                 Fellowship.SplitLuminance((ulong)amount, xpType, shareType, this);
+                return;
             }
-            else
-                AddLuminance(amount, xpType, shareType);
+
+            // CONQUEST: Apply personal bonuses to fellowship share
+            // When receiving a fellowship share, apply the recipient's personal bonuses
+            // (enchantment) but NOT server modifiers (already applied)
+            var enchantment = GetXPAndLuminanceModifier(xpType);
+
+            var bonusedAmount = (long)Math.Round(amount * enchantment);
+
+            AddLuminance(bonusedAmount, xpType, shareType);
         }
 
         private void AddLuminance(long amount, XpType xpType, ShareType shareType)

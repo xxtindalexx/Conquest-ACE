@@ -27,7 +27,8 @@ namespace ACE.Server.Factories
             InvalidSkillRequested,
             FailedToTrainSkill,
             FailedToSpecializeSkill,
-            ClientServerSkillsMismatch
+            ClientServerSkillsMismatch,
+            SummoningRequiresVoidMagic
         }
 
         public static CreateResult Create(CharacterCreateInfo characterCreateInfo, Weenie weenie, ObjectGuid guid, uint accountId, WeenieType weenieType, out Player player)
@@ -165,6 +166,19 @@ namespace ACE.Server.Factories
 
                 if (characterCreateInfo.SkillAdvancementClasses.Count != 55)
                     return CreateResult.ClientServerSkillsMismatch;
+
+                // CONQUEST: Check if Summoning is being trained without Void Magic
+                var summoningIndex = (int)Skill.Summoning;
+                var voidMagicIndex = (int)Skill.VoidMagic;
+                if (summoningIndex < characterCreateInfo.SkillAdvancementClasses.Count &&
+                    voidMagicIndex < characterCreateInfo.SkillAdvancementClasses.Count)
+                {
+                    var summoningSac = characterCreateInfo.SkillAdvancementClasses[summoningIndex];
+                    var voidMagicSac = characterCreateInfo.SkillAdvancementClasses[voidMagicIndex];
+
+                    if (summoningSac >= SkillAdvancementClass.Trained && voidMagicSac < SkillAdvancementClass.Trained)
+                        return CreateResult.SummoningRequiresVoidMagic;
+                }
 
                 for (int i = 0; i < characterCreateInfo.SkillAdvancementClasses.Count; i++)
                 {

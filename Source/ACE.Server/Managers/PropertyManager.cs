@@ -510,6 +510,8 @@ namespace ACE.Server.Managers
                 ("allow_negative_dispel_resist", new Property<bool>(true, "enables retail behavior where #-# negative dispels can be resisted")),
                 ("allow_negative_rating_curve", new Property<bool>(true, "enables retail behavior where negative DRR from void dots didn't switch to the reverse rating formula, resulting in a possibly unintended curve that quickly ramps up as -rating goes down, eventually approaching infinity / divide by 0 for -100 rating. less than -100 rating would produce negative numbers.")),
                 ("allow_pkl_bump", new Property<bool>(true, "enables retail behavior where /pkl checks for entry collisions, bumping the player position over if standing on another PKLite. This effectively enables /pkl door skipping from retail")),
+                ("anti_blink_door_detection", new Property<bool>(false, "CONQUEST: If enabled, detects and prevents players from passing through closed doors (anti-Blink exploit). Players will be rubber - banded back and logged.")),
+                ("anti_blink_debug", new Property<bool>(false, "CONQUEST: If enabled, logs debug information for anti-blink door detection.")),
                 ("allow_summoning_killtask_multicredit", new Property<bool>(true, "enables retail behavior where a summoner can get multiple killtask credits from a monster")),
                 ("assess_creature_mod", new Property<bool>(false, "(non-retail function) If enabled, re-enables former skill formula, when assess creature skill is not trained or spec'ed")),
                 ("attribute_augmentation_safety_cap", new Property<bool>(true, "if TRUE players are not able to use attribute augmentations if the innate value of the target attribute is >= 96. All normal restrictions to these augmentations still apply.")),
@@ -667,6 +669,7 @@ namespace ACE.Server.Managers
         public static readonly ReadOnlyDictionary<string, Property<double>> DefaultDoubleProperties =
             DictOf(
 
+                ("anti_blink_detection_radius", new Property<double>(0.5, "CONQUEST: Detection radius in meters for anti-blink door detection. Lower = must be closer to door to trigger. Default 0.5m.")),
                 ("cantrip_drop_rate", new Property<double>(1.0, "Scales the chance for cantrips to drop in each tier. Defaults to 1.0, as per end of retail")),
                 ("cloak_cooldown_seconds", new Property<double>(5.0, "The number of seconds between possible cloak procs.")),
                 ("cloak_max_proc_base", new Property<double>(0.25, "The max proc chance of a cloak.")),
@@ -721,7 +724,11 @@ namespace ACE.Server.Managers
                 ("mystery_egg_weight_common", new Property<double>(85.25, "Rarity weight for Common eggs. All weights are relative (don't need to sum to 100).")),
                 ("mystery_egg_weight_rare", new Property<double>(13.0, "Rarity weight for Rare eggs.")),
                 ("mystery_egg_weight_legendary", new Property<double>(1.5, "Rarity weight for Legendary eggs.")),
-                ("mystery_egg_weight_mythic", new Property<double>(0.25, "Rarity weight for Mythic eggs."))
+                ("mystery_egg_weight_mythic", new Property<double>(0.25, "Rarity weight for Mythic eggs.")),
+
+                // CONQUEST: Default Nether Resistance for Creatures
+                ("creature_default_resist_nether", new Property<double>(1.0, "Default ResistNether value for creatures without it defined. 1.0 = no resistance, 0.5 = 50% resistance, 2.0 = 200% damage (vulnerability)")),
+                ("creature_default_armor_mod_vs_nether", new Property<double>(1.0, "Default ArmorModVsNether value for creatures without it defined. 1.0 = normal damage, 0.5 = 50% damage, 2.0 = 200% damage"))
 
                 );
 
@@ -735,7 +742,8 @@ namespace ACE.Server.Managers
                 ("popup_welcome_olthoi", new Property<string>("Welcome to the Olthoi hive! Be sure to talk to the Olthoi Queen to receive the Olthoi protections granted by the energies of the hive.", "Welcome message displayed on the first login for an Olthoi Player")),
                 ("popup_motd", new Property<string>("", "Popup message of the day")),
                 ("server_motd", new Property<string>("", "Server message of the day")),
-                ("proxycheck_api_key", new Property<string>("", "API key for proxycheck.io VPN detection service. Get a free key at https://proxycheck.io/"))
+                ("proxycheck_api_key", new Property<string>("", "API key for proxycheck.io VPN detection service. Get a free key at https://proxycheck.io/")),
+                ("town_control_alleglist", new Property<string>("", "Comma-separated list of monarch IDs whitelisted for PK quest credit"))
                 );
     }
 }

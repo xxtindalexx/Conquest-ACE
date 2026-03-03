@@ -1396,14 +1396,14 @@ namespace ACE.Server.WorldObjects
             // This allows players to drop maps, store in house chests, and pick them back up without hitting the limit
             if (itemRootOwner is Corpse && containerRootOwner == this && item is TreasureMap treasureMap)
             {
-                // Check daily loot limit (2 maps per 24 hours)
+                // Check daily loot limit (2 maps per 20 hours)
                 var currentTime = (long)Time.GetUnixTime();
                 var lastLootResetTime = GetProperty(PropertyInt64.LastTreasureMapLootResetTime) ?? 0;
                 var mapsLootedToday = GetProperty(PropertyInt.TreasureMapsLootedToday) ?? 0;
 
-                // Check if 24 hours have passed since last reset
+                // Check if 20 hours have passed since last reset
                 var timeSinceLootReset = currentTime - lastLootResetTime;
-                if (timeSinceLootReset >= 86400) // 86400 seconds = 24 hours
+                if (timeSinceLootReset >= 72000) // 72000 seconds = 20 hours
                 {
                     // Reset counter
                     SetProperty(PropertyInt.TreasureMapsLootedToday, 0);
@@ -1414,7 +1414,7 @@ namespace ACE.Server.WorldObjects
                 // Check if player has reached daily loot limit
                 if (mapsLootedToday >= 2)
                 {
-                    var timeRemaining = 86400 - timeSinceLootReset;
+                    var timeRemaining = 72000 - timeSinceLootReset;
                     var hours = (int)(timeRemaining / 3600);
                     var minutes = (int)((timeRemaining % 3600) / 60);
                     var seconds = (int)(timeRemaining % 60);

@@ -1545,6 +1545,12 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastSoulFragmentCapNotifyTime); else SetProperty(PropertyInt64.LastSoulFragmentCapNotifyTime, value.Value); }
         }
 
+        public long? LastSoulRecoveryGemUseTime
+        {
+            get => GetProperty(PropertyInt64.LastSoulRecoveryGemUseTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastSoulRecoveryGemUseTime); else SetProperty(PropertyInt64.LastSoulRecoveryGemUseTime, value.Value); }
+        }
+
         public string CurrentRareEnchantmentIds
         {
             get => GetProperty(PropertyString.CurrentRareEnchantmentIds);

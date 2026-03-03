@@ -9,6 +9,7 @@ using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Entity.PKQuests;
+using ACE.Server.Entity.TownControl;
 using ACE.Server.Factories;
 using ACE.Server.Factories.Entity;
 using ACE.Server.Managers;
@@ -1923,6 +1924,51 @@ namespace ACE.Server.Command.Handlers
             else
             {
                 CommandHandlerHelper.WriteOutputInfo(session, $"Unable to gag a character named {playerName}, check the name and re-try the command.", ChatMessageType.Broadcast);
+            }
+        }
+
+        // ungag <char name>
+        [CommandHandler("ungag", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 1,
+            "Removes a gag from a character.",
+            "<char name>\n" +
+            "Example: /ungag Bibbity\n" +
+            "Example: /ungag \"Player Name\"")]
+        public static void HandleUnGag(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /ungag <char name>", ChatMessageType.Broadcast);
+                return;
+            }
+
+            // Parse player name (could be quoted for names with spaces)
+            string playerName;
+
+            if (parameters[0].StartsWith("\""))
+            {
+                // Find the closing quote
+                var nameBuilder = new System.Text.StringBuilder();
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    if (i > 0) nameBuilder.Append(" ");
+                    nameBuilder.Append(parameters[i]);
+                    if (parameters[i].EndsWith("\"") && (i > 0 || parameters[i].Length > 1))
+                        break;
+                }
+                playerName = nameBuilder.ToString().Trim('"');
+            }
+            else
+            {
+                playerName = parameters[0];
+            }
+
+            if (PlayerManager.UnGagPlayer(session.Player, playerName))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"{playerName} has been ungagged.", ChatMessageType.WorldBroadcast);
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Unable to ungag {playerName}. Player may not be gagged or character name not found.", ChatMessageType.Broadcast);
             }
         }
 
@@ -7923,6 +7969,458 @@ namespace ACE.Server.Command.Handlers
             }
 
             CommandHandlerHelper.WriteOutputInfo(session, sb.ToString());
+        }
+
+        // CONQUEST: Exempt Landblock Management Command
+        [CommandHandler("exemptlandblock", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Manage landblocks exempt from IP character restrictions.",
+            "add <landblock> [description] - Add a landblock to exemptions\n" +
+            "remove <landblock> - Remove a landblock from exemptions\n" +
+            "list - List all exempt landblocks\n" +
+            "check <landblock> - Check if a landblock is exempt\n" +
+            "reload - Reload exempt landblocks from database")]
+        public static void HandleExemptLandblock(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                ShowExemptLandblockUsage(session);
+                return;
+            }
+
+            var subcommand = parameters[0].ToLower();
+
+            switch (subcommand)
+            {
+                case "add":
+                    HandleExemptLandblockAdd(session, parameters);
+                    break;
+                case "remove":
+                    HandleExemptLandblockRemove(session, parameters);
+                    break;
+                case "list":
+                    HandleExemptLandblockList(session);
+                    break;
+                case "check":
+                    HandleExemptLandblockCheck(session, parameters);
+                    break;
+                case "reload":
+                    HandleExemptLandblockReload(session);
+                    break;
+                default:
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown subcommand: {subcommand}", ChatMessageType.Broadcast));
+                    ShowExemptLandblockUsage(session);
+                    break;
+            }
+        }
+
+        // Shorthand alias
+        [CommandHandler("elb", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Shorthand for /exemptlandblock",
+            "add <landblock> | remove <landblock> | list | check <landblock>")]
+        public static void HandleElb(Session session, params string[] parameters)
+        {
+            HandleExemptLandblock(session, parameters);
+        }
+
+        private static void ShowExemptLandblockUsage(Session session)
+        {
+            session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /exemptlandblock <add|remove|list|check|reload> or /elb", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> [description] - Add a landblock (e.g., 0x5756 Marketplace)", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> - Remove a landblock", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all exempt landblocks", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  check <landblock> - Check if a landblock is exempt", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  reload - Reload exempt landblocks from database", ChatMessageType.Help));
+        }
+
+        private static void HandleExemptLandblockReload(Session session)
+        {
+            try
+            {
+                Landblock.LoadExemptLandblocksFromDatabase();
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Reloaded {Landblock.connectionExemptLandblocks.Count} exempt landblock(s) from database.", ChatMessageType.Broadcast));
+                log.Info($"[ADMIN] {session.Player.Name} reloaded exempt landblocks from database");
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error reloading exempt landblocks: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error reloading exempt landblocks: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleExemptLandblockAdd(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /exemptlandblock add <landblock> [description]", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /exemptlandblock add 0x5756 Marketplace", ChatMessageType.Help));
+                return;
+            }
+
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Use hex format (0x5756) or decimal (22358)", ChatMessageType.Help));
+                return;
+            }
+
+            // Optional description
+            string description = parameters.Length > 2 ? string.Join(" ", parameters.Skip(2)) : null;
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var existing = context.ExemptLandblocks.Find(landblock);
+                    if (existing != null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is already in the exempt list.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var newEntry = new ACE.Database.Models.World.ExemptLandblock
+                    {
+                        Landblock = landblock,
+                        Description = description
+                    };
+
+                    context.ExemptLandblocks.Add(newEntry);
+                    context.SaveChanges();
+
+                    // Update in-memory cache
+                    Landblock.connectionExemptLandblocks.Add(landblock);
+                    if (!string.IsNullOrWhiteSpace(description))
+                        Landblock.exemptLandblockDescriptions[landblock] = description;
+
+                    var descText = string.IsNullOrWhiteSpace(description) ? "" : $" ({description})";
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Added landblock 0x{landblock:X4}{descText} to exempt list. ({Landblock.connectionExemptLandblocks.Count} total)", ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} added landblock 0x{landblock:X4}{descText} to connection exempt list (persisted)");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error adding exempt landblock: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error adding exempt landblock: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleExemptLandblockRemove(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /exemptlandblock remove <landblock>", ChatMessageType.Help));
+                return;
+            }
+
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var existing = context.ExemptLandblocks.Find(landblock);
+                    if (existing == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is not in the exempt list.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    context.ExemptLandblocks.Remove(existing);
+                    context.SaveChanges();
+
+                    // Update in-memory cache
+                    Landblock.connectionExemptLandblocks.Remove(landblock);
+                    Landblock.exemptLandblockDescriptions.Remove(landblock);
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Removed landblock 0x{landblock:X4} from exempt list. ({Landblock.connectionExemptLandblocks.Count} remaining)", ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} removed landblock 0x{landblock:X4} from connection exempt list (persisted)");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error removing exempt landblock: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error removing exempt landblock: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleExemptLandblockList(Session session)
+        {
+            var landblocks = Landblock.connectionExemptLandblocks.OrderBy(x => x).ToList();
+
+            if (landblocks.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("No landblocks are currently exempt.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"=== Exempt Landblocks ({landblocks.Count}) ===", ChatMessageType.Broadcast));
+
+            foreach (var lb in landblocks)
+            {
+                var desc = Landblock.exemptLandblockDescriptions.TryGetValue(lb, out var d) ? $" - {d}" : "";
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{lb:X4}{desc}", ChatMessageType.Broadcast));
+            }
+        }
+
+        private static void HandleExemptLandblockCheck(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /exemptlandblock check <landblock>", ChatMessageType.Help));
+                return;
+            }
+
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var isExempt = Landblock.connectionExemptLandblocks.Contains(landblock);
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is {(isExempt ? "EXEMPT" : "NOT exempt")} from IP restrictions.", ChatMessageType.Broadcast));
+        }
+
+        // CONQUEST: Allegiance Whitelist Management Command
+        [CommandHandler("allegwhitelist", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Manage whitelisted allegiances for PK quest credit.",
+            "add <monarchname> - Add an allegiance by monarch name\n" +
+            "remove <monarchname> - Remove an allegiance\n" +
+            "list - List all whitelisted allegiances\n" +
+            "addid <monarchid> - Add by character ID directly\n" +
+            "removeid <monarchid> - Remove by character ID directly")]
+        public static void HandleAllegWhitelist(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                ShowAllegWhitelistUsage(session);
+                return;
+            }
+
+            var subcommand = parameters[0].ToLower();
+
+            switch (subcommand)
+            {
+                case "add":
+                    HandleAllegWhitelistAdd(session, parameters);
+                    break;
+                case "remove":
+                    HandleAllegWhitelistRemove(session, parameters);
+                    break;
+                case "list":
+                    HandleAllegWhitelistList(session);
+                    break;
+                case "addid":
+                    HandleAllegWhitelistAddId(session, parameters);
+                    break;
+                case "removeid":
+                    HandleAllegWhitelistRemoveId(session, parameters);
+                    break;
+                default:
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown subcommand: {subcommand}", ChatMessageType.Broadcast));
+                    ShowAllegWhitelistUsage(session);
+                    break;
+            }
+        }
+
+        // Shorthand alias
+        [CommandHandler("awl", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Shorthand for /allegwhitelist",
+            "add <monarchname> | remove <monarchname> | list | addid <id> | removeid <id>")]
+        public static void HandleAwl(Session session, params string[] parameters)
+        {
+            HandleAllegWhitelist(session, parameters);
+        }
+
+        private static void ShowAllegWhitelistUsage(Session session)
+        {
+            session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist <add|remove|list|addid|removeid> or /awl", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  add <monarchname> - Add allegiance by monarch name", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  remove <monarchname> - Remove allegiance by monarch name", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all whitelisted allegiances", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  addid <monarchid> - Add by character ID directly", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  removeid <monarchid> - Remove by character ID directly", ChatMessageType.Help));
+        }
+
+        private static void HandleAllegWhitelistAdd(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist add <monarchname>", ChatMessageType.Help));
+                return;
+            }
+
+            var monarchName = string.Join(" ", parameters.Skip(1));
+
+            // Find the player by name
+            var monarch = PlayerManager.FindByName(monarchName);
+            if (monarch == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Player '{monarchName}' not found.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Check if they are a monarch
+            if (monarch.MonarchId != monarch.Guid.Full)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"'{monarchName}' is not a monarch. They are in {(monarch.MonarchId > 0 ? "another allegiance" : "no allegiance")}.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            AddMonarchToWhitelist(session, (int)monarch.Guid.Full, monarch.Name);
+        }
+
+        private static void HandleAllegWhitelistAddId(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist addid <monarchid>", ChatMessageType.Help));
+                return;
+            }
+
+            if (!int.TryParse(parameters[1], out int monarchId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid monarch ID: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Try to find the player name for display
+            var monarch = PlayerManager.FindByGuid((uint)monarchId);
+            var monarchName = monarch?.Name ?? $"ID:{monarchId}";
+
+            AddMonarchToWhitelist(session, monarchId, monarchName);
+        }
+
+        private static void AddMonarchToWhitelist(Session session, int monarchId, string monarchName)
+        {
+            var currentList = TownControlAllegiances.AllowedAllegianceList;
+
+            if (currentList.Contains(monarchId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Allegiance '{monarchName}' (ID: {monarchId}) is already whitelisted.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Build new comma-separated string
+            var newList = new List<int>(currentList) { monarchId };
+            var newListString = string.Join(",", newList);
+
+            // Update the property
+            PropertyManager.ModifyString("town_control_alleglist", newListString);
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Added allegiance '{monarchName}' (ID: {monarchId}) to whitelist. ({newList.Count} total)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} added allegiance '{monarchName}' (ID: {monarchId}) to PK quest whitelist");
+        }
+
+        private static void HandleAllegWhitelistRemove(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist remove <monarchname>", ChatMessageType.Help));
+                return;
+            }
+
+            var monarchName = string.Join(" ", parameters.Skip(1));
+
+            // Find the player by name
+            var monarch = PlayerManager.FindByName(monarchName);
+            if (monarch == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Player '{monarchName}' not found.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            RemoveMonarchFromWhitelist(session, (int)monarch.Guid.Full, monarch.Name);
+        }
+
+        private static void HandleAllegWhitelistRemoveId(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /allegwhitelist removeid <monarchid>", ChatMessageType.Help));
+                return;
+            }
+
+            if (!int.TryParse(parameters[1], out int monarchId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid monarch ID: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Try to find the player name for display
+            var monarch = PlayerManager.FindByGuid((uint)monarchId);
+            var monarchName = monarch?.Name ?? $"ID:{monarchId}";
+
+            RemoveMonarchFromWhitelist(session, monarchId, monarchName);
+        }
+
+        private static void RemoveMonarchFromWhitelist(Session session, int monarchId, string monarchName)
+        {
+            var currentList = TownControlAllegiances.AllowedAllegianceList;
+
+            if (!currentList.Contains(monarchId))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Allegiance '{monarchName}' (ID: {monarchId}) is not in the whitelist.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Build new comma-separated string without this ID
+            var newList = currentList.Where(id => id != monarchId).ToList();
+            var newListString = string.Join(",", newList);
+
+            // Update the property
+            PropertyManager.ModifyString("town_control_alleglist", newListString);
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Removed allegiance '{monarchName}' (ID: {monarchId}) from whitelist. ({newList.Count} remaining)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} removed allegiance '{monarchName}' (ID: {monarchId}) from PK quest whitelist");
+        }
+
+        private static void HandleAllegWhitelistList(Session session)
+        {
+            var currentList = TownControlAllegiances.AllowedAllegianceList;
+
+            if (currentList.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("No allegiances are currently whitelisted for PK quests.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Use /allegwhitelist add <monarchname> to add allegiances.", ChatMessageType.Help));
+                return;
+            }
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"=== Whitelisted Allegiances ({currentList.Count}) ===", ChatMessageType.Broadcast));
+
+            foreach (var monarchId in currentList)
+            {
+                var monarch = PlayerManager.FindByGuid((uint)monarchId);
+                var monarchName = monarch?.Name ?? "Unknown";
+                var memberCount = monarch?.AllegianceNode?.Allegiance?.Members?.Count ?? 0;
+
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  {monarchName} (ID: {monarchId}) - {memberCount} members", ChatMessageType.Broadcast));
+            }
+        }
+
+        [CommandHandler("clearevent", AccessLevel.Developer, CommandHandlerFlag.None, 1, "Reloads an event from database", "<eventname>")]
+        public static void HandleEventClear(Session session, params string[] parameters)
+        {
+            var eventName = parameters[0];
+            var reloaded = Managers.EventManager.ReloadEvent(eventName);
+            if (reloaded)
+            {
+                var state = Managers.EventManager.GetEventStatus(eventName);
+                CommandHandlerHelper.WriteOutputInfo(session, $"Event '{eventName}' reloaded from database (State: {state})");
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared event cache for '{parameters[0]}'.");
+            }
+            else
+                CommandHandlerHelper.WriteOutputInfo(session, $"Event '{eventName}' not found in database");
+        }
+
+        [CommandHandler("clearallevents", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Reloads all events from database")]
+        public static void HandleEventClearAll(Session session, params string[] parameters)
+        {
+            Managers.EventManager.ReloadAllEvents();
+            CommandHandlerHelper.WriteOutputInfo(session, $"All events reloaded from database ({Managers.EventManager.Events.Count} events)");
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared all event caches.");
         }
     }
 }

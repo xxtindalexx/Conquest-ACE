@@ -11,7 +11,6 @@ using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Factories.Enum;
 
-
 namespace ACE.Server.Managers
 {
     /// <summary>

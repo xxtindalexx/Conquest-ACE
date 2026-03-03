@@ -141,6 +141,12 @@ namespace ACE.Server.Network.Handlers
                     return;
                 }
 
+                if (result == PlayerFactory.CreateResult.SummoningRequiresVoidMagic)
+                {
+                    session.Terminate(SessionTerminationReason.AccountBooted, new GameMessageBootAccount(" - Character creation failed: Summoning skill requires Void Magic to be trained first. Please train Void Magic before selecting Summoning."));
+                    return;
+                }
+
                 SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.Corrupt);
                 return;
             }

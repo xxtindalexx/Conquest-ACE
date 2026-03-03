@@ -479,6 +479,73 @@ namespace ACE.Server.WorldObjects
                             // verify z-pos
                             if (blockDist == 0 && LastGroundPos != null && newPosition.PositionZ - LastGroundPos.PositionZ > 10 && DateTime.UtcNow - LastJumpTime > TimeSpan.FromSeconds(1) && GetCreatureSkill(Skill.Jump).Current < 1000)
                                 verifyContact = true;
+
+                            // CONQUEST: Anti-Blink exploit detection - check for door collision
+                            if (PropertyManager.GetBool("anti_blink_door_detection") && CloakStatus != CloakStatus.On)
+                            {
+                                if (PropertyManager.GetBool("anti_blink_debug"))
+                                    log.Info($"[BLINK DEBUG] {Name} - CheckDoorCollision called. From {Location?.ToLOCString()} to {newPosition?.ToLOCString()}");
+
+                                var collidedDoor = CheckDoorCollision(Location, newPosition);
+                                if (collidedDoor != null)
+                                {
+                                    // Rate limit messages (but always rubber-band)
+                                    var now = DateTime.UtcNow;
+                                    var timeSinceLastDetection = (now - lastBlinkDetectionTime).TotalSeconds;
+                                    var messageCooldown = 5.0; // Only send messages every 5 seconds
+
+                                    if (timeSinceLastDetection >= messageCooldown)
+                                    {
+                                        lastBlinkDetectionTime = now;
+
+                                        // Log the exploit attempt
+                                        var doorName = collidedDoor.Name ?? "Unknown Door";
+                                        var doorLoc = collidedDoor.Location?.ToLOCString() ?? "Unknown";
+                                        log.Warn($"[BLINK EXPLOIT] Player '{Name}' (Account: {Account?.AccountName}) attempted to pass through closed door '{doorName}' at {doorLoc}. Movement rejected from {Location.ToLOCString()} to {newPosition.ToLOCString()}");
+
+                                        // Send to Discord audit channel if configured
+                                        var auditMsg = $"[BLINK EXPLOIT] Player '{Name}' (Account: {Account?.AccountName}) attempted to pass through closed door '{doorName}' at {doorLoc}";
+                                        DiscordChatManager.SendDiscordMessage(Name ?? "Unknown", auditMsg, ConfigManager.Config.Chat.TrackingAuditChannelId);
+
+                                        // CONQUEST: Send a troll message to the player
+                                        var trollMessages = new string[]
+                                        {
+                                            "Nice try, ghost boy. Doors still exist on the server.",
+                                            "The door whispers: 'I see you, cheater.'",
+                                            "Error 404: Your integrity not found.",
+                                            "Blink detected. Skill issue detected. Cope harder.",
+                                            "The server remembers what Blink made you forget... doors.",
+                                            "You thought you were slick? The door disagrees.",
+                                            "Breaking news: Local player discovers doors are solid. More at 11.",
+                                            "Did you really think that would work? Adorable.",
+                                            "The door says: 'Talk to the hand... I mean handle.'",
+                                            "Roses are red, violets are blue, nice exploit kid, but the server sees you.",
+                                            "Achievement Unlocked: Failed to Blink (Try opening doors like a normal person)",
+                                            "Your Blink subscription has been cancelled. Reason: We're not stupid.",
+                                            "Server-side collision says hello!",
+                                            "Imagine using exploits and STILL getting caught. Couldn't be you... oh wait.",
+                                            "This door is sponsored by anti-cheat. Unlike your gameplay."
+                                        };
+                                        var randomMsg = trollMessages[ThreadSafeRandom.Next(0, trollMessages.Length)];
+                                        Session.Network.EnqueueSend(new GameMessageSystemChat(randomMsg, ChatMessageType.Broadcast));
+                                    }
+
+                                    // Always rubber-band player back to last valid position
+                                    var rubberBandPos = lastValidDoorPosition ?? LastGroundPos ?? Location;
+                                    if (rubberBandPos != null)
+                                    {
+                                        Location = new ACE.Entity.Position(rubberBandPos);
+                                        Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
+                                        SendUpdatePosition();
+                                    }
+                                    return false;
+                                }
+                                else
+                                {
+                                    // Update last valid position if no collision
+                                    lastValidDoorPosition = new ACE.Entity.Position(Location);
+                                }
+                            }
                         }
 
                         var curCell = LScape.get_landcell(newPosition.Cell, newPosition.Variation);
@@ -589,6 +656,110 @@ namespace ACE.Server.WorldObjects
             0xD6990112,
             0xD599012C
         };
+
+        // CONQUEST: Anti-Blink exploit detection - tracks last valid position before potential door collision
+        private ACE.Entity.Position lastValidDoorPosition;
+
+        // CONQUEST: Rate limit for Blink detection messages (prevent spam)
+        private DateTime lastBlinkDetectionTime = DateTime.MinValue;
+
+        /// <summary>
+        /// CONQUEST: Checks if player movement crosses through a closed door (anti-Blink exploit)
+        /// Returns the door if collision detected, null otherwise
+        /// Uses two detection methods:
+        /// 1. Proximity-based: Player's new position is too close to a closed door
+        /// 2. Crossing-based: Player moved from one side of a door to the other
+        /// </summary>
+        private Door CheckDoorCollision(ACE.Entity.Position oldPosition, ACE.Entity.Position newPosition)
+        {
+            if (CurrentLandblock == null || oldPosition == null || newPosition == null)
+                return null;
+
+            var debugMode = PropertyManager.GetBool("anti_blink_debug");
+
+            // Get all world objects from the landblock and check for closed doors
+            var worldObjects = CurrentLandblock.GetWorldObjectsForPhysicsHandling();
+
+            int doorCount = 0;
+            int closedDoorCount = 0;
+
+            // Configurable detection radius (how close to a closed door triggers detection)
+            // Adjustable via server property: @setprop anti_blink_detection_radius 0.5
+            var detectionRadius = (float)PropertyManager.GetDouble("anti_blink_detection_radius", 0.5);
+
+            foreach (var wo in worldObjects)
+            {
+                if (wo is Door door)
+                {
+                    doorCount++;
+
+                    // Check if door is closed (not open and not ethereal)
+                    if (!door.IsOpen && door.Ethereal != true)
+                    {
+                        closedDoorCount++;
+
+                        if (door.Location == null)
+                            continue;
+
+                        var doorPos = door.Location;
+
+                        // Calculate distances
+                        var oldToDoor = doorPos.DistanceTo(oldPosition);
+                        var newToDoor = doorPos.DistanceTo(newPosition);
+
+                        // Skip doors that are far away from both positions
+                        if (oldToDoor > 10.0f && newToDoor > 10.0f)
+                            continue;
+
+                        if (debugMode)
+                        {
+                            log.Info($"[BLINK DEBUG] {Name} near door '{door.Name}': oldDist={oldToDoor:F2}, newDist={newToDoor:F2}");
+                        }
+
+                        // METHOD 1: Proximity detection
+                        // If player's NEW position is inside the door's collision zone
+                        // but OLD position was outside, they passed through
+                        if (newToDoor < detectionRadius && oldToDoor >= detectionRadius)
+                        {
+                            if (debugMode)
+                            {
+                                log.Info($"[BLINK DEBUG] {Name} DETECTED (proximity) - entered door '{door.Name}' zone. oldDist={oldToDoor:F2}, newDist={newToDoor:F2}");
+                            }
+                            return door;
+                        }
+
+                        // METHOD 2: Crossing detection
+                        // Player was on one side of door and is now on the other side
+                        // This catches cases where player jumps through or moves fast
+                        var oldToNew = oldPosition.DistanceTo(newPosition);
+                        if (oldToNew > 0.5f) // Only check if meaningful movement
+                        {
+                            var pathSum = oldToDoor + newToDoor;
+                            var pathDiff = Math.Abs(pathSum - oldToNew);
+
+                            // If door is approximately on the line between old and new positions
+                            // pathDiff close to 0 means door is directly on the path
+                            if (pathDiff < 2.0f && oldToDoor > detectionRadius && newToDoor > detectionRadius)
+                            {
+                                // Player crossed through the door zone
+                                if (debugMode)
+                                {
+                                    log.Info($"[BLINK DEBUG] {Name} DETECTED (crossing) - passed through door '{door.Name}'. pathDiff={pathDiff:F2}");
+                                }
+                                return door;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (debugMode && doorCount > 0)
+            {
+                log.Info($"[BLINK DEBUG] {Name} - Landblock has {doorCount} doors, {closedDoorCount} closed");
+            }
+
+            return null;
+        }
 
         public bool ValidateMovement(ACE.Entity.Position newPosition)
         {

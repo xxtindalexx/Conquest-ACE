@@ -110,6 +110,7 @@ namespace ACE.Server.Entity.Actions
         PlayerLocation_TeleportToMarketplace,
         PlayerLocation_TeleportToPKArena,
         PlayerLocation_TeleportToPKLArena,
+        PlayerLocation_TeleportToCorpse,
         PlayerLocation_TeleToPosition,
         PlayerLocation_RestorePet,
         PlayerInventory_AddObjectToLandblock,

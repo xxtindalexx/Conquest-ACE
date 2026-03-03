@@ -89,7 +89,28 @@ namespace ACE.Server.WorldObjects
 
             Location.LandblockId = new LandblockId(Location.GetCell());
 
-            Name = player.Name + "'s " + Name;
+            // CONQUEST: Check for custom pet name stored on the device
+            var customPetName = petDevice.GetProperty(PropertyString.ShortDesc);
+            if (!string.IsNullOrEmpty(customPetName))
+            {
+                // Include rarity in the name: "[Player]'s Legendary Pet [CustomName]"
+                var petRarity = petDevice.GetProperty(PropertyInt.PetRarity);
+                var rarityPrefix = petRarity switch
+                {
+                    1 => "Common",
+                    2 => "Rare",
+                    3 => "Legendary",
+                    4 => "Mythic",
+                    _ => ""
+                };
+
+                if (!string.IsNullOrEmpty(rarityPrefix))
+                    Name = player.Name + "'s " + rarityPrefix + " Pet " + customPetName;
+                else
+                    Name = player.Name + "'s Pet " + customPetName;
+            }
+            else
+                Name = player.Name + "'s " + Name;
 
             PetOwner = player.Guid.Full;
             P_PetOwner = player;

@@ -130,8 +130,18 @@ namespace ACE.Server.WorldObjects
             if (this is Player player && player.AugmentationFasterRegen > 0)
                 augMod += player.AugmentationFasterRegen;
 
+            // CONQUEST: Add enlightenment token-purchased benediction bonuses
+            var enlightenmentBenedictionMod = 1.0f;
+            if (this is Player enlPlayer)
+            {
+                if (vital.Vital == PropertyAttribute2nd.MaxStamina && (enlPlayer.GetProperty(PropertyInt.EnlightenmentStaminaBenediction) ?? 0) > 0)
+                    enlightenmentBenedictionMod = 1.20f; // +20% stamina regen
+                else if (vital.Vital == PropertyAttribute2nd.MaxMana && (enlPlayer.GetProperty(PropertyInt.EnlightenmentManaBenediction) ?? 0) > 0)
+                    enlightenmentBenedictionMod = 1.20f; // +20% mana regen
+            }
+
             // cap rate?
-            var currentTick = vital.RegenRate * attributeMod * stanceMod * enchantmentMod * augMod;
+            var currentTick = vital.RegenRate * attributeMod * stanceMod * enchantmentMod * augMod * enlightenmentBenedictionMod;
 
             // add in partially accumulated / rounded vitals from previous tick(s)
             var totalTick = currentTick + vital.PartialRegen;

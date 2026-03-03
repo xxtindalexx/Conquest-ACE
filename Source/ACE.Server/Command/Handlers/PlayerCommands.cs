@@ -1,5 +1,6 @@
 using ACE.Common;
 using ACE.Database;
+using ACE.DatLoader;
 using ACE.Database.Models.Auth;
 using ACE.Database.Models.Log;
 using ACE.Entity;
@@ -398,6 +399,12 @@ namespace ACE.Server.Command.Handlers
         [CommandHandler("myquests", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows your quest log")]
         public static void HandleQuests(Session session, params string[] parameters)
         {
+            if (!PropertyManager.GetBool("quest_info_enabled"))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("The command \"myquests\" is not currently enabled on this server.", ChatMessageType.Broadcast));
+                return;
+            }
+
             if (PropertyManager.GetBool("myquest_throttle_enabled"))
             {
                 var currentTime = DateTime.UtcNow;
@@ -410,12 +417,6 @@ namespace ACE.Server.Command.Handlers
             }
 
             session.LastMyQuestsCommandTime = DateTime.UtcNow;
-
-            if (!PropertyManager.GetBool("quest_info_enabled"))
-            {
-                session.Network.EnqueueSend(new GameMessageSystemChat("The command \"myquests\" is not currently enabled on this server.", ChatMessageType.Broadcast));
-                return;
-            }
 
             var quests = session.Player.QuestManager.GetQuests();
 
@@ -430,16 +431,21 @@ namespace ACE.Server.Command.Handlers
             {
                 var questName = QuestManager.GetQuestName(playerQuest.QuestName);
                 var quest = DatabaseManager.World.GetCachedQuest(questName);
-                if (quest == null)
+
+                string text;
+                if (quest != null)
                 {
-                    continue;
+                    var minDelta = quest.MinDelta;
+                    if (QuestManager.CanScaleQuestMinDelta(quest))
+                        minDelta = (uint)(quest.MinDelta * PropertyManager.GetDouble("quest_mindelta_rate"));
+
+                    text = $"{playerQuest.QuestName.ToLower()} - {playerQuest.NumTimesCompleted} solves ({playerQuest.LastTimeCompleted}) \"{quest.Message}\" {quest.MaxSolves} {minDelta}";
                 }
-
-                var minDelta = quest.MinDelta;
-                if (QuestManager.CanScaleQuestMinDelta(quest))
-                    minDelta = (uint)(quest.MinDelta * PropertyManager.GetDouble("quest_mindelta_rate"));
-
-                var text = $"{playerQuest.QuestName.ToLower()} - {playerQuest.NumTimesCompleted} solves ({playerQuest.LastTimeCompleted}) \"{quest.Message}\" {quest.MaxSolves} {minDelta}";
+                else
+                {
+                    // Quest not in world database - show basic info
+                    text = $"{playerQuest.QuestName.ToLower()} - {playerQuest.NumTimesCompleted} solves ({playerQuest.LastTimeCompleted})";
+                }
                 questMessages.Add(text);
             }
 
@@ -471,6 +477,124 @@ namespace ACE.Server.Command.Handlers
         public static void HandleAugmentations2(Session session, params string[] parameters)
         {
             HandleAugmentations(session, parameters);
+        }
+
+        /// <summary>
+        /// Rate limiter for /rerolltreasuremap command - 1 hour cooldown
+        /// </summary>
+        private static readonly TimeSpan RerollTreasureMapCooldown = TimeSpan.FromHours(1);
+
+        [CommandHandler("rerolltreasuremap", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Rerolls a treasure map to your current location if you're within range but can't reach the dig spot")]
+        public static void HandleRerollTreasureMap(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            // Check cooldown
+            var currentTime = DateTime.UtcNow;
+            var timeSinceLastUse = currentTime - session.LastRerollTreasureMapCommandTime;
+            if (timeSinceLastUse < RerollTreasureMapCooldown)
+            {
+                var remainingTime = RerollTreasureMapCooldown - timeSinceLastUse;
+                var minutes = (int)remainingTime.TotalMinutes;
+                var seconds = remainingTime.Seconds;
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[Treasure Map] You must wait {minutes} minute(s) and {seconds} second(s) before using this command again.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Check if player is indoors/in dungeon
+            if (player.Location.Indoors)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] You cannot use this command while indoors or in a dungeon.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Get the last appraised (inspected) object
+            var lastAppraised = CommandHandlerHelper.GetLastAppraisedObject(session);
+            if (lastAppraised == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] You must inspect a treasure map first before using this command.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Verify it's a treasure map with coordinates
+            if (!(lastAppraised is TreasureMap treasureMap))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] The inspected item is not a treasure map.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Check that the treasure map has valid coordinates
+            if (!treasureMap.NSCoordinates.HasValue || !treasureMap.EWCoordinates.HasValue)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] This treasure map does not have valid coordinates.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Verify the treasure map is in the player's inventory
+            if (treasureMap.ContainerId != player.Guid.Full)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] The treasure map must be in your inventory.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Get the player's current map coordinates
+            var playerMapCoords = player.Location.GetMapCoords();
+            if (playerMapCoords == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] Cannot determine your current map coordinates.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Map coordinates: X = EW (longitude), Y = NS (latitude)
+            float playerNS = playerMapCoords.Value.Y;
+            float playerEW = playerMapCoords.Value.X;
+            float mapNS = (float)treasureMap.NSCoordinates.Value;
+            float mapEW = (float)treasureMap.EWCoordinates.Value;
+
+            // Calculate distance between player and treasure map coordinates
+            float distanceNS = Math.Abs(playerNS - mapNS);
+            float distanceEW = Math.Abs(playerEW - mapEW);
+            float totalDistance = (float)Math.Sqrt(distanceNS * distanceNS + distanceEW * distanceEW);
+
+            // Maximum allowed distance: 2 map units (clicks)
+            float maxDistance = 2.0f;
+
+            if (totalDistance > maxDistance)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[Treasure Map] You must be within {maxDistance:F1} map units of the treasure location. Current distance: {totalDistance:F2} map units.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Verify the player's current location is valid for treasure
+            if (!TreasureMap.AreCoordinatesValid(playerNS, playerEW))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] Your current location is not suitable for treasure (water, building, steep terrain, etc.).", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Update the treasure map coordinates to the player's current location
+            var oldNS = mapNS;
+            var oldEW = mapEW;
+            treasureMap.NSCoordinates = playerNS;
+            treasureMap.EWCoordinates = playerEW;
+
+            // Update the cooldown
+            session.LastRerollTreasureMapCommandTime = currentTime;
+
+            // Format coordinates for display
+            string oldNSStr = oldNS >= 0 ? $"{oldNS:F1}N" : $"{Math.Abs(oldNS):F1}S";
+            string oldEWStr = oldEW >= 0 ? $"{oldEW:F1}E" : $"{Math.Abs(oldEW):F1}W";
+            string newNSStr = playerNS >= 0 ? $"{playerNS:F1}N" : $"{Math.Abs(playerNS):F1}S";
+            string newEWStr = playerEW >= 0 ? $"{playerEW:F1}E" : $"{Math.Abs(playerEW):F1}W";
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"[Treasure Map] Coordinates updated from {oldNSStr}, {oldEWStr} to {newNSStr}, {newEWStr}.", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] You can now dig for treasure at your current location!", ChatMessageType.Broadcast));
+        }
+
+        [CommandHandler("rrtm", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Rerolls a treasure map to your current location (alias for /rerolltreasuremap)")]
+        public static void HandleRerollTreasureMapAlias(Session session, params string[] parameters)
+        {
+            HandleRerollTreasureMap(session, parameters);
         }
 
         [CommandHandler("qb", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your Quest Bonus count")]
@@ -560,15 +684,55 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
+        [CommandHandler("petdmg", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Toggle visibility of damage dealt by your summoned pets")]
+        public static void HandlePetDamage(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            // Toggle the setting
+            var currentSetting = player.GetProperty(PropertyBool.ShowPetDamage) ?? false;
+            player.SetProperty(PropertyBool.ShowPetDamage, !currentSetting);
+
+            var newSetting = player.GetProperty(PropertyBool.ShowPetDamage) ?? false;
+            var status = newSetting ? "ENABLED" : "DISABLED";
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Pet Damage Display is now {status}.", ChatMessageType.Broadcast));
+            if (newSetting)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  - You will now see damage dealt by your summoned pets", ChatMessageType.Broadcast));
+            }
+        }
+
         [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
         public static void HandleEnlighten(Session session, params string[] parameters)
         {
             var player = session.Player;
 
-            if (!Entity.Enlightenment.VerifyRequirements(player))
-                return; // Error messages sent by VerifyRequirements
+            // Calculate costs for confirmation message
+            var targetEnlightenment = player.Enlightenment + 1;
+            long baseLumCost = 1_000_000;
+            long reqLum = targetEnlightenment * baseLumCost;
+            long coinsRequired = targetEnlightenment * 100;
 
-            Entity.Enlightenment.HandleEnlightenment(player);
+            // Build confirmation message
+            var confirmMessage = $"Enlightening to level {targetEnlightenment} will cost:\n" +
+                                 $"- {reqLum:N0} Luminance\n" +
+                                 $"- {coinsRequired:N0} Conquest Coins\n\n" +
+                                 $"Are you sure you want to enlighten?";
+
+            // Show confirmation dialog
+            if (!player.ConfirmationManager.EnqueueSend(
+                new Confirmation_Custom(player.Guid, () => {
+                    // This callback executes when player clicks "Yes"
+                    if (!Entity.Enlightenment.VerifyRequirements(player))
+                        return; // Error messages sent by VerifyRequirements
+
+                    Entity.Enlightenment.HandleEnlightenment(player);
+                }),
+                confirmMessage))
+            {
+                player.SendWeenieError(WeenieError.ConfirmationInProgress);
+            }
         }
 
         [CommandHandler("enlighten", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
@@ -728,9 +892,11 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit pyreals 100 (or /b d p 100) - Deposit specific amount", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw pyreals 100 (or /b w p 100) - Withdraw 100 pyreals", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw notes 5 (or /b w n 5) - Withdraw 5 trade notes (250k each)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw notes D 10 (or /b w n d 10) - Withdraw 10 D notes (50k each)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  Note denominations: I=100, V=500, X=1k, L=5k, C=10k, D=50k, M=100k, MM=200k, MMD=250k", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank transfer pyreals 100 CharName - Transfer 100 pyreals to CharName", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank balance (or /b b) - View your bank balance", ChatMessageType.System));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s), Eventtokens (e), Notes (n)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s), Eventtokens (e), Notes (n), LegendaryKeys (k)", ChatMessageType.System));
                 return;
             }
 
@@ -767,16 +933,25 @@ namespace ACE.Server.Command.Handlers
                 else if (parameters[1] == "ConquestCoins" || parameters[1] == "c") iType = 4;
                 else if (parameters[1] == "SoulFragments" || parameters[1] == "s") iType = 5;
                 else if (parameters[1] == "notes" || parameters[1] == "n") iType = 6;
+                else if (parameters[1] == "LegendaryKeys" || parameters[1] == "k") iType = 7;
             }
 
             if (parameters.Length == 3 || parameters.Length == 4)
             {
+                // For trade notes (iType 6), parameters[2] might be a denomination letter instead of a number
+                // e.g., /b w n d 10 where "d" is the denomination and "10" is the amount
                 if (!long.TryParse(parameters[2], out amount))
                 {
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid amount. Please provide a number.", ChatMessageType.System));
-                    return;
+                    // Only error if this isn't a trade note with denomination syntax
+                    if (iType != 6 || parameters.Length < 4)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid amount. Please provide a number.", ChatMessageType.System));
+                        return;
+                    }
+                    // For trade notes with denomination, amount will be parsed later from parameters[3]
+                    amount = 0;
                 }
-                if (amount <= 0)
+                if (amount < 0)
                 {
                     session.Network.EnqueueSend(new GameMessageSystemChat($"Amount must be positive.", ChatMessageType.System));
                     return;
@@ -841,6 +1016,9 @@ namespace ACE.Server.Command.Handlers
                         case 5: // Soul Fragments
                             session.Player.DepositSoulFragments();
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all soul fragments!", ChatMessageType.System));
+                            break;
+                        case 7: // Legendary Keys
+                            session.Player.DepositLegendaryKeys();
                             break;
                     }
                 }
@@ -922,31 +1100,66 @@ namespace ACE.Server.Command.Handlers
                         session.Player.WithdrawSoulFragments(amount);
                         break;
                     case 6: // Withdraw trade notes
-                        const int TradeNoteWeenieId = 20630;
-                        const long TradeNoteValue = 250000;
-                        const int TradeNoteMaxStack = 250;
-
-                        if (amount <= 0)
+                        // Trade note denominations: /b w n <denomination> <amount> OR /b w n <amount> (defaults to 250k)
+                        // Denominations: I=100, V=500, X=1000, L=5000, C=10000, CL=15000, CC=20000, CCL=25000, D=50000, DCCL=75000, M=100000, MD=150000, MM=200000, MMD=250000
+                        var tradeNoteDenominations = new Dictionary<string, (uint weenieId, long value, string name)>(StringComparer.OrdinalIgnoreCase)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify number of trade notes to withdraw.", ChatMessageType.System));
+                            { "I", (2621, 100, "100 pyreal") },
+                            { "V", (2622, 500, "500 pyreal") },
+                            { "X", (2623, 1000, "1,000 pyreal") },
+                            { "L", (2624, 5000, "5,000 pyreal") },
+                            { "C", (2625, 10000, "10,000 pyreal") },
+                            { "CL", (7374, 15000, "15,000 pyreal") },
+                            { "CC", (7375, 20000, "20,000 pyreal") },
+                            { "CCL", (7376, 25000, "25,000 pyreal") },
+                            { "D", (2626, 50000, "50,000 pyreal") },
+                            { "DCCL", (7377, 75000, "75,000 pyreal") },
+                            { "M", (2627, 100000, "100,000 pyreal") },
+                            { "MD", (20628, 150000, "150,000 pyreal") },
+                            { "MM", (20629, 200000, "200,000 pyreal") },
+                            { "MMD", (20630, 250000, "250,000 pyreal") }
+                        };
+
+                        uint noteWeenieId = 20630; // Default to 250k notes
+                        long noteValue = 250000;
+                        string noteName = "250,000 pyreal";
+                        long noteAmount = amount;
+
+                        // Check if parameters[2] is a denomination rather than a number
+                        if (parameters.Length >= 4 && tradeNoteDenominations.TryGetValue(parameters[2].ToUpper(), out var denomInfo))
+                        {
+                            noteWeenieId = denomInfo.weenieId;
+                            noteValue = denomInfo.value;
+                            noteName = denomInfo.name;
+                            // parameters[3] should be the amount
+                            if (!long.TryParse(parameters[3], out noteAmount) || noteAmount <= 0)
+                            {
+                                session.Network.EnqueueSend(new GameMessageSystemChat($"Specify number of {noteName} trade notes to withdraw.", ChatMessageType.System));
+                                break;
+                            }
+                        }
+                        else if (noteAmount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: /b w n <amount> OR /b w n <denom> <amount>\nDenominations: I, V, X, L, C, CL, CC, CCL, D, DCCL, M, MD, MM, MMD", ChatMessageType.System));
                             break;
                         }
 
-                        long totalPyrealCost = amount * TradeNoteValue;
+                        const int TradeNoteMaxStack = 250;
+                        long totalPyrealCost = noteAmount * noteValue;
                         if (session.Player.BankedPyreals == null || session.Player.BankedPyreals < totalPyrealCost)
                         {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked pyreals. You need {totalPyrealCost:N0} pyreals for {amount:N0} trade notes.", ChatMessageType.System));
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked pyreals. You need {totalPyrealCost:N0} pyreals for {noteAmount:N0} {noteName} trade notes.", ChatMessageType.System));
                             break;
                         }
 
                         // Calculate how many stacks we need
-                        long notesRemaining = amount;
+                        long notesRemaining = noteAmount;
                         int notesCreated = 0;
 
                         while (notesRemaining > 0)
                         {
                             int stackSize = (int)Math.Min(notesRemaining, TradeNoteMaxStack);
-                            var tradeNote = WorldObjectFactory.CreateNewWorldObject((uint)TradeNoteWeenieId);
+                            var tradeNote = WorldObjectFactory.CreateNewWorldObject(noteWeenieId);
                             if (tradeNote == null)
                             {
                                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Error creating trade notes.", ChatMessageType.System));
@@ -968,13 +1181,26 @@ namespace ACE.Server.Command.Handlers
 
                         if (notesCreated > 0)
                         {
-                            long pyrealCost = (long)notesCreated * TradeNoteValue;
+                            long pyrealCost = (long)notesCreated * noteValue;
                             session.Player.BankedPyreals -= pyrealCost;
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Withdrew {notesCreated:N0} trade notes ({pyrealCost:N0} pyreals). Balance: {session.Player.BankedPyreals:N0}", ChatMessageType.System));
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Withdrew {notesCreated:N0} {noteName} trade notes ({pyrealCost:N0} pyreals). Balance: {session.Player.BankedPyreals:N0}", ChatMessageType.System));
 
                             // Log the transaction
-                            TransferLogger.LogBankTransfer(session.Player, session.Player.Name, $"Trade Note (250k)", notesCreated, "Trade Note Withdrawal");
+                            TransferLogger.LogBankTransfer(session.Player, session.Player.Name, $"Trade Note ({noteName})", notesCreated, "Trade Note Withdrawal");
                         }
+                        break;
+                    case 7: // Withdraw legendary keys
+                        if (session.Player.BankedLegendaryKeys != null && amount > session.Player.BankedLegendaryKeys)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked legendary keys.", ChatMessageType.System));
+                            break;
+                        }
+                        if (amount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to withdraw.", ChatMessageType.System));
+                            break;
+                        }
+                        session.Player.WithdrawLegendaryKeys(amount);
                         break;
                 }
             }
@@ -1038,6 +1264,22 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Event Tokens to {transferTargetName}", ChatMessageType.System));
                         }
                         break;
+                    case 7: // Transfer legendary keys
+                        if (session.Player.BankedLegendaryKeys != null && amount >= session.Player.BankedLegendaryKeys)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked legendary keys to transfer.", ChatMessageType.System));
+                            break;
+                        }
+                        if (amount <= 0)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to transfer.", ChatMessageType.System));
+                            break;
+                        }
+                        if (!session.Player.TransferLegendaryKeys(amount, transferTargetName))
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Legendary Keys to {transferTargetName}", ChatMessageType.System));
+                        }
+                        break;
                 }
             }
 
@@ -1047,9 +1289,36 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Your balances:", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Pyreals: {session.Player.BankedPyreals:N0}", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Luminance: {session.Player.BankedLuminance:N0}", ChatMessageType.System));
+
+                // CONQUEST: Show daily luminance transfer limits
+                var baseTransferLimit = PropertyManager.GetLong("luminance_transfer_daily_limit");
+                var baseReceiveLimit = PropertyManager.GetLong("luminance_receive_daily_limit");
+                if (baseTransferLimit > 0 || baseReceiveLimit > 0)
+                {
+                    session.Player.CheckAndResetLuminanceDailyLimits();
+                    var enlightenmentBonus = session.Player.Enlightenment * 20000;
+
+                    if (baseTransferLimit > 0)
+                    {
+                        var transferLimit = baseTransferLimit + enlightenmentBonus;
+                        var transferred = session.Player.LuminanceTransferredToday ?? 0;
+                        var enlightenmentNote = enlightenmentBonus > 0 ? $" (+{enlightenmentBonus:N0} enlightenment)" : "";
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK]   Daily Transfer: {transferred:N0} / {transferLimit:N0}{enlightenmentNote}", ChatMessageType.System));
+                    }
+
+                    if (baseReceiveLimit > 0)
+                    {
+                        var receiveLimit = baseReceiveLimit + enlightenmentBonus;
+                        var received = session.Player.LuminanceReceivedToday ?? 0;
+                        var enlightenmentNote = enlightenmentBonus > 0 ? $" (+{enlightenmentBonus:N0} enlightenment)" : "";
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK]   Daily Receive: {received:N0} / {receiveLimit:N0}{enlightenmentNote}", ChatMessageType.System));
+                    }
+                }
+
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Event Tokens (Dragon Coins): {session.Player.EventTokens:N0}", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Conquest Coins (non-transferable): {session.Player.ConquestCoins:N0}", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Soul Fragments (non-transferable): {session.Player.SoulFragments:N0}", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Legendary Keys: {session.Player.BankedLegendaryKeys:N0}", ChatMessageType.System));
             }
         }
 
@@ -2195,6 +2464,89 @@ namespace ACE.Server.Command.Handlers
             }
 
             session.Network.EnqueueSend(new GameMessageSystemChat(sb.ToString(), ChatMessageType.System));
+        }
+
+        /// <summary>
+        /// CONQUEST: Allows players to set a custom name for their rarity pet essences
+        /// Usage: /namepet <name> or /np <name>
+        /// Must have the pet essence selected/ID'd first
+        /// </summary>
+        [CommandHandler("namepet", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 1, "Set a custom name for your pet essence", "<name>")]
+        [CommandHandler("np", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 1, "Set a custom name for your pet essence", "<name>")]
+        public static void HandleNamePet(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            if (parameters.Length == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /namepet <name> - Select a pet essence first with ID", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Get the last appraised object
+            var lastAppraised = player.RequestedAppraisalTarget;
+            if (lastAppraised == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("You must select (ID) a pet essence first.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Find the object
+            var wo = player.FindObject(lastAppraised.Value, Player.SearchLocations.MyInventory);
+            if (wo == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("You must select (ID) a pet essence in your inventory.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Check if it's a PetDevice
+            if (!(wo is PetDevice petDevice))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("You can only name pet essences.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Check if it's a rarity pet (has PetRarity property)
+            var petRarity = petDevice.GetProperty(PropertyInt.PetRarity);
+            if (petRarity == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("You can only name rarity pets (from Mystery Eggs).", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Combine all parameters into the pet name
+            var petName = string.Join(" ", parameters).Trim();
+
+            // Validate name length
+            if (petName.Length < 1 || petName.Length > 32)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Pet name must be between 1 and 32 characters.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Check for bad words using the same system as character creation
+            if (PropertyManager.GetBool("taboo_table") && DatManager.PortalDat.TabooTable.ContainsBadWord(petName.ToLowerInvariant()))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("That name is not allowed.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Store the custom name on the pet device using ShortDesc property
+            petDevice.SetProperty(PropertyString.ShortDesc, petName);
+            petDevice.SaveBiotaToDatabase();
+
+            // Update the essence name to reflect the custom pet name
+            var rarityName = petRarity.Value switch
+            {
+                1 => "Common",
+                2 => "Rare",
+                3 => "Legendary",
+                4 => "Mythic",
+                _ => ""
+            };
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Your {rarityName} pet has been named '{petName}'!", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat("The name will appear when you summon your pet.", ChatMessageType.Broadcast));
         }
     }
 }

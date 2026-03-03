@@ -357,8 +357,95 @@ namespace ACE.Server.WorldObjects
                 return false;  // If the coordinates are not walkable, return false
             }
 
+            // Check surrounding area to ensure location is accessible (not an isolated flat spot on a mountain)
+            // Sample 8 points in a circle around the target at ~20 meter radius
+            if (!IsSurroundingAreaAccessible(latitude, longitude, position.Pos.Z))
+            {
+                //Console.WriteLine($"[DEBUG] Surrounding area not accessible at Latitude {latitude}, Longitude {longitude}.");
+                return false;
+            }
+
             // Coordinates are valid, return true
             //Console.WriteLine($"[DEBUG] Valid coordinates found: Latitude {latitude}, Longitude {longitude}.");
+            return true;
+        }
+
+        /// <summary>
+        /// Checks if the surrounding area is accessible by sampling points in a circle.
+        /// Returns false if the location appears to be an isolated spot (mountain top, cliff edge, etc.)
+        /// </summary>
+        private static bool IsSurroundingAreaAccessible(float latitude, float longitude, float centerZ)
+        {
+            // Radius in map coordinate units (approximately 20 meters = ~0.083 map units)
+            // 1 map unit = 240 meters, so 20m / 240 = 0.083
+            float checkRadius = 0.083f;
+
+            // Maximum allowed elevation difference (in game units) between center and surrounding points
+            // If surrounding points are much lower, we're likely on a peak/cliff
+            float maxElevationDrop = 15.0f;
+
+            // Sample 8 points around the center
+            int walkableCount = 0;
+            int validSampleCount = 0;
+            float totalElevationDiff = 0;
+
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = i * (float)(Math.PI / 4); // 45 degrees apart
+                float sampleLat = latitude + checkRadius * (float)Math.Sin(angle);
+                float sampleLon = longitude + checkRadius * (float)Math.Cos(angle);
+
+                var samplePos = new Position(sampleLat, sampleLon, null);
+                var sampleMapCoords = samplePos.GetMapCoords();
+
+                if (sampleMapCoords == null)
+                    continue;
+
+                var sampleLandcell = LScape.get_landcell(samplePos.GetCell(), null) as SortCell;
+                if (sampleLandcell == null)
+                    continue;
+
+                // Skip water samples
+                if (sampleLandcell.CurLandblock.WaterType != LandDefs.WaterType.NotWater)
+                    continue;
+
+                validSampleCount++;
+
+                samplePos.AdjustMapCoords();
+
+                // Check walkability
+                if (samplePos.IsWalkable())
+                    walkableCount++;
+
+                // Track elevation difference
+                float elevDiff = centerZ - samplePos.Pos.Z;
+                totalElevationDiff += elevDiff;
+            }
+
+            // If we couldn't get enough valid samples, reject (probably near edge of map or water)
+            if (validSampleCount < 4)
+            {
+                //Console.WriteLine($"[DEBUG] Not enough valid samples: {validSampleCount}/8");
+                return false;
+            }
+
+            // Require at least half of valid samples to be walkable
+            // This catches isolated flat spots surrounded by steep terrain
+            float walkableRatio = (float)walkableCount / validSampleCount;
+            if (walkableRatio < 0.5f)
+            {
+                //Console.WriteLine($"[DEBUG] Too few walkable surrounding points: {walkableCount}/{validSampleCount}");
+                return false;
+            }
+
+            // Check average elevation drop - if center is much higher than surroundings, it's a peak
+            float avgElevationDiff = totalElevationDiff / validSampleCount;
+            if (avgElevationDiff > maxElevationDrop)
+            {
+                //Console.WriteLine($"[DEBUG] Location appears to be on a peak/cliff. Avg elevation diff: {avgElevationDiff}");
+                return false;
+            }
+
             return true;
         }
 
@@ -381,12 +468,17 @@ namespace ACE.Server.WorldObjects
             rewardsGiven.Add((20630, 3, "Trade Notes (250,000)")); // 100% 3 MMDs
 
             // OPTIONAL REWARDS (probability-based)
+            // Check if player has healing skill trained - give healing kits instead of diamond scarabs
+            var hasHealingSkill = player.GetCreatureSkill(Skill.Healing).AdvancementClass >= SkillAdvancementClass.Trained;
+
             var optionalRewards = new List<(uint wcid, int quantity, string name, int chance)>
             {
                 (13370003, 3, "Soul Fragments", 25),           // 25% 3 soul fragments
                 (29295, 1, "Blank Augmentation Gem", 15),      // 15% 1 xp aug gem
                 (43901, 25, "Promissory Notes", 15),           // 15% 25 prom notes
-                (7299, 10, "Diamond Scarabs", 15),             // 15% 10 diamond scarabs
+                hasHealingSkill
+                    ? (22449u, 3, "Healing Kits", 15)          // 15% 3 blue healing kits (if player has healing)
+                    : (7299u, 10, "Diamond Scarabs", 15),      // 15% 10 diamond scarabs (if no healing)
                 (46423, 1, "Stipend", 5),                      // 5% 1 stipend
                 (13370001, 50, "Conquest Coins (Bonus)", 1)    // 1% 50 conquest coins (separate from guaranteed)
             };
@@ -430,13 +522,17 @@ namespace ACE.Server.WorldObjects
             // Give all rewards to player
             foreach (var reward in rewardsGiven)
             {
-                var loot = WorldObjectFactory.CreateNewWorldObject(reward.wcid);
-                if (loot != null)
-                {
-                    if (loot is Stackable)
-                        loot.SetStackSize(reward.quantity);
+                var firstLoot = WorldObjectFactory.CreateNewWorldObject(reward.wcid);
+                if (firstLoot == null)
+                    continue;
 
-                    if (player.TryCreateInInventoryWithNetworking(loot))
+                // Check if item is stackable
+                if (firstLoot is Stackable)
+                {
+                    // Stackable items - set stack size and give once
+                    firstLoot.SetStackSize(reward.quantity);
+
+                    if (player.TryCreateInInventoryWithNetworking(firstLoot))
                     {
                         var quantityText = reward.quantity > 1 ? $"({reward.quantity}) " : "";
                         player.Session.Network.EnqueueSend(new GameMessageSystemChat(
@@ -445,7 +541,39 @@ namespace ACE.Server.WorldObjects
                     }
                     else
                     {
-                        loot.Destroy();
+                        firstLoot.Destroy();
+                    }
+                }
+                else
+                {
+                    // Non-stackable items - create and give multiple times
+                    int givenCount = 0;
+
+                    // Give the first one we already created
+                    if (player.TryCreateInInventoryWithNetworking(firstLoot))
+                        givenCount++;
+                    else
+                        firstLoot.Destroy();
+
+                    // Create and give additional items if quantity > 1
+                    for (int i = 1; i < reward.quantity; i++)
+                    {
+                        var additionalLoot = WorldObjectFactory.CreateNewWorldObject(reward.wcid);
+                        if (additionalLoot != null)
+                        {
+                            if (player.TryCreateInInventoryWithNetworking(additionalLoot))
+                                givenCount++;
+                            else
+                                additionalLoot.Destroy();
+                        }
+                    }
+
+                    if (givenCount > 0)
+                    {
+                        var quantityText = givenCount > 1 ? $"({givenCount}) " : "";
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"You have received {quantityText}{reward.name}!",
+                            ChatMessageType.System));
                     }
                 }
             }

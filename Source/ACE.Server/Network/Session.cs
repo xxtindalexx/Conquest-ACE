@@ -100,6 +100,8 @@ namespace ACE.Server.Network
 
         public DateTime LastQBCommandTime { get; set; }
 
+        public DateTime LastRerollTreasureMapCommandTime { get; set; }
+
         public DateTime LoginTime { get; set; }
 
         public Session(ConnectionListener connectionListener, IPEndPoint endPoint, ushort clientId, ushort serverId)

@@ -238,6 +238,11 @@ namespace ACE.Server.Managers
 
                 if (player.AugmentationBonusImbueChance > 0)
                     successChance += player.AugmentationBonusImbueChance * 0.05f;
+
+                // CONQUEST: Add enlightenment token-purchased imbue bonus (+1% per purchase, max 10%)
+                var enlightenmentImbueBonus = player.GetProperty(PropertyInt.EnlightenmentImbueBonus) ?? 0;
+                if (enlightenmentImbueBonus > 0)
+                    successChance += enlightenmentImbueBonus * 0.01f;
             }
 
             // todo: remove this once foolproof salvage recipes are updated

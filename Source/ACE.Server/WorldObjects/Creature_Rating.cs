@@ -241,6 +241,8 @@ namespace ACE.Server.WorldObjects
             var enlightenmentBonus = 0;
             var petBonus = 0;
 
+            var enlightenmentTokenBonus = 0;
+
             if (this is Player player)
             {
                 augBonus = player.AugmentationDamageBonus * 3;
@@ -250,12 +252,15 @@ namespace ACE.Server.WorldObjects
                 if (player.Enlightenment > 0)
                     enlightenmentBonus = ACE.Server.Entity.Enlightenment.GetEnlightenmentRatingBonus(player.Enlightenment);
 
+                // CONQUEST: Add enlightenment token-purchased damage rating bonus (max +4)
+                enlightenmentTokenBonus = player.GetProperty(PropertyInt.EnlightenmentBonusDamageRating) ?? 0;
+
                 // Pet damage rating bonus
                 petBonus = GetPetRatingBonus(PropertyInt.PetBonusDamageRating);
             }
 
             // heritage / weapon type bonus factored in elsewhere?
-            return damageRating + equipment + enchantments - weaknessRating + augBonus + lumAugBonus + enlightenmentBonus + petBonus;
+            return damageRating + equipment + enchantments - weaknessRating + augBonus + lumAugBonus + enlightenmentBonus + enlightenmentTokenBonus + petBonus;
         }
 
         public int GetDamageResistRating(CombatType? combatType = null, bool directDamage = true)
@@ -279,6 +284,8 @@ namespace ACE.Server.WorldObjects
             var enlightenmentBonus = 0;
             var petBonus = 0;
 
+            var enlightenmentTokenBonus = 0;
+
             if (this is Player player)
             {
                 augBonus = player.AugmentationDamageReduction * 3;
@@ -289,11 +296,14 @@ namespace ACE.Server.WorldObjects
                 if (player.Enlightenment > 0)
                     enlightenmentBonus = ACE.Server.Entity.Enlightenment.GetEnlightenmentRatingBonus(player.Enlightenment);
 
+                // CONQUEST: Add enlightenment token-purchased damage reduction rating bonus (max +4)
+                enlightenmentTokenBonus = player.GetProperty(PropertyInt.EnlightenmentBonusDamageReduction) ?? 0;
+
                 // Pet damage reduction rating bonus
                 petBonus = GetPetRatingBonus(PropertyInt.PetBonusDamageReductionRating);
             }
 
-            return damageResistRating + equipment + enchantments - netherDotDamageRating + augBonus + lumAugBonus + specBonus + enlightenmentBonus + petBonus;
+            return damageResistRating + equipment + enchantments - netherDotDamageRating + augBonus + lumAugBonus + specBonus + enlightenmentBonus + enlightenmentTokenBonus + petBonus;
         }
 
         public float GetDamageResistRatingMod(CombatType? combatType = null, bool directDamage = true)
@@ -369,17 +379,21 @@ namespace ACE.Server.WorldObjects
             var augBonus = 0;
             var lumAugBonus = 0;
             var petBonus = 0;
+            var enlightenmentTokenBonus = 0;
 
             if (this is Player player)
             {
                 augBonus = player.AugmentationCriticalPower * 3;
                 lumAugBonus = player.LumAugCritDamageRating;
 
+                // CONQUEST: Add enlightenment token-purchased crit damage rating bonus (max +4)
+                enlightenmentTokenBonus = player.GetProperty(PropertyInt.EnlightenmentBonusCritDamageRating) ?? 0;
+
                 // Pet crit damage rating bonus
                 petBonus = GetPetRatingBonus(PropertyInt.PetBonusCritDamageRating);
             }
 
-            return critDamageRating + equipment + enchantments + augBonus + lumAugBonus + petBonus;
+            return critDamageRating + equipment + enchantments + augBonus + lumAugBonus + enlightenmentTokenBonus + petBonus;
         }
 
         public int GetCritResistRating()
@@ -412,16 +426,20 @@ namespace ACE.Server.WorldObjects
 
             var lumAugBonus = 0;
             var petBonus = 0;
+            var enlightenmentTokenBonus = 0;
 
             if (this is Player player)
             {
                 lumAugBonus = player.LumAugCritReductionRating;
 
+                // CONQUEST: Add enlightenment token-purchased crit damage reduction rating bonus (max +4)
+                enlightenmentTokenBonus = player.GetProperty(PropertyInt.EnlightenmentBonusCritDamageReduction) ?? 0;
+
                 // Pet crit damage reduction rating bonus
                 petBonus = GetPetRatingBonus(PropertyInt.PetBonusCritDamageReductionRating);
             }
 
-            return critDamageResistRating + equipment + enchantments + lumAugBonus + petBonus;
+            return critDamageResistRating + equipment + enchantments + lumAugBonus + enlightenmentTokenBonus + petBonus;
         }
 
         public int GetHealingBoostRating()

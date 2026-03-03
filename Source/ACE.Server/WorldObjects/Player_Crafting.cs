@@ -315,7 +315,9 @@ namespace ACE.Server.WorldObjects
             var highestTrainedTinkeringSkill = highestTinkeringSkill.AdvancementClass >= SkillAdvancementClass.Trained ? highestTinkeringSkill.Current : 0;
 
             // take augs into account for salvaging only
-            var salvageAmount = CalcNumUnits((int)salvageSkill, workmanship, AugmentationBonusSalvage) * stackSize;
+            // CONQUEST: Add enlightenment token-purchased salvage bonus (+1 unit per purchase, max +10 units)
+            var enlightenmentSalvageBonus = GetProperty(PropertyInt.EnlightenmentSalvageBonus) ?? 0;
+            var salvageAmount = (CalcNumUnits((int)salvageSkill, workmanship, AugmentationBonusSalvage) + enlightenmentSalvageBonus) * stackSize;
             var tinkeringAmount = CalcNumUnits((int)highestTrainedTinkeringSkill, workmanship, 0);
 
             // DEBUG: Log salvage calculation details

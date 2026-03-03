@@ -225,5 +225,10 @@ namespace ACE.Entity.Enum.Properties
         /// </summary>
         [SendOnLogin]
         VendorBankMode = 9210,
+
+        /// <summary>
+        /// CONQUEST: If TRUE, shows damage dealt by player's summoned pets
+        /// </summary>
+        ShowPetDamage = 9220,
     }
 }

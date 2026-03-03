@@ -50,13 +50,12 @@ namespace ACE.Server.Entity
         public static float MaxObjectGhostRange { get; } = 250f;
 
         // CONQUEST: Landblocks exempt from multi-character IP restrictions (Marketplace + Apartments)
-        public static readonly HashSet<ushort> connectionExemptLandblocks = new()
-        {
-            //Marketplace
-            0x5756,
-            //Apartments
-            0x7200, 0x7300, 0x7400, 0x7500, 0x7600, 0x7700, 0x7800, 0x7900, 0x7A00, 0x7B00, 0x7C00, 0x7D00, 0x7E00, 0x7F00, 0x8000, 0x8100, 0x8200, 0x8300, 0x8400, 0x8500, 0x8600, 0x8700, 0x8800, 0x8900, 0x8A00, 0x8B00, 0x8C00, 0x8D00, 0x8E00, 0x8F00, 0x9000, 0x9100, 0x9200, 0x9300, 0x9400, 0x9500, 0x9600, 0x9700, 0x9800, 0x9900, 0x5360, 0x5361, 0x5362, 0x5363, 0x5364, 0x5365, 0x5366, 0x5367, 0x5368, 0x5369
-        };
+        // Loaded from database on server startup via LoadExemptLandblocksFromDatabase()
+        public static readonly HashSet<ushort> connectionExemptLandblocks = new();
+
+        // CONQUEST: Cache of exempt landblock descriptions for admin display
+        // Key is landblock ID, value is the description (e.g., "Marketplace", "Apartments")
+        public static readonly Dictionary<ushort, string> exemptLandblockDescriptions = new();
 
         // CONQUEST: PK-only dungeon variants where players gain +10% XP/Lum bonus
         // Stores (landblock, variation) tuples to identify specific dungeon variants
@@ -168,6 +167,48 @@ namespace ACE.Server.Entity
             catch (Exception ex)
             {
                 log.Error($"Error loading PK dungeon landblocks from database: {ex.Message}");
+                log.Error($"Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Loads exempt landblocks from database into connectionExemptLandblocks HashSet
+        /// Called during server startup
+        /// </summary>
+        public static void LoadExemptLandblocksFromDatabase()
+        {
+            log.Info("Loading exempt landblocks from database...");
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var configs = context.ExemptLandblocks.ToList();
+
+                    connectionExemptLandblocks.Clear();
+                    exemptLandblockDescriptions.Clear();
+
+                    foreach (var config in configs)
+                    {
+                        connectionExemptLandblocks.Add(config.Landblock);
+
+                        // Cache description for admin display
+                        if (!string.IsNullOrWhiteSpace(config.Description))
+                            exemptLandblockDescriptions[config.Landblock] = config.Description;
+
+                        log.Debug($"  Loaded exempt landblock: 0x{config.Landblock:X4}" +
+                                (string.IsNullOrWhiteSpace(config.Description) ? "" : $" ({config.Description})"));
+                    }
+
+                    if (configs.Count == 0)
+                        log.Info("  No exempt landblocks configured in database.");
+                    else
+                        log.Info($"Successfully loaded {configs.Count} exempt landblock(s) from database.");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error loading exempt landblocks from database: {ex.Message}");
                 log.Error($"Stack trace: {ex.StackTrace}");
             }
         }
