@@ -258,7 +258,16 @@ namespace ACE.Server.WorldObjects
             var dist = GetCylinderDistance(P_PetOwner);
 
             if (dist > MaxDistance)
+            {
                 Destroy();
+                return;
+            }
+
+            // CONQUEST: If pet falls too far behind, snap it closer to owner
+            if (PropertyManager.GetBool("pet_speed_match_owner") && dist > 10.0f)
+            {
+                SnapToOwner();
+            }
 
             // Mythic pet spell casting logic
             TryMythicPetSpellCasting(currentUnixTime);
@@ -266,6 +275,40 @@ namespace ACE.Server.WorldObjects
             if (!IsMoving && dist > MinDistance)
                 StartFollow();
         }
+
+        /// <summary>
+        /// CONQUEST: Instantly moves the pet close to the owner
+        /// </summary>
+        private void SnapToOwner()
+        {
+            if (P_PetOwner == null || P_PetOwner.Location == null)
+                return;
+
+            // Only works within same landblock
+            if (Location.Landblock != P_PetOwner.Location.Landblock)
+                return;
+
+            var playerRadius = P_PetOwner.PhysicsObj.GetPhysicsRadius();
+            var petRadius = GetPetRadius();
+            var spawnDist = playerRadius + petRadius + MinDistance;
+
+            var newLocation = P_PetOwner.Location.InFrontOf(spawnDist, true);
+            newLocation.LandblockId = new LandblockId(newLocation.GetCell());
+
+            // Stop movement
+            IsMoving = false;
+            PhysicsObj.CachedVelocity = Vector3.Zero;
+
+            // Use same teleport method as FakeTeleport
+            var setPosition = new Physics.Common.SetPosition();
+            setPosition.Pos = new Physics.Common.Position(newLocation);
+            setPosition.Flags = Physics.Common.SetPositionFlags.SendPositionEvent | Physics.Common.SetPositionFlags.Slide | Physics.Common.SetPositionFlags.Placement | Physics.Common.SetPositionFlags.Teleport;
+
+            PhysicsObj.SetPosition(setPosition);
+            SyncLocation(newLocation.Variation);
+            SendUpdatePosition(true);
+        }
+
 
         /// <summary>
         /// Checks if this is a Mythic pet and attempts to cast healing/stamina spells on owner
@@ -341,6 +384,29 @@ namespace ACE.Server.WorldObjects
         private const float MinDistance = 2.0f;
         private const float MaxDistance = 192.0f;
 
+        /// <summary>
+        /// CONQUEST: Override to ignore scale for pet movement speed
+        /// Small pets shouldn't move slower than their owner
+        /// </summary>
+        public new void GetMovementSpeed()
+        {
+            var moveSpeed = ACE.Server.Physics.Animation.MotionTable.GetRunSpeed(MotionTableId);
+            if (moveSpeed == 0) moveSpeed = 2.5f;
+
+            // CONQUEST: Ignore scale for pets - use owner's run rate instead
+            if (PropertyManager.GetBool("pet_speed_match_owner") && P_PetOwner != null)
+            {
+                RunRate = P_PetOwner.GetRunRate() * 1.2f; // 20% faster than owner
+            }
+            else
+            {
+                RunRate = GetRunRate();
+            }
+
+            // CONQUEST: Don't multiply by scale - small pets should still keep up
+            MoveSpeed = moveSpeed * RunRate;
+        }
+
         private void StartFollow()
         {
             // similar to Monster_Navigation.StartTurn()
@@ -348,6 +414,9 @@ namespace ACE.Server.WorldObjects
             //Console.WriteLine($"{Name}.StartFollow()");
 
             IsMoving = true;
+
+            // CONQUEST: Recalculate movement speed (ignores scale, matches owner speed)
+            GetMovementSpeed();
 
             // broadcast to clients
             MoveTo(P_PetOwner, RunRate);
@@ -385,7 +454,7 @@ namespace ACE.Server.WorldObjects
             motion.MoveToParameters.DistanceToObject = MinDistance;
             motion.MoveToParameters.WalkRunThreshold = 0.0f;
 
-            motion.RunRate = RunRate;
+            motion.RunRate = runRate;
 
             CurrentMotionState = motion;
 

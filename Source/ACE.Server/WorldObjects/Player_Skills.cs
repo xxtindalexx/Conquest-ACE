@@ -221,6 +221,15 @@ namespace ACE.Server.WorldObjects
                 Session?.Network.EnqueueSend(new GameMessageSystemChat("Your knowledge of War Magic grants you +1 Spell Chain!", ChatMessageType.Advancement));
             }
 
+            // CONQUEST: Void Magic training grants +1 Void Contagion (DoT spread on death)
+            // Only grant if the feature is enabled on the server
+            if (skill == Skill.VoidMagic && PropertyManager.GetBool("void_contagion_enabled"))
+            {
+                var currentSpread = GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
+                SetProperty(PropertyInt.VoidDotSpreadTargets, currentSpread + 1);
+                Session?.Network.EnqueueSend(new GameMessageSystemChat("Your knowledge of Void Magic grants you +1 Void Contagion!", ChatMessageType.Advancement));
+            }
+
             return true;
         }
 
@@ -322,6 +331,22 @@ namespace ACE.Server.WorldObjects
                 {
                     RemoveProperty(PropertyInt.SpellChainTargets);
                     RemoveProperty(PropertyInt.SpellChainDamagePercent);
+                }
+            }
+
+            // CONQUEST: Void Magic untraining removes Void Contagion bonus
+            // Only process if the feature is enabled (otherwise they shouldn't have the bonus anyway)
+            if (skill == Skill.VoidMagic && PropertyManager.GetBool("void_contagion_enabled"))
+            {
+                var currentSpread = GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
+                if (currentSpread > 0)
+                {
+                    SetProperty(PropertyInt.VoidDotSpreadTargets, currentSpread - 1);
+                    Session?.Network.EnqueueSend(new GameMessageSystemChat("You have lost -1 Void Contagion due to untraining Void Magic.", ChatMessageType.Advancement));
+                }
+                if ((GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0) == 0)
+                {
+                    RemoveProperty(PropertyInt.VoidDotSpreadTargets);
                 }
             }
 
@@ -459,6 +484,30 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// CONQUEST: Called immediately when IsMule property is set to true
+        /// Removes tinkering skills and sets leaderboard exclusion without requiring a relog
+        /// </summary>
+        public void OnMuleFlagSet()
+        {
+            var tinkeringSkills = new List<Skill>
+            {
+                Skill.ArmorTinkering,
+                Skill.WeaponTinkering,
+                Skill.ItemTinkering,
+                Skill.MagicItemTinkering
+            };
+
+            RemoveTinkeringSkillsFromMule(tinkeringSkills);
+
+            // Ensure mules are excluded from leaderboards
+            if (!ExcludeFromLeaderboards)
+            {
+                ExcludeFromLeaderboards = true;
+                ChangesDetected = true;
+            }
+        }
+
+        /// <summary>
         /// CONQUEST: Applies the War Magic spell chain bonus on login
         /// Players with War Magic trained/specialized get +1 to SpellChainTargets with 50% chain damage
         /// This ensures existing characters get the bonus without needing to retrain
@@ -493,6 +542,41 @@ namespace ACE.Server.WorldObjects
             if ((GetProperty(PropertyInt.SpellChainTargets) ?? 0) > 0 && GetProperty(PropertyInt.SpellChainDamagePercent) == null)
             {
                 SetProperty(PropertyInt.SpellChainDamagePercent, 50);
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Applies the Void Magic DoT spread bonus on login
+        /// Players with Void Magic trained/specialized get +1 to VoidDotSpreadTargets (Void Contagion)
+        /// This ensures existing characters get the bonus without needing to retrain
+        /// Only runs if void_contagion_enabled is true
+        /// </summary>
+        public void ApplyVoidMagicDotSpreadBonus()
+        {
+            // Skip if the feature is disabled
+            if (!PropertyManager.GetBool("void_contagion_enabled"))
+                return;
+
+            var voidMagic = GetCreatureSkill(Skill.VoidMagic);
+            var currentSpread = GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
+            var enlightenmentBonus = GetProperty(PropertyInt.EnlightenmentVoidDotSpreadBonus) ?? 0;
+            var shouldHaveBonus = voidMagic?.AdvancementClass >= SkillAdvancementClass.Trained;
+
+            // Calculate what the base spread targets should be (excluding enlightenment bonus)
+            // Void Magic trained = 1 base spread target
+            var expectedBaseSpread = shouldHaveBonus ? 1 : 0;
+
+            // Only modify if the current value doesn't match expected
+            // This preserves any enlightenment bonuses
+            if (shouldHaveBonus && currentSpread == 0)
+            {
+                SetProperty(PropertyInt.VoidDotSpreadTargets, 1);
+                Session?.Network.EnqueueSend(new GameMessageSystemChat("Your Void Magic training has granted you +1 Void Contagion!", ChatMessageType.Advancement));
+            }
+            else if (!shouldHaveBonus && currentSpread > 0 && enlightenmentBonus == 0)
+            {
+                // Only remove if there's no enlightenment bonus keeping it
+                RemoveProperty(PropertyInt.VoidDotSpreadTargets);
             }
         }
 

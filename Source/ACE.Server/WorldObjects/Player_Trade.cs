@@ -35,8 +35,22 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // CONQUEST: Arena observers cannot trade
+            if (IsArenaObserver || IsPendingArenaObserver)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot trade while observing an arena match.", ChatMessageType.Broadcast));
+                return;
+            }
+
             var tradePartner = PlayerManager.GetOnlinePlayer(tradePartnerGuid);
             if (tradePartner == null) return;
+
+            // CONQUEST: Cannot trade with arena observers
+            if (initiator && (tradePartner.IsArenaObserver || tradePartner.IsPendingArenaObserver))
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot trade with someone who is observing an arena match.", ChatMessageType.Broadcast));
+                return;
+            }
 
             //Check to see if potential trading partner is an Olthoi player
             if (initiator && tradePartner.IsOlthoiPlayer)

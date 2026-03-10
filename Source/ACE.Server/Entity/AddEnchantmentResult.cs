@@ -121,29 +121,52 @@ namespace ACE.Server.Entity
                     }
                     else
                     {
-                        // handle special case to prevent message: Pumpkin Shield casts Web of Defense on you, refreshing Aura of Defense
-                        var spellDuration = equip ? double.PositiveInfinity : spell.Duration;
+                        // CONQUEST: Compare StatModValue first when power levels are equal
+                        // This prevents weaker item spells (infinite duration) from overwriting
+                        // stronger player-cast augmented spells (finite duration but higher StatModValue)
+                        // Must add AugmentationLevelWhenCast to entry.StatModValue since augmentation
+                        // bonus is stored separately (same pattern as PowerLevel comparison above)
+                        var incomingStatModValue = spell.StatModVal + augmentLevel;
+                        var entryStatModValue = entry.StatModValue + (entry.AugmentationLevelWhenCast ?? 0);
 
-                        if (!equip && caster is Player player && (player.AugmentationIncreasedSpellDuration + player.LuminanceAugmentSpellDurationCount ?? 0) > 0)
+                        // For beneficial spells, higher StatModValue is better
+                        // For harmful spells (debuffs), the comparison still works because
+                        // a player's augmented debuff should also be stronger
+                        if (incomingStatModValue > entryStatModValue)
                         {
-                            spellDuration *= 1.0f + (player.AugmentationIncreasedSpellDuration * 0.2f);
-                            spellDuration += (((caster as Player).LuminanceAugmentSpellDurationCount ?? 0) * 0.05f);
-                        }
-                        var entryDuration = entry.Duration == -1 ? double.PositiveInfinity : entry.Duration;
-
-                        if (spellDuration > entryDuration || spellDuration == entryDuration && !SpellSet.SetSpells.Contains(entry.SpellId))
                             Surpass.Add(entry);
-                        else if (spellDuration < entryDuration)
+                        }
+                        else if (incomingStatModValue < entryStatModValue)
+                        {
                             Surpassed.Add(entry);
+                        }
                         else
                         {
-                            // fallback on spell id, for overlapping set spells in multiple sets, where the different 'level' names each have the same spellLevel and powerLevel?
-                            // ie. for Gauntlet Damage Boost I and II
-                            // this bug still exists in acclient visual enchantment display, unknown whether this bug existed on retail server
-                            if (spell.Id > entry.SpellId)
+                            // StatModValues are equal, fall back to duration comparison
+                            // handle special case to prevent message: Pumpkin Shield casts Web of Defense on you, refreshing Aura of Defense
+                            var spellDuration = equip ? double.PositiveInfinity : spell.Duration;
+
+                            if (!equip && caster is Player player && (player.AugmentationIncreasedSpellDuration + player.LuminanceAugmentSpellDurationCount ?? 0) > 0)
+                            {
+                                spellDuration *= 1.0f + (player.AugmentationIncreasedSpellDuration * 0.2f);
+                                spellDuration += (((caster as Player).LuminanceAugmentSpellDurationCount ?? 0) * 0.05f);
+                            }
+                            var entryDuration = entry.Duration == -1 ? double.PositiveInfinity : entry.Duration;
+
+                            if (spellDuration > entryDuration || spellDuration == entryDuration && !SpellSet.SetSpells.Contains(entry.SpellId))
                                 Surpass.Add(entry);
-                            else
+                            else if (spellDuration < entryDuration)
                                 Surpassed.Add(entry);
+                            else
+                            {
+                                // fallback on spell id, for overlapping set spells in multiple sets, where the different 'level' names each have the same spellLevel and powerLevel?
+                                // ie. for Gauntlet Damage Boost I and II
+                                // this bug still exists in acclient visual enchantment display, unknown whether this bug existed on retail server
+                                if (spell.Id > entry.SpellId)
+                                    Surpass.Add(entry);
+                                else
+                                    Surpassed.Add(entry);
+                            }
                         }
                     }
                 }

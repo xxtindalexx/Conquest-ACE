@@ -866,6 +866,18 @@ namespace ACE.Server.WorldObjects
                     ACE.Server.Managers.ArenaManager.HandlePlayerDamage(targetPlayer.Character.Id, sourcePlayer.Character.Id, amount);
                 }
 
+                // CONQUEST: Track PK dungeon damage for quests (spells)
+                if (targetPlayer != null && sourcePlayer != null && target.CurrentLandblock != null && target.Location != null)
+                {
+                    var currentLandblock = (ushort)target.CurrentLandblock.Id.Landblock;
+                    var currentVariation = target.Location.Variation ?? 0;
+
+                    if (ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                    {
+                        sourcePlayer.CompletePkQuestTask("PKDUNGEON_DMG_50K", (int)amount);
+                    }
+                }
+
                 //if (targetPlayer != null && targetPlayer.Fellowship != null)
                 //targetPlayer.Fellowship.OnVitalUpdate(targetPlayer);
             }

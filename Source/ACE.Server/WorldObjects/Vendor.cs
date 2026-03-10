@@ -886,6 +886,7 @@ namespace ACE.Server.WorldObjects
         /// 9 = +1% Imbue, 10 = +1% Salvage (Token gems, max 10 each)
         /// 11 = +1 Skill Credit (Token gem, max 5)
         /// 12 = Stamina Benediction, 13 = Mana Benediction (Token gems, max 1 each)
+        /// 14 = Void Contagion (Combat trophy gem, max 1)
         /// </summary>
         private bool CanPurchaseEnlightenmentGem(Player player, int gemType, out string errorMessage)
         {
@@ -938,6 +939,24 @@ namespace ACE.Server.WorldObjects
                         errorMessage = hasAetheriaSurge
                             ? "You have already acquired the Aetheria Surge ability."
                             : "You already have an unused Aetheria Surge gem in your inventory.";
+                        return false;
+                    }
+                    break;
+
+                case 14: // Void Contagion (max 1)
+                    // Block purchase if the feature is disabled
+                    if (!PropertyManager.GetBool("void_contagion_enabled"))
+                    {
+                        errorMessage = "This ability is not yet available.";
+                        return false;
+                    }
+                    var hasVoidContagion = (player.GetProperty(PropertyInt.EnlightenmentVoidDotSpreadBonus) ?? 0) > 0;
+                    var invVoidContagion = CountEnlightenmentGemsInInventory(player, 14);
+                    if (hasVoidContagion || invVoidContagion > 0)
+                    {
+                        errorMessage = hasVoidContagion
+                            ? "You have already acquired the Void Contagion ability."
+                            : "You already have an unused Void Contagion gem in your inventory.";
                         return false;
                     }
                     break;

@@ -2,6 +2,7 @@ using ACE.Common;
 using ACE.Database;
 using ACE.DatLoader;
 using ACE.Database.Models.Auth;
+using ACE.Database.Models.Shard;
 using ACE.Database.Models.Log;
 using ACE.Entity;
 using ACE.Entity.Enum;
@@ -46,6 +47,8 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship disband", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship list to see all fellowships looking for members", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship queue to see your queue status, /fship queue leave to leave queues", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship votekick <name> to start a vote to kick a player", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship vote yes or /fship vote no to vote on an active kick", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: tell any fellowship member 'xp' to join (or queue if full)", ChatMessageType.Broadcast));
                 return;
             }
@@ -297,6 +300,61 @@ namespace ACE.Server.Command.Handlers
                     }
                     return;
                 }
+
+                // CONQUEST: Vote kick with targeted player
+                if (parameters[0] == "votekick")
+                {
+                    if (session.Player.Fellowship == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var tPGuid = session.Player.CurrentAppraisalTarget;
+                    if (tPGuid != null)
+                    {
+                        var tplayer = PlayerManager.GetOnlinePlayer(tPGuid.Value);
+                        if (tplayer != null)
+                        {
+                            session.Player.Fellowship.StartVoteKick(session.Player, tplayer);
+                        }
+                        else
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Target player is not online.", ChatMessageType.Broadcast));
+                        }
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: No player targeted. Use /fship votekick <name> to vote kick by name.", ChatMessageType.Broadcast));
+                    }
+                    return;
+                }
+
+                // CONQUEST: Check vote status
+                if (parameters[0] == "vote")
+                {
+                    if (session.Player.Fellowship == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var vote = session.Player.Fellowship.ActiveVoteKick;
+                    if (vote == null || vote.IsExpired())
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: There is no active vote kick.", ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        var timeLeft = (int)(60 - (DateTime.UtcNow - vote.StartTime).TotalSeconds);
+                        var yesCount = vote.VotesYes.Count;
+                        var noCount = vote.VotesNo.Count;
+                        var status = yesCount > noCount ? "passing" : (yesCount < noCount ? "failing" : "tied");
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Vote to kick {vote.TargetName}: {yesCount} yes, {noCount} no (currently {status}). {timeLeft}s remaining.", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Use /fship vote yes or /fship vote no to cast your vote.", ChatMessageType.Broadcast));
+                    }
+                    return;
+                }
             }
 
             if (parameters.Count() == 2)
@@ -354,6 +412,52 @@ namespace ACE.Server.Command.Handlers
                     }
                     return;
                 }
+
+                // CONQUEST: Vote kick by player name
+                if (parameters[0] == "votekick")
+                {
+                    if (session.Player.Fellowship == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var tplayer = PlayerManager.GetOnlinePlayer(parameters[1]);
+                    if (tplayer != null)
+                    {
+                        session.Player.Fellowship.StartVoteKick(session.Player, tplayer);
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Player '{parameters[1]}' is not online.", ChatMessageType.Broadcast));
+                    }
+                    return;
+                }
+
+                // CONQUEST: Cast vote on active vote kick
+                if (parameters[0] == "vote")
+                {
+                    if (session.Player.Fellowship == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var vote = parameters[1].ToLower();
+                    if (vote == "yes" || vote == "y")
+                    {
+                        session.Player.Fellowship.CastVote(session.Player, true);
+                    }
+                    else if (vote == "no" || vote == "n")
+                    {
+                        session.Player.Fellowship.CastVote(session.Player, false);
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Use /fship vote yes or /fship vote no", ChatMessageType.Broadcast));
+                    }
+                    return;
+                }
             }
         }
 
@@ -364,6 +468,37 @@ namespace ACE.Server.Command.Handlers
         public static void HandlePop(Session session, params string[] parameters)
         {
             CommandHandlerHelper.WriteOutputInfo(session, $"Current world population: {PlayerManager.GetOnlineCount():N0}", ChatMessageType.Broadcast);
+        }
+
+        // CONQUEST: Luminance Per Hour tracking
+        [CommandHandler("lph", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
+            "Track luminance earned per hour",
+            "/lph - Check current stats\n/lph start - Start tracking\n/lph restart - Restart tracking\n/lph stop - Stop tracking")]
+        public static void HandleLph(Session session, params string[] parameters)
+        {
+            if (parameters == null || parameters.Length == 0)
+            {
+                // No parameters - show current LPH stats
+                session.Player.LphCheck();
+                return;
+            }
+
+            var subCommand = parameters[0].ToLower();
+            switch (subCommand)
+            {
+                case "start":
+                    session.Player.LphStart();
+                    break;
+                case "restart":
+                    session.Player.LphRestart();
+                    break;
+                case "stop":
+                    session.Player.LphStop();
+                    break;
+                default:
+                    session.Network.EnqueueSend(new GameMessageSystemChat("[LPH] Usage: /lph, /lph start, /lph restart, /lph stop", ChatMessageType.Broadcast));
+                    break;
+            }
         }
 
         // upop - admin command to show unique IP connections
@@ -601,9 +736,10 @@ namespace ACE.Server.Command.Handlers
         public static void HandleQuestBonus(Session session, params string[] parameters)
         {
             var player = session.Player;
-            var questCount = player.QuestCompletionCount ?? 0;
+            // CONQUEST: Use account-wide quest count (same as GetQuestCountXPBonus uses)
+            var questCount = player.Account?.CachedQuestBonusCount ?? 0;
             session.Network.EnqueueSend(new GameMessageSystemChat("=== Quest Bonus (QB) ===", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Quests Completed: {questCount:N0}", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Quests Completed (Account): {questCount:N0}", ChatMessageType.Broadcast));
         }
 
         [CommandHandler("bonus", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays all your XP bonuses")]
@@ -611,8 +747,8 @@ namespace ACE.Server.Command.Handlers
         {
             var player = session.Player;
 
-            // Quest Bonus
-            var questCount = player.QuestCompletionCount ?? 0;
+            // Quest Bonus (account-wide)
+            var questCount = player.Account?.CachedQuestBonusCount ?? 0;
             var questBonus = player.GetQuestCountXPBonus();
             var questBonusPercent = ((questBonus - 1.0) * 100.0);
 
@@ -1248,22 +1384,6 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Luminance to {transferTargetName}", ChatMessageType.System));
                         }
                         break;
-                    case 3: // Transfer event tokens
-                        if (session.Player.EventTokens != null && amount >= session.Player.EventTokens)
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked event tokens to transfer.", ChatMessageType.System));
-                            break;
-                        }
-                        if (amount <= 0)
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to transfer.", ChatMessageType.System));
-                            break;
-                        }
-                        if (!session.Player.TransferEventTokens(amount, transferTargetName))
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Event Tokens to {transferTargetName}", ChatMessageType.System));
-                        }
-                        break;
                     case 7: // Transfer legendary keys
                         if (session.Player.BankedLegendaryKeys != null && amount >= session.Player.BankedLegendaryKeys)
                         {
@@ -1303,7 +1423,7 @@ namespace ACE.Server.Command.Handlers
                         var transferLimit = baseTransferLimit + enlightenmentBonus;
                         var transferred = session.Player.LuminanceTransferredToday ?? 0;
                         var enlightenmentNote = enlightenmentBonus > 0 ? $" (+{enlightenmentBonus:N0} enlightenment)" : "";
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK]   Daily Transfer: {transferred:N0} / {transferLimit:N0}{enlightenmentNote}", ChatMessageType.System));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Daily Transfer: {transferred:N0} / {transferLimit:N0}{enlightenmentNote}", ChatMessageType.System));
                     }
 
                     if (baseReceiveLimit > 0)
@@ -1311,7 +1431,7 @@ namespace ACE.Server.Command.Handlers
                         var receiveLimit = baseReceiveLimit + enlightenmentBonus;
                         var received = session.Player.LuminanceReceivedToday ?? 0;
                         var enlightenmentNote = enlightenmentBonus > 0 ? $" (+{enlightenmentBonus:N0} enlightenment)" : "";
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK]   Daily Receive: {received:N0} / {receiveLimit:N0}{enlightenmentNote}", ChatMessageType.System));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Daily Receive: {received:N0} / {receiveLimit:N0}{enlightenmentNote}", ChatMessageType.System));
                     }
                 }
 
@@ -1672,7 +1792,7 @@ namespace ACE.Server.Command.Handlers
             "Common settings:\nConfirmVolatileRareUse, MainPackPreferred, SalvageMultiple, SideBySideVitals, UseCraftSuccessDialog",
             "Interaction settings:\nAcceptLootPermits, AllowGive, AppearOffline, AutoAcceptFellowRequest, DragItemOnPlayerOpensSecureTrade, FellowshipShareLoot, FellowshipShareXP, IgnoreAllegianceRequests, IgnoreFellowshipRequests, IgnoreTradeRequests, UseDeception",
             "UI settings:\nCoordinatesOnRadar, DisableDistanceFog, DisableHouseRestrictionEffects, DisableMostWeatherEffects, FilterLanguage, LockUI, PersistentAtDay, ShowCloak, ShowHelm, ShowTooltips, SpellDuration, TimeStamp, ToggleRun, UseMouseTurning",
-            "Chat settings:\nHearAllegianceChat, HearGeneralChat, HearLFGChat, HearRoleplayChat, HearSocietyChat, HearTradeChat, HearPKDeaths, StayInChatMode",
+            "Chat settings:\nHearAllegianceChat, HearArenaChat, HearGeneralChat, HearLFGChat, HearRoleplayChat, HearSocietyChat, HearTradeChat, HearPKDeaths, StayInChatMode",
             "Combat settings:\nAdvancedCombatUI, AutoRepeatAttack, AutoTarget, LeadMissileTargets, UseChargeAttack, UseFastMissiles, ViewCombatTarget, VividTargetingIndicator",
             "Character display settings:\nDisplayAge, DisplayAllegianceLogonNotifications, DisplayChessRank, DisplayDateOfBirth, DisplayFishingSkill, DisplayNumberCharacterTitles, DisplayNumberDeaths"
         };
@@ -1720,6 +1840,7 @@ namespace ACE.Server.Command.Handlers
 
             // Chat
             { "HearAllegianceChat", "ListenToAllegianceChat" },
+            { "HearArenaChat", "ListenToArenaChat" },
             { "HearGeneralChat", "ListenToGeneralChat" },
             { "HearLFGChat", "ListenToLFGChat" },
             { "HearRoleplayChat", "ListentoRoleplayChat" },
@@ -2329,8 +2450,21 @@ namespace ACE.Server.Command.Handlers
 
                     break;
 
+                case "chat":
+                case "messages":
+                    // CONQUEST: Toggle arena chat messages (queue notifications, match results, etc.)
+                    var currentSetting = session.Player.GetCharacterOption(CharacterOption.ListenToArenaChat);
+                    var newSetting = !currentSetting;
+                    session.Player.SetCharacterOption(CharacterOption.ListenToArenaChat, newSetting);
+
+                    if (newSetting)
+                        CommandHandlerHelper.WriteOutputInfo(session, "Arena chat messages are now ENABLED. You will see queue notifications and match results.");
+                    else
+                        CommandHandlerHelper.WriteOutputInfo(session, "Arena chat messages are now DISABLED. You will no longer see queue notifications or match results.");
+                    break;
+
                 default:
-                    CommandHandlerHelper.WriteOutputInfo(session, $"Arena Commands...\n\n  To join a 1v1 arena match: /arena join\n\n  To join a specific type of arena match: /arena join eventType\n  (replace eventType with the string code for the type of match you want to join; 1v1, 2v2, FFA, Tugak or Group)\n\n  To leave an arena queue or stop observing a match: /arena cancel\n\n  To get info about players in an arena queue and active arena matches: /arena info\n\n  To get your current character's stats: /arena stats\n\n  To get a named character's stats: /arena stats characterName\n  (replace characterName with the target character's name)\n\n  To get rank leaderboard by event type: /arena rank eventType\n  (replace eventType with the string code for the type of match you want ranking for; 1v1, 2v2, Tugak or FFA)\n\n  To watch a match as a silent observer: /arena watch EventID\n  (use /arena info to get the EventID of an active arena match and use that value in the command)\n\n    To get this help file: /arena help\n");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Arena Commands...\n\n  To join a 1v1 arena match: /arena join\n\n  To join a specific type of arena match: /arena join eventType\n  (replace eventType with the string code for the type of match you want to join; 1v1, 2v2, FFA, Tugak or Group)\n\n  To leave an arena queue or stop observing a match: /arena cancel\n\n  To get info about players in an arena queue and active arena matches: /arena info\n\n  To get your current character's stats: /arena stats\n\n  To get a named character's stats: /arena stats characterName\n  (replace characterName with the target character's name)\n\n  To get rank leaderboard by event type: /arena rank eventType\n  (replace eventType with the string code for the type of match you want ranking for; 1v1, 2v2, Tugak or FFA)\n\n  To watch a match as a silent observer: /arena watch EventID\n  (use /arena info to get the EventID of an active arena match and use that value in the command)\n\n  To toggle arena chat messages on/off: /arena chat\n\n    To get this help file: /arena help\n");
                     return;
             }
         }
@@ -2547,6 +2681,115 @@ namespace ACE.Server.Command.Handlers
 
             session.Network.EnqueueSend(new GameMessageSystemChat($"Your {rarityName} pet has been named '{petName}'!", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat("The name will appear when you summon your pet.", ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// CONQUEST: Display all account-level quest completions with character info
+        /// Rate limited to once per 30 minutes per character
+        /// </summary>
+        private static readonly TimeSpan MyQstListCooldown = TimeSpan.FromMinutes(30);
+        private static readonly ConcurrentDictionary<uint, DateTime> MyQstListLastUsed = new ConcurrentDictionary<uint, DateTime>();
+
+        [CommandHandler("myqstlist", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows all quests completed on your account")]
+        public static void HandleMyQuestList(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+            var characterId = player.Guid.Full;
+            var accountId = player.Account.AccountId;
+
+            // Rate limit check (30 minutes per character)
+            var currentTime = DateTime.UtcNow;
+            if (MyQstListLastUsed.TryGetValue(characterId, out var lastUsed))
+            {
+                var elapsed = currentTime - lastUsed;
+                if (elapsed < MyQstListCooldown)
+                {
+                    var remaining = MyQstListCooldown - elapsed;
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"You can use /myqstlist again in {remaining.Minutes}m {remaining.Seconds}s.",
+                        ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            // Update last used time
+            MyQstListLastUsed[characterId] = currentTime;
+
+            // Get account-level quest completions, excluding PKSoulLoot_ stamps (PvP cooldown trackers)
+            var accountQuests = DatabaseManager.Authentication.GetAccountQuests(accountId)?
+                .Where(q => !q.Quest.StartsWith("PKSoulLoot_", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (accountQuests == null || accountQuests.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("No quests completed on this account.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Get all characters on this account to map character stamps
+            var characters = DatabaseManager.Shard.BaseDatabase.GetCharacters(accountId, false);
+            var characterNames = characters?.ToDictionary(c => c.Id, c => c.Name) ?? new Dictionary<uint, string>();
+            var characterIds = characters?.Select(c => c.Id).ToList() ?? new List<uint>();
+
+            // Build a lookup of quest name -> list of character names that have the stamp
+            var questToCharacters = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            if (characterIds.Count > 0)
+            {
+                using (var context = new ShardDbContext())
+                {
+                    var stamps = context.CharacterPropertiesQuestRegistry
+                        .Where(q => characterIds.Contains(q.CharacterId))
+                        .Select(q => new { q.QuestName, q.CharacterId })
+                        .ToList();
+
+                    foreach (var stamp in stamps)
+                    {
+                        var charName = characterNames.ContainsKey(stamp.CharacterId)
+                            ? characterNames[stamp.CharacterId]
+                            : "Unknown";
+
+                        if (!questToCharacters.ContainsKey(stamp.QuestName))
+                            questToCharacters[stamp.QuestName] = new List<string>();
+
+                        if (!questToCharacters[stamp.QuestName].Contains(charName))
+                            questToCharacters[stamp.QuestName].Add(charName);
+                    }
+                }
+            }
+
+            // Sort alphabetically by quest name
+            var sortedQuests = accountQuests.OrderBy(q => q.Quest, StringComparer.OrdinalIgnoreCase).ToList();
+
+            // Get the XP bonus
+            var questBonus = player.GetQuestCountXPBonus();
+            var questBonusPercent = ((questBonus - 1.0) * 100.0);
+
+            // Display header
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"---- Account Quests ({sortedQuests.Count}) | XP Bonus: {questBonusPercent:F1}% ----",
+                ChatMessageType.Broadcast));
+
+            // Display each quest with character names
+            int index = 1;
+            foreach (var quest in sortedQuests)
+            {
+                string charInfo = "";
+                if (questToCharacters.TryGetValue(quest.Quest, out var charList) && charList.Count > 0)
+                {
+                    charInfo = $" ({string.Join(", ", charList)})";
+                }
+
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"{index}. {quest.Quest}{charInfo}",
+                    ChatMessageType.Broadcast));
+                index++;
+            }
+
+            // Display footer
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                "---- End of Account Quests ----",
+                ChatMessageType.Broadcast));
         }
     }
 }

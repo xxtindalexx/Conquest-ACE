@@ -672,6 +672,9 @@ namespace ACE.Server.Factories
 
             // This option was seen in PCAPs on new characters, and possibly was added to Defaults post PDB we have
             player.SetCharacterOption(CharacterOption.ListenToPKDeathMessages, true);
+
+            // CONQUEST: Enable arena chat messages by default for new characters
+            player.SetCharacterOption(CharacterOption.ListenToArenaChat, true);
         }
     }
 }

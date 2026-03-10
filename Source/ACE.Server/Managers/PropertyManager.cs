@@ -579,6 +579,7 @@ namespace ACE.Server.Managers
                 ("persist_movement", new Property<bool>(false, "If TRUE, persists autonomous movements such as turns and sidesteps through non-autonomous server actions. Retail didn't appear to do this, but some players may prefer this.")),
                 ("pet_stow_replace", new Property<bool>(false, "pet stowing for different pet devices becomes a stow and replace. defaults to retail value of false")),
                 ("pet_rating_bonuses_disabled_in_pvp", new Property<bool>(true, "if TRUE, pet rating bonuses (Rare/Legendary/Mythic) are disabled during PvP combat")),
+                ("pet_speed_match_owner", new Property<bool>(true, "CONQUEST: if TRUE, pets move 20% faster than their owner to ensure they always keep up and never fall behind.")),
                 ("player_config_command", new Property<bool>(false, "If enabled, players can use /config to change their settings via text commands")),
                 ("player_receive_immediate_save", new Property<bool>(false, "if enabled, when the player receives items from an NPC, they will be saved immediately")),
                 ("pk_server", new Property<bool>(false, "set this to TRUE for darktide servers")),
@@ -619,6 +620,8 @@ namespace ACE.Server.Managers
                 ("arena_allow_observers", new Property<bool>(true, "enable this to allow players to watch arena matches as invisible observers")),
                 ("use_wield_requirements", new Property<bool>(true, "disable this to bypass wield requirements. mostly for dev debugging")),
                 ("version_info_enabled", new Property<bool>(false, "toggles the /aceversion player command")),
+                ("void_contagion_enabled", new Property<bool>(false, "CONQUEST: Master toggle for Void Contagion system. Set to TRUE to enable the Void DoT spread/explosion perk.")),
+                ("void_contagion_explosion_mode", new Property<bool>(false, "CONQUEST: Void Contagion mode toggle (requires void_contagion_enabled). FALSE (default) = DoTs spread to nearby targets at 50% duration. TRUE = Dying mob explodes dealing % of DoT damage to ALL nearby enemies (20%/40%/60% based on perk level).")),
                 ("vendor_shop_uses_generator", new Property<bool>(false, "enables or disables vendors using generator system in addition to createlist to create artificial scarcity")),
                 ("world_closed", new Property<bool>(false, "enable this to startup world as a closed to players world"))
                 );
@@ -669,7 +672,9 @@ namespace ACE.Server.Managers
         public static readonly ReadOnlyDictionary<string, Property<double>> DefaultDoubleProperties =
             DictOf(
 
-                ("anti_blink_detection_radius", new Property<double>(0.5, "CONQUEST: Detection radius in meters for anti-blink door detection. Lower = must be closer to door to trigger. Default 0.5m.")),
+                ("anti_blink_detection_radius", new Property<double>(2.5, "CONQUEST: (Legacy) Detection radius in meters for anti-blink door detection. Default 2.5m.")),
+                ("anti_blink_door_width", new Property<double>(3.0, "CONQUEST: Door width in meters for anti-blink line segment detection. Default 3.0m.")),
+                ("anti_blink_z_height_limit", new Property<double>(3.5, "CONQUEST: Z-height limit for anti-blink detection. Doors further than this above/below player are ignored (for multi-floor buildings). Default 3.5m.")),
                 ("cantrip_drop_rate", new Property<double>(1.0, "Scales the chance for cantrips to drop in each tier. Defaults to 1.0, as per end of retail")),
                 ("cloak_cooldown_seconds", new Property<double>(5.0, "The number of seconds between possible cloak procs.")),
                 ("cloak_max_proc_base", new Property<double>(0.25, "The max proc chance of a cloak.")),
@@ -705,6 +710,7 @@ namespace ACE.Server.Managers
                 ("vitae_penalty", new Property<double>(0.05, "the amount of vitae penalty a player gets per death")),
                 ("vitae_penalty_max", new Property<double>(0.40, "the maximum vitae penalty a player can have")),
                 ("void_pvp_modifier", new Property<double>(0.5, "Scales the amount of damage players take from Void Magic. Defaults to 0.5, as per retail. For earlier content where DRR isn't as readily available, this can be adjusted for balance.")),
+                ("pvp_void_dot_damage_scale", new Property<double>(0.0, "CONQUEST: Scales Void/Nether DoT damage in PvP. 1.0 = full damage, 0.5 = half, 0 = disabled. The debuff (damage reduction) still applies. Default 0 (disabled).")),
                 ("xp_modifier", new Property<double>(1.0, "scales the amount of xp received by players")),
                 ("melee/missile_aug_crit_modifier", new Property<double>(0.002, "the maximum crit damage bonus from melee and missile augs")),
                 ("finesse_attribute_multiplier", new Property<double>(1.5, "the multiplier applied to coordination for calculating finesse weapons attribute damage modifiers")),

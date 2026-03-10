@@ -36,12 +36,12 @@ namespace ACE.Entity.Enum
         ShowCloak                               = 0x00800000,
         LockUI                                  = 0x01000000,
         HearPKDeath                             = 0x02000000,
-        NotUsed1                                = 0x04000000,
-        NotUsed2                                = 0x08000000,
-        NotUsed3                                = 0x10000000,
-        NotUsed4                                = 0x20000000,
-        NotUsed5                                = 0x40000000,
-        NotUsed6                                = 0x80000000,
+        HearArenaChat                           = 0x04000000, // CONQUEST: Toggle for arena queue/match messages
+        NotUsed1                                = 0x08000000,
+        NotUsed2                                = 0x10000000,
+        NotUsed3                                = 0x20000000,
+        NotUsed4                                = 0x40000000,
+        NotUsed5                                = 0x80000000,
 
         Default                                 = HearGeneralChat | HearTradeChat | HearLFGChat | LeadMissileTargets | ConfirmVolatileRareUse | ShowHelm | ShowCloak // 9733888
     }

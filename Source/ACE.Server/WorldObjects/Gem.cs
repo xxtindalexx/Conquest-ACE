@@ -495,7 +495,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// CONQUEST: Handles enlightenment gem usage based on gem type
         /// Gem types:
-        /// 1 = Cleave, 2 = Arrow Split, 3 = Spell Chain, 4 = Aetheria Surge (Combat Trophies)
+        /// 1 = Cleave, 2 = Arrow Split, 3 = Spell Chain, 4 = Aetheria Surge, 14 = Void Contagion (Combat Trophies)
         /// 5 = +1 DR, 6 = +1 DRR, 7 = +1 CD, 8 = +1 CDR (Tokens, max 4 each)
         /// 9 = +1% Imbue (Tokens, max 10), 10 = +1% Salvage (Tokens, max 10)
         /// 11 = +1 Skill Credit (Tokens, max 5), 12 = Stamina Benediction, 13 = Mana Benediction
@@ -524,6 +524,15 @@ namespace ACE.Server.WorldObjects
                 case 4: // Aetheria Surge
                     success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentAetheriaSurgeBonus, 1, 1, gemName,
                         "Your aetheria now surge as if they were 1 level higher!");
+                    break;
+                case 14: // Void Contagion (DoT spread on death)
+                    if (!PropertyManager.GetBool("void_contagion_enabled"))
+                    {
+                        player.Session?.Network.EnqueueSend(new GameMessageSystemChat("This ability is not yet available.", ChatMessageType.Broadcast));
+                        return false;
+                    }
+                    success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentVoidDotSpreadBonus, 1, 1, gemName,
+                        "Your void magic DoTs now spread to nearby enemies when your target dies!");
                     break;
 
                 // Rating Gems (max 4 each)

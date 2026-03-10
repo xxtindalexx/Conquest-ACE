@@ -11,6 +11,22 @@ namespace ACE.Server.WorldObjects
 {
     partial class Player
     {
+        /// <summary>
+        /// CONQUEST: Shadow the base SetProperty to catch when IsMule is set directly via emotes/quests
+        /// This ensures OnMuleFlagSet() is called regardless of how the property is set
+        /// </summary>
+        public new void SetProperty(PropertyBool property, bool value)
+        {
+            // Call base implementation first
+            base.SetProperty(property, value);
+
+            // CONQUEST: If IsMule was just set to true, immediately remove tinkering skills
+            if (property == PropertyBool.IsMule && value == true)
+            {
+                OnMuleFlagSet();
+            }
+        }
+
         public override string Name
         {
             get => IsPlussed && CloakStatus < CloakStatus.Player ? "+" + base.Name : base.Name;
@@ -1146,6 +1162,12 @@ namespace ACE.Server.WorldObjects
             else
                 obj.RemoveProperty(prop);
 
+            // CONQUEST: If IsMule was just set to true on a player, immediately remove tinkering skills
+            if (prop == PropertyBool.IsMule && value == true && obj is Player playerObj)
+            {
+                playerObj.OnMuleFlagSet();
+            }
+
             var msg = new GameMessagePublicUpdatePropertyBool(obj, prop, value ?? false);
 
             SendNetwork(msg, broadcast);
@@ -1451,7 +1473,13 @@ namespace ACE.Server.WorldObjects
         public bool IsMule
         {
             get => GetProperty(PropertyBool.IsMule) ?? false;
-            set { if (!value) RemoveProperty(PropertyBool.IsMule); else SetProperty(PropertyBool.IsMule, value); }
+            set
+            {
+                if (!value)
+                    RemoveProperty(PropertyBool.IsMule);
+                else
+                    SetProperty(PropertyBool.IsMule, value); // OnMuleFlagSet() called by shadowed SetProperty
+            }
         }
 
         public bool ExcludeFromLeaderboards

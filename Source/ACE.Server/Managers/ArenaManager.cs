@@ -180,7 +180,8 @@ namespace ACE.Server.Managers
             if (!eventType.ToLower().Equals("group"))
             {
                 var queueMsg = $"A new player has queued for a{(eventType.ToLower().Equals("ffa") ? "n" : "")} {eventType} arena match. There {(queueCount > 1 ? "are" : "is")} currently {queueCount} player{(queueCount > 1 ? "s" : "")} queued for {eventType}";
-                PlayerManager.BroadcastToAll(new GameMessageSystemChat(queueMsg, ChatMessageType.Broadcast));
+                // CONQUEST: Use filtered broadcast - only players with ListenToArenaChat enabled will see this
+                PlayerManager.BroadcastToAllWithOption(new GameMessageSystemChat(queueMsg, ChatMessageType.Broadcast), CharacterOption.ListenToArenaChat);
                 DiscordChatManager.SendPvPMessage($"🏟️ {queueMsg}");
             }
 
@@ -521,9 +522,10 @@ namespace ACE.Server.Managers
                             {
                                 finalPlayerList.Add(firstArenaPlayer);
 
-                                //if we have 10 total players, start the match, or if we have at least 5 total players after having waited for 3 minutes, start the match                             
+                                //if we have 10 total players, start the match, or if we have at least 5 total players after having waited for 3 minutes, start the match
                                 foreach (var player in otherPlayers)
                                 {
+                                    finalPlayerList.Add(player);  // CONQUEST: Bug fix - was missing this line, players were never added!
                                     if (finalPlayerList.Count() >= 10)
                                         break;
                                 }

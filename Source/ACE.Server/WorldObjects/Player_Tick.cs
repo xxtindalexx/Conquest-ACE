@@ -137,6 +137,10 @@ namespace ACE.Server.WorldObjects
 
             GagsTick();
 
+            // CONQUEST: Process fellowship vote kick timeout (only by fellowship leader to avoid duplicate processing)
+            if (Fellowship != null && Fellowship.FellowshipLeaderGuid == Guid.Full)
+                Fellowship.ProcessVoteKickTimeout();
+
             PhysicsObj.ObjMaint.DestroyObjects();
 
             // Check if we're due for our periodic SavePlayer
@@ -526,7 +530,7 @@ namespace ACE.Server.WorldObjects
                                             "Imagine using exploits and STILL getting caught. Couldn't be you... oh wait.",
                                             "This door is sponsored by anti-cheat. Unlike your gameplay."
                                         };
-                                        var randomMsg = trollMessages[ThreadSafeRandom.Next(0, trollMessages.Length)];
+                                        var randomMsg = trollMessages[ThreadSafeRandom.Next(0, trollMessages.Length - 1)];
                                         Session.Network.EnqueueSend(new GameMessageSystemChat(randomMsg, ChatMessageType.Broadcast));
                                     }
 
@@ -670,92 +674,159 @@ namespace ACE.Server.WorldObjects
         /// 1. Proximity-based: Player's new position is too close to a closed door
         /// 2. Crossing-based: Player moved from one side of a door to the other
         /// </summary>
+        /// <summary>
+        /// Creates a door line segment based on the door's position and rotation.
+        /// The line segment represents the door's width perpendicular to its facing direction.
+        /// </summary>
+        private (System.Numerics.Vector2 Start, System.Numerics.Vector2 End) GetDoorLine(ACE.Entity.Position doorPos, float doorWidth)
+        {
+            float halfWidth = doorWidth * 0.5f;
+
+            // Get door's rotation as quaternion
+            var rotation = new System.Numerics.Quaternion(
+                doorPos.RotationX,
+                doorPos.RotationY,
+                doorPos.RotationZ,
+                doorPos.RotationW
+            );
+
+            // Transform unit Y vector by door's rotation to get facing direction
+            var doorForward = System.Numerics.Vector3.Transform(System.Numerics.Vector3.UnitY, rotation);
+            doorForward = System.Numerics.Vector3.Normalize(doorForward);
+
+            // Get perpendicular direction (the door's width axis)
+            var perpendicular = new System.Numerics.Vector2(-doorForward.Y, doorForward.X);
+
+            // Create line segment centered on door position
+            var doorCenter = new System.Numerics.Vector2(doorPos.PositionX, doorPos.PositionY);
+            var doorStart = doorCenter - perpendicular * halfWidth;
+            var doorEnd = doorCenter + perpendicular * halfWidth;
+
+            return (doorStart, doorEnd);
+        }
+
+        /// <summary>
+        /// Calculates the intersection point between two line segments.
+        /// Returns null if no intersection exists.
+        /// </summary>
+        private System.Numerics.Vector2? GetLineIntersection(
+            System.Numerics.Vector2 p1, System.Numerics.Vector2 p2,
+            System.Numerics.Vector2 p3, System.Numerics.Vector2 p4)
+        {
+            float x1 = p1.X, y1 = p1.Y;
+            float x2 = p2.X, y2 = p2.Y;
+            float x3 = p3.X, y3 = p3.Y;
+            float x4 = p4.X, y4 = p4.Y;
+
+            // Calculate direction vectors
+            float dx1 = x2 - x1;
+            float dy1 = y2 - y1;
+            float dx2 = x4 - x3;
+            float dy2 = y4 - y3;
+
+            float denominator = dx1 * dy2 - dy1 * dx2;
+
+            // Lines are parallel
+            if (Math.Abs(denominator) < 1e-10)
+                return null;
+
+            // Calculate parameters
+            float t = ((x3 - x1) * dy2 - (y3 - y1) * dx2) / denominator;
+            float u = ((x3 - x1) * dy1 - (y3 - y1) * dx1) / denominator;
+
+            // Check if intersection is within both line segments
+            if (t >= 0 && t <= 1 && u >= 0 && u <= 1)
+            {
+                float intersectionX = x1 + t * dx1;
+                float intersectionY = y1 + t * dy1;
+                return new System.Numerics.Vector2(intersectionX, intersectionY);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Checks if player movement path intersects with any closed doors.
+        /// Uses line-segment intersection for accurate collision detection.
+        /// </summary>
         private Door CheckDoorCollision(ACE.Entity.Position oldPosition, ACE.Entity.Position newPosition)
         {
             if (CurrentLandblock == null || oldPosition == null || newPosition == null)
                 return null;
 
+            // Skip cross-landblock movement for now (TODO: handle this case)
+            if (oldPosition.Landblock != newPosition.Landblock)
+                return null;
+
             var debugMode = PropertyManager.GetBool("anti_blink_debug");
 
-            // Get all world objects from the landblock and check for closed doors
-            var worldObjects = CurrentLandblock.GetWorldObjectsForPhysicsHandling();
+            // Door width for line segment calculation (full width, not half)
+            var doorWidth = (float)PropertyManager.GetDouble("anti_blink_door_width", 3.0);
+
+            // Z-height limit - skip doors too far above/below player
+            var zHeightLimit = (float)PropertyManager.GetDouble("anti_blink_z_height_limit", 3.5);
+
+            // Create player movement path as 2D line segment
+            var pathStart = new System.Numerics.Vector2(oldPosition.PositionX, oldPosition.PositionY);
+            var pathEnd = new System.Numerics.Vector2(newPosition.PositionX, newPosition.PositionY);
 
             int doorCount = 0;
             int closedDoorCount = 0;
 
-            // Configurable detection radius (how close to a closed door triggers detection)
-            // Adjustable via server property: @setprop anti_blink_detection_radius 0.5
-            var detectionRadius = (float)PropertyManager.GetDouble("anti_blink_detection_radius", 0.5);
+            // Use physics visible objects for better efficiency
+            if (PhysicsObj?.ObjMaint == null)
+                return null;
 
-            foreach (var wo in worldObjects)
+            foreach (var obj in PhysicsObj.ObjMaint.GetVisibleObjectsValues(Location.Variation))
             {
-                if (wo is Door door)
+                // Skip objects in different landblocks
+                if (obj.Position.Landblock != oldPosition.Landblock)
+                    continue;
+
+                var wo = obj.WeenieObj?.WorldObject;
+                if (wo == null)
+                    continue;
+
+                // Check if this is a non-ethereal door
+                if (wo is Door door && !door.IsOpen && door.Ethereal != true)
                 {
                     doorCount++;
+                    closedDoorCount++;
 
-                    // Check if door is closed (not open and not ethereal)
-                    if (!door.IsOpen && door.Ethereal != true)
+                    if (door.Location == null)
+                        continue;
+
+                    // Z-height check: skip doors too far above/below player
+                    var zDiff = Math.Abs(obj.Position.Frame.Origin.Z - oldPosition.PositionZ);
+                    if (zDiff > zHeightLimit)
                     {
-                        closedDoorCount++;
-
-                        if (door.Location == null)
-                            continue;
-
-                        var doorPos = door.Location;
-
-                        // Calculate distances
-                        var oldToDoor = doorPos.DistanceTo(oldPosition);
-                        var newToDoor = doorPos.DistanceTo(newPosition);
-
-                        // Skip doors that are far away from both positions
-                        if (oldToDoor > 10.0f && newToDoor > 10.0f)
-                            continue;
-
                         if (debugMode)
                         {
-                            log.Info($"[BLINK DEBUG] {Name} near door '{door.Name}': oldDist={oldToDoor:F2}, newDist={newToDoor:F2}");
+                            log.Info($"[BLINK DEBUG] {Name} skipping door '{door.Name}' - Z diff {zDiff:F2} > {zHeightLimit:F2}");
                         }
+                        continue;
+                    }
 
-                        // METHOD 1: Proximity detection
-                        // If player's NEW position is inside the door's collision zone
-                        // but OLD position was outside, they passed through
-                        if (newToDoor < detectionRadius && oldToDoor >= detectionRadius)
+                    // Get door line segment (perpendicular to door's facing)
+                    var doorLine = GetDoorLine(door.Location, doorWidth);
+
+                    // Check if player path intersects door line
+                    var intersection = GetLineIntersection(pathStart, pathEnd, doorLine.Start, doorLine.End);
+
+                    if (intersection.HasValue)
+                    {
+                        if (debugMode)
                         {
-                            if (debugMode)
-                            {
-                                log.Info($"[BLINK DEBUG] {Name} DETECTED (proximity) - entered door '{door.Name}' zone. oldDist={oldToDoor:F2}, newDist={newToDoor:F2}");
-                            }
-                            return door;
+                            log.Info($"[BLINK DEBUG] {Name} DETECTED - path intersects door '{door.Name}' at ({intersection.Value.X:F2}, {intersection.Value.Y:F2})");
                         }
-
-                        // METHOD 2: Crossing detection
-                        // Player was on one side of door and is now on the other side
-                        // This catches cases where player jumps through or moves fast
-                        var oldToNew = oldPosition.DistanceTo(newPosition);
-                        if (oldToNew > 0.5f) // Only check if meaningful movement
-                        {
-                            var pathSum = oldToDoor + newToDoor;
-                            var pathDiff = Math.Abs(pathSum - oldToNew);
-
-                            // If door is approximately on the line between old and new positions
-                            // pathDiff close to 0 means door is directly on the path
-                            if (pathDiff < 2.0f && oldToDoor > detectionRadius && newToDoor > detectionRadius)
-                            {
-                                // Player crossed through the door zone
-                                if (debugMode)
-                                {
-                                    log.Info($"[BLINK DEBUG] {Name} DETECTED (crossing) - passed through door '{door.Name}'. pathDiff={pathDiff:F2}");
-                                }
-                                return door;
-                            }
-                        }
+                        return door;
                     }
                 }
             }
 
             if (debugMode && doorCount > 0)
             {
-                log.Info($"[BLINK DEBUG] {Name} - Landblock has {doorCount} doors, {closedDoorCount} closed");
+                log.Info($"[BLINK DEBUG] {Name} - Checked {closedDoorCount} closed doors, no collision");
             }
 
             return null;

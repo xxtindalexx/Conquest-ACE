@@ -698,6 +698,10 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         SpellChainTargets = 9331,              // Base number of additional targets for spell chain
         SpellChainDamagePercent = 9332,        // Damage percentage dealt to chain targets (e.g., 30 = 30%)
+        // CONQUEST: Void DoT Spread Properties (Void Contagion - spreads DoTs on death)
+        [AssessmentProperty]
+        VoidDotSpreadTargets = 9333,           // Number of targets DoTs spread to on death (void magic)
+        EnlightenmentVoidDotSpreadBonus = 9334, // +1 void DoT spread target from enlightenment combat trophy
                                                // CONQUEST: Champion Mutation System
         ChampionSpawnChance = 9400,            // Generator property - % chance (0-100)
         ChampionTier = 9401,                   // Creature property - tier (1-8)

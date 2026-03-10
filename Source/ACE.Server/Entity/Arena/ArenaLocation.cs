@@ -470,6 +470,21 @@ namespace ACE.Server.Entity
                                 }
                             }
 
+                            // CONQUEST: Also remove any observers when event ends
+                            if (ActiveEvent.Observers != null && ActiveEvent.Observers.Count > 0)
+                            {
+                                foreach (var observerId in ActiveEvent.Observers.ToList())
+                                {
+                                    var observer = PlayerManager.GetOnlinePlayer(observerId);
+                                    if (observer != null)
+                                    {
+                                        observer.Session.Network.EnqueueSend(new GameMessageSystemChat($"The arena match has ended. You are being teleported out.", ChatMessageType.System));
+                                        ArenaManager.ExitArenaObserverMode(observer);
+                                    }
+                                }
+                                ActiveEvent.Observers.Clear();
+                            }
+
                             ActiveEvent = null;
                         }
                         else //if there's no players in the arena go ahead and end the event early
@@ -659,7 +674,8 @@ namespace ACE.Server.Entity
             DatabaseManager.Log.SaveArenaEvent(ActiveEvent);
 
             var msg = $"Arena Match Started: Event Type = {ActiveEvent.EventTypeDisplay}, Players = {ActiveEvent.PlayersDisplay}, EventID = {ActiveEvent.Id}. To watch the event, type /arena watch {ActiveEvent.Id}";
-            PlayerManager.BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
+            // CONQUEST: Use filtered broadcast - only players with ListenToArenaChat enabled will see this
+            PlayerManager.BroadcastToAllWithOption(new GameMessageSystemChat(msg, ChatMessageType.Broadcast), CharacterOption.ListenToArenaChat);
             DiscordChatManager.SendPvPMessage($"⚔️ Arena Match Started: {ActiveEvent.EventTypeDisplay} - {ActiveEvent.PlayersDisplay}");
             try
             {
@@ -1095,8 +1111,9 @@ namespace ACE.Server.Entity
             }
 
             //Global Broadcast
+            // CONQUEST: Use filtered broadcast - only players with ListenToArenaChat enabled will see this
             var globalMsg = $"{winnerList} just won a {ActiveEvent.EventTypeDisplay} arena event against {loserList} in {ArenaName}";
-            PlayerManager.BroadcastToAll(new GameMessageSystemChat(globalMsg, ChatMessageType.Broadcast));
+            PlayerManager.BroadcastToAllWithOption(new GameMessageSystemChat(globalMsg, ChatMessageType.Broadcast), CharacterOption.ListenToArenaChat);
             DiscordChatManager.SendPvPMessage($"🏆 {globalMsg}");
             try
             {
@@ -1340,8 +1357,9 @@ namespace ACE.Server.Entity
                 }
             }
 
+            // CONQUEST: Use filtered broadcast - only players with ListenToArenaChat enabled will see this
             var drawMsg = $"Arena event ended in a draw: {ActiveEvent.EventTypeDisplay} - {ActiveEvent.PlayersDisplay} - {ArenaName}";
-            PlayerManager.BroadcastToAll(new GameMessageSystemChat(drawMsg, ChatMessageType.Broadcast));
+            PlayerManager.BroadcastToAllWithOption(new GameMessageSystemChat(drawMsg, ChatMessageType.Broadcast), CharacterOption.ListenToArenaChat);
             DiscordChatManager.SendPvPMessage($"🤝 {drawMsg}");
             try
             {
@@ -1473,23 +1491,26 @@ namespace ACE.Server.Entity
             fowl.ArenaName = "Fowl Basement";
             locList.Add(fowl.LandblockId, fowl);
 
-            ////Landing Strip
-            //var ls = new ArenaLocation();
-            //ls.LandblockId = 0xD50E;
-            //ls.SupportedEventTypes = new List<string>();
-            //ls.SupportedEventTypes.Add("1v1");
-            //ls.SupportedEventTypes.Add("2v2");
-            //ls.ArenaName = "The Landing Strip";
-            //locList.Add(ls.LandblockId, ls);
+            //Landing Strip
+            var ls = new ArenaLocation();
+            ls.LandblockId = 0xD50E;
+            ls.SupportedEventTypes = new List<string>() { "1v1", "2v2" };
+            ls.ArenaName = "The Landing Strip";
+            locList.Add(ls.LandblockId, ls);
 
-            ////The Heptagon
-            //var heptagon = new ArenaLocation();
-            //heptagon.LandblockId = 0x7222;
-            //heptagon.SupportedEventTypes = new List<string>();
-            //heptagon.SupportedEventTypes.Add("1v1");
-            //heptagon.SupportedEventTypes.Add("2v2");
-            //heptagon.ArenaName = "The Heptagon";
-            //locList.Add(heptagon.LandblockId, heptagon);
+            //The Heptagon
+            var heptagon = new ArenaLocation();
+            heptagon.LandblockId = 0x7222;
+            heptagon.SupportedEventTypes = new List<string>() { "1v1", "2v2" };
+            heptagon.ArenaName = "The Heptagon";
+            locList.Add(heptagon.LandblockId, heptagon);
+
+            //Ice Box
+            var icebox = new ArenaLocation();
+            icebox.LandblockId = 0x5950;
+            icebox.SupportedEventTypes = new List<string>() { "1v1", "2v2" };
+            icebox.ArenaName = "Ice Box";
+            locList.Add(icebox.LandblockId, icebox);
 
             ////oneTen
             //var oneTen = new ArenaLocation();
@@ -1518,8 +1539,9 @@ namespace ACE.Server.Entity
                         //0xECEC, //Pyramid -Admin Island
                         //0x00AF, //Mad Cow Arena
                         0x596A, //Fowl Basement
-                        //0xD50E, //Landing Strip
-                        //0x7222  //The Heptagon
+                        0xD50E, //Landing Strip
+                        0x7222, //The Heptagon
+                        0x5950, //Ice Box
                         //0x039D, //One Ten
                     };
                 }
@@ -1709,33 +1731,47 @@ namespace ACE.Server.Entity
                             //0x596A0102 [5.146578 -21.661127 0.005000] 0.718819 0.000000 0.000000 -0.695197
                     }); //Fowl Basement
 
-                    //_arenaLocationStartingPositions.Add(
-                    //0xD50E,
-                    //new List<Position>()
-                    //{
-                    //        new Position(0xD50E0012, 48.137695f, 40.723217f, -0.095000f, 0.000000f, 0.000000f, 0.011873f, -0.999929f, false, 2),
-                    //        //0xD50E0012 [48.137695 40.723217 -0.095000] -0.999929 0.000000 0.000000 0.011873
-                    //        new Position(0xD50E000E, 47.949497f, 130.815628f, -0.095000f, 0.000000f, 0.000000f, -0.999986f, 0.005301f, false, 2),
-                    //        //0xD50E000E [47.949497 130.815628 -0.095000] 0.005301 0.000000 0.000000 -0.999986
-                    //        new Position(0xD50E000D, 36.021290f, 96.158844f, -0.095000f, 0.000000f, 0.000000f, -0.707318f, 0.706895f, false, 2),
-                    //        //0xD50E000D [36.021290 96.158844 -0.095000] 0.706895 0.000000 0.000000 -0.707318
-                    //        new Position(0xD50E0015, 61.040390f, 96.038742f, -0.445000f, 0.000000f, 0.000000f, -0.707665f, -0.706548f, false, 2),
-                    //        //0xD50E0015 [61.040390 96.038742 -0.445000] -0.706548 0.000000 0.000000 -0.707665
-                    //}); //Landing Strip
+                    _arenaLocationStartingPositions.Add(
+                    0xD50E,
+                    new List<Position>()
+                    {
+                            new Position(0xD50E0012, 48.137695f, 40.723217f, -0.095000f, 0.000000f, 0.000000f, 0.011873f, -0.999929f, false, 2),
+                            //0xD50E0012 [48.137695 40.723217 -0.095000] -0.999929 0.000000 0.000000 0.011873
+                            new Position(0xD50E000E, 47.949497f, 130.815628f, -0.095000f, 0.000000f, 0.000000f, -0.999986f, 0.005301f, false, 2),
+                            //0xD50E000E [47.949497 130.815628 -0.095000] 0.005301 0.000000 0.000000 -0.999986
+                            new Position(0xD50E000D, 36.021290f, 96.158844f, -0.095000f, 0.000000f, 0.000000f, -0.707318f, 0.706895f, false, 2),
+                            //0xD50E000D [36.021290 96.158844 -0.095000] 0.706895 0.000000 0.000000 -0.707318
+                            new Position(0xD50E0015, 61.040390f, 96.038742f, -0.445000f, 0.000000f, 0.000000f, -0.707665f, -0.706548f, false, 2),
+                            //0xD50E0015 [61.040390 96.038742 -0.445000] -0.706548 0.000000 0.000000 -0.707665
+                    }); //Landing Strip
 
-                    //_arenaLocationStartingPositions.Add(
-                    //0x7222,
-                    //new List<Position>()
-                    //{
-                    //        new Position(0x7222002D, 131.824692f, 96.041451f, -0.445000f, 0.000000f, 0.000000f, -0.709499f, 0.704706f, false, 2),
-                    //        // 0x7222002D [131.824692 96.041451 -0.445000] 0.704706 0.000000 0.000000 -0.709499
-                    //        new Position(0x72220034, 156.016724f, 95.997833f, -0.445000f, 0.000000f, 0.000000f, -0.719308f, -0.694692f, false, 2),
-                    //        // 0x72220034 [156.016724 95.997833 -0.445000] -0.694692 0.000000 0.000000 -0.719308
-                    //        new Position(0x7222002D, 143.945587f, 110.087395f, -0.445000f, 0.000000f, 0.000000f, -0.999998f, -0.002127f, false, 2),
-                    //        // 0x7222002D [143.945587 110.087395 -0.445000] -0.002127 0.000000 0.000000 -0.999998
-                    //        new Position(0x7222002C, 143.886292f, 81.059364f, -0.445000f, 0.000000f, 0.000000f, 0.004404f, -0.999990f, false, 2),
-                    //        // 0x7222002C [143.886292 81.059364 -0.445000] -0.999990 0.000000 0.000000 0.004404
-                    //}); //The Heptagon
+                    _arenaLocationStartingPositions.Add(
+                    0x7222,
+                    new List<Position>()
+                    {
+                            new Position(0x7222002D, 131.824692f, 96.041451f, -0.445000f, 0.000000f, 0.000000f, -0.709499f, 0.704706f, false, 2),
+                            // 0x7222002D [131.824692 96.041451 -0.445000] 0.704706 0.000000 0.000000 -0.709499
+                            new Position(0x72220034, 156.016724f, 95.997833f, -0.445000f, 0.000000f, 0.000000f, -0.719308f, -0.694692f, false, 2),
+                            // 0x72220034 [156.016724 95.997833 -0.445000] -0.694692 0.000000 0.000000 -0.719308
+                            new Position(0x7222002D, 143.945587f, 110.087395f, -0.445000f, 0.000000f, 0.000000f, -0.999998f, -0.002127f, false, 2),
+                            // 0x7222002D [143.945587 110.087395 -0.445000] -0.002127 0.000000 0.000000 -0.999998
+                            new Position(0x7222002C, 143.886292f, 81.059364f, -0.445000f, 0.000000f, 0.000000f, 0.004404f, -0.999990f, false, 2),
+                            // 0x7222002C [143.886292 81.059364 -0.445000] -0.999990 0.000000 0.000000 0.004404
+                    }); //The Heptagon
+
+                    _arenaLocationStartingPositions.Add(
+                    0x5950,
+                    new List<Position>()
+                    {
+                            new Position(0x595002C2, 137.865723f, -159.649750f, 0.005000f, 0f, 0f, 0.014999f, 0.999888f, false, 2),
+                            //0x595002C2 [137.865723 -159.649750 0.005000] 0.999888 0.000000 0.000000 0.014999
+                            new Position(0x595002BF, 142.448196f, -129.912125f, 0.005000f, 0f, 0f, 0.999978f, -0.006704f, false, 2),
+                            //0x595002BF [142.448196 -129.912125 0.005000] -0.006704 0.000000 0.000000 0.999978
+                            new Position(0x595002C2, 141.860199f, -159.729660f, 0.005000f, 0f, 0f, -0.010000f, 0.999950f, false, 2),
+                            //0x595002C2 [141.860199 -159.729660 0.005000] 0.999950 0.000000 0.000000 -0.010000
+                            new Position(0x595002BF, 135.567551f, -129.822784f, 0.005000f, 0f, 0f, 0.999978f, -0.006704f, false, 2),
+                            //0x595002BF [135.567551 -129.822784 0.005000] -0.006704 0.000000 0.000000 0.999978
+                    }); //Ice Box
 
                     //_arenaLocationStartingPositions.Add(
                     //    0x039D,

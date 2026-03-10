@@ -1581,14 +1581,16 @@ namespace ACE.Server.WorldObjects.Managers
                     if (!targetPlayer.IsPKType)
                         continue;
 
-                    // void spell projectile direct damage was modified to apply this pvp modifier *on top of* the player's natural resistance to nether,
-                    // which supposedly brings the direct damage from void spells in pvp closer to retail
-
-                    // however, dots were already supposedly on par, so we replace resistanceMod with void_pvp_modifier for dots,
-                    // instead of applying it on top like direct damage
-
+                    // CONQUEST: Scale Void/Nether DoT damage in PvP via config property
+                    // 1.0 = full damage, 0.5 = half damage, 0 = no damage
+                    // The enchantment still stays on the target (damage reduction debuff remains)
                     if (damageType == DamageType.Nether)
-                        resistanceMod = (float)PropertyManager.GetDouble("void_pvp_modifier");
+                    {
+                        var voidDotScale = (float)PropertyManager.GetDouble("pvp_void_dot_damage_scale", 0.0);
+                        if (voidDotScale <= 0)
+                            continue;
+                        tickAmount *= voidDotScale;
+                    }
                 }
 
                 // with the halvening, this actually seems like the fairest balance currently..

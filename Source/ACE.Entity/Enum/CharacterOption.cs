@@ -175,7 +175,11 @@ namespace ACE.Entity.Enum
         CharacterOptions1Default                = 0x35,
 
         [CharacterOptions2(CharacterOptions2.Default)]
-        CharacterOptions2Default                = 0x36
+        CharacterOptions2Default                = 0x36,
+
+        // CONQUEST: Arena message toggle
+        [CharacterOptions2(CharacterOptions2.HearArenaChat)]
+        ListenToArenaChat                       = 0x37 // HearArenaChat_PlayerOption
     }
 
     public static class CharacterOptionExtensions

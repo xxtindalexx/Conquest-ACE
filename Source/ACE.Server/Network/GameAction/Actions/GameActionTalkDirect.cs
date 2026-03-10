@@ -62,15 +62,25 @@ namespace ACE.Server.Network.GameAction.Actions
                         return;
                     }
 
-                    // Check if fellowship is full
-                    if (fellowship.FellowshipMembers.Count >= ACE.Server.Entity.Fellowship.MaxFellows)
+                    // Check if fellowship is full OR if there are people waiting in queue
+                    // CONQUEST: Fix queue bypass - if people are waiting, new joiners must queue
+                    var queueCount = fellowship.GetWaitingQueueCount();
+                    if (fellowship.FellowshipMembers.Count >= ACE.Server.Entity.Fellowship.MaxFellows || queueCount > 0)
                     {
-                        // CONQUEST: Add to waiting queue instead of rejecting
+                        // Add to waiting queue
                         var position = fellowship.AddToWaitingQueue(session.Player);
-                        var queueCount = fellowship.GetWaitingQueueCount();
-                        session.Network.EnqueueSend(new GameMessageSystemChat(
-                            $"[FSHIP]: {targetPlayer.Name}'s fellowship is full ({fellowship.FellowshipMembers.Count}/{ACE.Server.Entity.Fellowship.MaxFellows}). You are #{position} in queue. You will be notified when a spot opens.",
-                            ChatMessageType.Broadcast));
+                        if (fellowship.FellowshipMembers.Count >= ACE.Server.Entity.Fellowship.MaxFellows)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat(
+                                $"[FSHIP]: {targetPlayer.Name}'s fellowship is full ({fellowship.FellowshipMembers.Count}/{ACE.Server.Entity.Fellowship.MaxFellows}). You are #{position} in queue ({queueCount + 1} waiting).",
+                                ChatMessageType.Broadcast));
+                        }
+                        else
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat(
+                                $"[FSHIP]: {targetPlayer.Name}'s fellowship has {queueCount} player(s) waiting. You are #{position} in queue.",
+                                ChatMessageType.Broadcast));
+                        }
                         return;
                     }
 

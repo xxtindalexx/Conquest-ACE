@@ -482,8 +482,12 @@ namespace ACE.Server.Entity
             player.Enlightenment += 1;
             player.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt(player, PropertyInt.Enlightenment, player.Enlightenment));
 
-            // CONQUEST: Add +1 to all 6 attribute StartingValues (same method as augmentations)
-            // This ensures the bonus shows on both the character panel AND inspection panel
+            // CONQUEST: Record timestamp for leaderboard ordering (first to achieve rank shows higher)
+            player.SetProperty(PropertyFloat.EnlightenmentTimestamp, Time.GetUnixTime());
+
+            // CONQUEST: Add +1 to all 6 attribute StartingValues
+            // This ensures the bonus shows correctly on the client's character panel
+            // The AttributeTransferDevice subtracts enlightenment when checking the cap
             player.Attributes[PropertyAttribute.Strength].StartingValue += 1;
             player.Attributes[PropertyAttribute.Endurance].StartingValue += 1;
             player.Attributes[PropertyAttribute.Coordination].StartingValue += 1;
@@ -552,40 +556,46 @@ namespace ACE.Server.Entity
                     player.AddTitle(CharacterTitle.Gimp);
                     break;
                 case 10:
-                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria)
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria/VoidContagion)
                     AwardCombatTrophy(player);
                     break;
                 case 15:
                     // Title: Lots of Vitae (retired)
                     player.AddTitle(CharacterTitle.LotsofVitae);
                     break;
-                case 25:
-                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria)
+                case 20:
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria/VoidContagion)
                     AwardCombatTrophy(player);
                     break;
                 case 35:
                     // Title: Certified Ganksta (retired)
                     player.AddTitle(CharacterTitle.CertifiedGanksta);
                     break;
-                case 50:
-                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria)
+                case 40:
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria/VoidContagion)
                     AwardCombatTrophy(player);
+                    break;
+                case 50:
                     // Title: Defender of Dereth (retired)
                     player.AddTitle(CharacterTitle.DefenderofDereth);
                     // Item: Helm of 50th Journey
                     AwardEnlightenmentItem(player, 53370013, "Helm of 50th Journey");
                     break;
                 case 60:
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria/VoidContagion)
+                    AwardCombatTrophy(player);
                     // Title: Blood Warrior (retired)
                     player.AddTitle(CharacterTitle.BloodWarrior);
                     break;
                 case 75:
-                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria)
-                    AwardCombatTrophy(player);
                     // Title: Guardian of Dereth + Item
                     player.AddTitle(CharacterTitle.GuardianofDereth);
                     // Item: Robe of 75th Rebirth (Envoy Robe Tailor)
                     AwardEnlightenmentItem(player, 53370012, "Robe of 75th Rebirth");
+                    break;
+                case 80:
+                    // Combat Trophy for ability choice (Cleave/Split/Chain/Aetheria/VoidContagion)
+                    AwardCombatTrophy(player);
                     break;
                 case 100:
                     // Title: Warlord of Dereth + Item

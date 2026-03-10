@@ -1406,12 +1406,13 @@ namespace ACE.Server.WorldObjects
             LuminanceAugmentMeleeCount = 0;
             LuminanceAugmentMissileCount = 0;
 
-            // Remove existing self-cast buffs so the lower-power buffs can be applied
+            // CONQUEST: Buff level based on player's magic skill
+            var buffLevel = GetPvPBuffLevel();
+
+            // Remove existing self-cast buffs so clean buffs without augs can be applied
             RemoveSelfCastBuffsForRebuff();
 
             // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
-            // CONQUEST: Buff level based on player level, suppress visual effects when entering PvP mode
-            var buffLevel = GetPvPBuffLevel();
             BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
@@ -1497,12 +1498,13 @@ namespace ACE.Server.WorldObjects
             LuminanceAugmentMeleeCount = 0;
             LuminanceAugmentMissileCount = 0;
 
-            // Remove existing self-cast buffs so the lower-power buffs can be applied
+            // CONQUEST: Buff level based on player's magic skill
+            var buffLevel = GetPvPBuffLevel();
+
+            // Remove existing self-cast buffs so clean buffs without augs can be applied
             RemoveSelfCastBuffsForRebuff();
 
             // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
-            // CONQUEST: Buff level based on player level, suppress visual effects when entering PK dungeon mode
-            var buffLevel = GetPvPBuffLevel();
             BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
@@ -1566,12 +1568,13 @@ namespace ACE.Server.WorldObjects
             StoredPvPMeleeAugs = null;
             StoredPvPMissileAugs = null;
 
-            // Remove existing self-cast buffs so the higher-power buffs can be applied
+            // CONQUEST: Buff level based on player's magic skill
+            var buffLevel = GetPvPBuffLevel();
+
+            // Remove existing self-cast buffs so clean buffs without augs can be applied
             RemoveSelfCastBuffsForRebuff();
 
             // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
-            // CONQUEST: Buff level based on player level, suppress visual effects when exiting PK dungeon mode
-            var buffLevel = GetPvPBuffLevel();
             BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
@@ -1636,12 +1639,13 @@ namespace ACE.Server.WorldObjects
             StoredPvPMeleeAugs = null;
             StoredPvPMissileAugs = null;
 
-            // Remove existing self-cast buffs so the higher-power buffs can be applied
+            // CONQUEST: Buff level based on player's magic skill
+            var buffLevel = GetPvPBuffLevel();
+
+            // Remove existing self-cast buffs so clean buffs without augs can be applied
             RemoveSelfCastBuffsForRebuff();
 
             // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
-            // CONQUEST: Buff level based on player level, suppress visual effects when exiting PvP mode
-            var buffLevel = GetPvPBuffLevel();
             BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
 
             // Restore vital percentages based on new max values
@@ -1665,20 +1669,27 @@ namespace ACE.Server.WorldObjects
         /// CONQUEST: Returns the appropriate buff spell level based on player's character level
         /// Used for PvP mode rebuffing to ensure level-appropriate buffs
         /// </summary>
+        /// <summary>
+        /// CONQUEST: Returns the appropriate buff spell level based on player's magic skills
+        /// Uses the highest of Creature/Life/Item Enchantment skills to determine buff level
+        /// </summary>
         private ulong GetPvPBuffLevel()
         {
-            var playerLevel = Level ?? 1;
+            // Get the player's magic skill levels (current effective values)
+            var creatureSkill = GetCreatureSkill(Skill.CreatureEnchantment).Current;
+            var lifeSkill = GetCreatureSkill(Skill.LifeMagic).Current;
+            var itemSkill = GetCreatureSkill(Skill.ItemEnchantment).Current;
 
-            if (playerLevel >= 180)
+            // Use the highest of the three magic skills
+            var highestMagicSkill = Math.Max(creatureSkill, Math.Max(lifeSkill, itemSkill));
+
+            // Determine buff level based on magic skill
+            if (highestMagicSkill >= 400)
                 return 8;
-            else if (playerLevel >= 100)
+            else if (highestMagicSkill >= 300)
                 return 7;
-            else if (playerLevel >= 60)
-                return 6;
-            else if (playerLevel >= 30)
-                return 5;
             else
-                return 4;
+                return 6;
         }
 
         /// <summary>

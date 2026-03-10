@@ -664,6 +664,18 @@ namespace ACE.Server.Managers
                 player.Session.Network.EnqueueSend(msg);
         }
 
+        /// <summary>
+        /// CONQUEST: Broadcasts GameMessage to all online sessions that have a specific CharacterOption enabled.
+        /// </summary>
+        public static void BroadcastToAllWithOption(OutboundGameMessage msg, CharacterOption option)
+        {
+            foreach (var player in GetAllOnline())
+            {
+                if (player.GetCharacterOption(option))
+                    player.Session.Network.EnqueueSend(msg);
+            }
+        }
+
         public static void BroadcastFromDiscord(Channel channel, string senderName, string message)
         {
             foreach (var player in GetAllOnline().Where(p => (p.ChannelsActive ?? 0).HasFlag(channel)))

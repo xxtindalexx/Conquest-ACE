@@ -12,6 +12,56 @@ namespace ACE.Server.WorldObjects.Managers
     /// </summary>
     public partial class EmoteManager
     {
+        // CONQUEST: Tiered Augmentation Cost System 2.0
+        // Tier bases are derived from emote.Amount (so gem config still matters)
+        // Flat 5% increase across all tiers for simple player calculation
+        // Tier 1 (0-14):   1.0x  multiplier → 2.5M base
+        // Tier 2 (15-29):  2.4x  multiplier → 6M base
+        // Tier 3 (30-59):  4.8x  multiplier → 12M base
+        // Tier 4 (60+):    12.0x multiplier → 30M base (ensures smooth transition from T3)
+
+        /// <summary>
+        /// CONQUEST: Calculates the cost for a single augmentation based on tiered pricing
+        /// </summary>
+        /// <param name="augIndex">The 0-based index of the augmentation being purchased</param>
+        /// <param name="baseCost">Base cost from emote.Amount</param>
+        /// <param name="emotePercent">Percentage increase from emote.Percent</param>
+        /// <returns>Cost in luminance for this augmentation</returns>
+        private static double CalculateTieredAugmentationCost(long augIndex, double baseCost, double emotePercent)
+        {
+            double tierBase;
+            long positionInTier;
+
+            if (augIndex >= 60)
+            {
+                // Tier 4: 60+ (30M base with default 2.5M emote.Amount)
+                tierBase = baseCost * 12.0;
+                positionInTier = augIndex - 60;
+            }
+            else if (augIndex >= 30)
+            {
+                // Tier 3: 30-59 (12M base with default 2.5M emote.Amount)
+                tierBase = baseCost * 4.8;
+                positionInTier = augIndex - 30;
+            }
+            else if (augIndex >= 15)
+            {
+                // Tier 2: 15-29 (6M base with default 2.5M emote.Amount)
+                tierBase = baseCost * 2.4;
+                positionInTier = augIndex - 15;
+            }
+            else
+            {
+                // Tier 1: 0-14 (2.5M base - uses emote.Amount directly)
+                tierBase = baseCost;
+                positionInTier = augIndex;
+            }
+
+            // Calculate cost: tierBase × (1 + positionInTier × emotePercent)
+            // Flat percentage across all tiers for easy player calculation
+            return tierBase * (1.0 + (positionInTier * emotePercent));
+        }
+
         /// <summary>
         /// CONQUEST: Handles augmentation gem usage for EmoteType.PromptAddAugment
         /// Supports +1 and +5 variants for all 10 augmentation types
@@ -23,78 +73,67 @@ namespace ACE.Server.WorldObjects.Managers
 
             var augType = emote.Message; // e.g., "Creature", "Creature5", "Item", "Item5", etc.
 
-            // Determine augmentation type and count
+            // Determine augmentation type and count from message suffix
             int augCount = 1; // Default to +1
             string baseAugType = augType;
 
             if (augType.EndsWith("5"))
             {
                 augCount = 5;
-                baseAugType = augType.Substring(0, augType.Length - 1); // Remove the "5"
+                baseAugType = augType.Substring(0, augType.Length - 1);
             }
 
-            // Base luminance cost per augmentation level (from emote.Amount)
-            double baseCost = (double)(emote.Amount ?? 1000);
-
-            // Get current augmentation count and calculate total cost
+            // Get current augmentation count
             long currentAugCount = 0;
-            double totalCost = 0;
-            uint gemWeenieId = 0;
 
             switch (baseAugType)
             {
                 case "Creature":
                     currentAugCount = player.LuminanceAugmentCreatureCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370004u : 13370013u; // Placeholder weenie IDs
                     break;
                 case "Item":
                     currentAugCount = player.LuminanceAugmentItemCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370005u : 13370014u;
                     break;
                 case "Life":
                     currentAugCount = player.LuminanceAugmentLifeCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370006u : 13370015u;
                     break;
                 case "War":
                     currentAugCount = player.LuminanceAugmentWarCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370007u : 13370016u;
                     break;
                 case "Void":
                     currentAugCount = player.LuminanceAugmentVoidCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370008u : 13370017u;
                     break;
                 case "Duration":
                     currentAugCount = player.LuminanceAugmentSpellDurationCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370011u : 13370020u;
                     break;
                 case "Specialization":
                     currentAugCount = player.LuminanceAugmentSpecializeCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370012u : 13370021u;
                     break;
                 case "Summon":
                     currentAugCount = player.LuminanceAugmentSummonCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 999007u : 999017u;
                     break;
                 case "Melee":
                     currentAugCount = player.LuminanceAugmentMeleeCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370009u : 13370018u;
                     break;
                 case "Missile":
                     currentAugCount = player.LuminanceAugmentMissileCount ?? 0;
-                    gemWeenieId = augCount == 1 ? 13370010u : 13370019u;
                     break;
                 default:
                     player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown augmentation type: {augType}", ChatMessageType.Broadcast));
                     return;
             }
 
-            // Calculate cumulative cost for the specified number of augmentations
-            // CONQUEST: Linear cost scaling using weenie-configured percent: baseCost * (1 + currentCount * percent) per augmentation
-            var percentMultiplier = (emote.Percent ?? 1.0) / 100.0; // Convert from percentage to decimal (e.g., 0.3625% -> 0.003625)
+            // Base cost and percent increase from emote configuration
+            double baseCost = (double)(emote.Amount ?? 2500000);
+            double emotePercent = (emote.Percent ?? 5.0) / 100.0; // Convert from percentage to decimal
+            double totalCost = 0;
+
+            // CONQUEST: Calculate cumulative cost with tiered pricing
+            // Each augmentation is priced based on the player's current count for THIS type
             for (int i = 0; i < augCount; i++)
             {
-                var costMultiplier = 1.0 + ((currentAugCount + i) * percentMultiplier);
-                totalCost += baseCost * costMultiplier;
+                long thisAugIndex = currentAugCount + i;
+                totalCost += CalculateTieredAugmentationCost(thisAugIndex, baseCost, emotePercent);
             }
 
             // Check if player has enough banked luminance
@@ -114,8 +153,12 @@ namespace ACE.Server.WorldObjects.Managers
                     return;
                 }
 
-                // Deduct banked luminance
-                player.BankedLuminance -= (long)totalCost;
+                // Deduct luminance using SpendLuminance for proper handling
+                if (!player.SpendLuminance((long)totalCost))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to spend the necessary luminance. Please try again.", ChatMessageType.Broadcast));
+                    return;
+                }
 
                 // Apply the augmentations
                 switch (baseAugType)
@@ -152,10 +195,10 @@ namespace ACE.Server.WorldObjects.Managers
                         break;
                 }
 
-                // Consume the gem
-                if (gemWeenieId != 0)
+                // Consume the gem (the WorldObject that triggered this emote)
+                if (WorldObject != null)
                 {
-                    player.TryConsumeFromInventoryWithNetworking(gemWeenieId, 1);
+                    player.TryConsumeFromInventoryWithNetworking(WorldObject, 1);
                 }
 
                 // Notify player

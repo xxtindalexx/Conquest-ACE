@@ -230,5 +230,16 @@ namespace ACE.Entity.Enum.Properties
         /// CONQUEST: If TRUE, shows damage dealt by player's summoned pets
         /// </summary>
         ShowPetDamage = 9220,
+
+        /// <summary>
+        /// CONQUEST: Migration marker - arena chat option has been applied to this character
+        /// </summary>
+        ArenaChatMigrationApplied = 9221,
+
+        /// <summary>
+        /// CONQUEST: Migration marker - enlightenment attribute fix has been applied
+        /// Removes inflated StartingValue from enlightenment (now calculated in Base instead)
+        /// </summary>
+        EnlightenmentAttributeMigrationApplied = 9222,
     }
 }

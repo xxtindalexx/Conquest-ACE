@@ -62,13 +62,23 @@ namespace ACE.Server.WorldObjects
             var fromAttr = player.Attributes[TransferFromAttribute];
             var toAttr = player.Attributes[TransferToAttribute];
 
-            if (fromAttr.StartingValue <= 10)
+            // CONQUEST: Calculate true innate values by subtracting enlightenment and augmentation bonuses
+            // These bonuses add to StartingValue for display, but we don't want them
+            // to count towards the 100 cap for stat swapping
+            var enlightenmentBonus = (uint)(player.Enlightenment > 0 ? player.Enlightenment : 0);
+            var fromAugBonus = (uint)(GetAugmentationBonus(player, TransferFromAttribute));
+            var toAugBonus = (uint)(GetAugmentationBonus(player, TransferToAttribute));
+
+            var fromInnate = fromAttr.StartingValue - enlightenmentBonus - fromAugBonus;
+            var toInnate = toAttr.StartingValue - enlightenmentBonus - toAugBonus;
+
+            if (fromInnate <= 10)
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your innate {TransferFromAttribute} must be above 10 to use the {Name}.", ChatMessageType.Broadcast));
                 return;
             }
 
-            if (toAttr.StartingValue >= 100)
+            if (toInnate >= 100)
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your innate {TransferToAttribute} must be below 100 to use the {Name}.", ChatMessageType.Broadcast));
                 return;
@@ -81,8 +91,9 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            var fromAmount = Math.Min(10, fromAttr.StartingValue - 10);
-            var toAmount = Math.Min(100 - toAttr.StartingValue, 10);
+            // CONQUEST: Use true innate values for transfer calculations
+            var fromAmount = Math.Min(10, fromInnate - 10);
+            var toAmount = Math.Min(100 - toInnate, 10);
 
             var amount = Math.Min(fromAmount, toAmount);
 
@@ -102,6 +113,37 @@ namespace ACE.Server.WorldObjects
             player.SaveBiotaToDatabase();
 
             player.TryConsumeFromInventoryWithNetworking(this, 1);
+        }
+
+        /// <summary>
+        /// CONQUEST: Gets the augmentation bonus for a specific attribute
+        /// Each augmentation adds +5 to the attribute's StartingValue
+        /// </summary>
+        private static int GetAugmentationBonus(Player player, PropertyAttribute attribute)
+        {
+            int augCount = 0;
+            switch (attribute)
+            {
+                case PropertyAttribute.Strength:
+                    augCount = player.AugmentationInnateStrength;
+                    break;
+                case PropertyAttribute.Endurance:
+                    augCount = player.AugmentationInnateEndurance;
+                    break;
+                case PropertyAttribute.Coordination:
+                    augCount = player.AugmentationInnateCoordination;
+                    break;
+                case PropertyAttribute.Quickness:
+                    augCount = player.AugmentationInnateQuickness;
+                    break;
+                case PropertyAttribute.Focus:
+                    augCount = player.AugmentationInnateFocus;
+                    break;
+                case PropertyAttribute.Self:
+                    augCount = player.AugmentationInnateSelf;
+                    break;
+            }
+            return augCount * 5; // Each augmentation adds +5
         }
     }
 }

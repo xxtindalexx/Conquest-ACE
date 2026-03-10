@@ -229,6 +229,7 @@ namespace ACE.Entity.Enum.Properties
         SoulFragmentDayResetTimestamp  = 8103,  // Timestamp for daily Soul Fragment cap reset
         LastDungeonDeathTimestamp      = 8104,  // Last time player died in a dungeon (20min re-entry cooldown)
         LastClapCommandTime            = 8105,  // Last time /clap command was used (for ILT compatibility)
+        EnlightenmentTimestamp         = 8106,  // Timestamp when player achieved current enlightenment level (for leaderboard ordering)
         SpentExperienceStrength        = 9002,
         SpentExperienceEndurance       = 9003,
         SpentExperienceCoordination    = 9004,

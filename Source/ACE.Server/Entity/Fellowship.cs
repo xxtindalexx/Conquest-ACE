@@ -51,6 +51,11 @@ namespace ACE.Server.Entity
         public List<WeakReference<Player>> WaitingQueue;
 
         /// <summary>
+        /// CONQUEST: Active vote kick session
+        /// </summary>
+        public VoteKickSession ActiveVoteKick;
+
+        /// <summary>
         /// Called when a player first creates a Fellowship
         /// </summary>
         public Fellowship(Player leader, string fellowshipName, bool shareXP)
@@ -74,6 +79,7 @@ namespace ACE.Server.Entity
             DepartedMembers = new Dictionary<uint, int>();
             FellowshipLocks = new Dictionary<string, FellowshipLockData>();
             WaitingQueue = new List<WeakReference<Player>>();
+            ActiveVoteKick = null;
         }
 
         /// <summary>
@@ -1047,6 +1053,269 @@ namespace ACE.Server.Entity
 
             CalculateXPSharing();
             UpdateAllMembers();
+        }
+
+        #region CONQUEST: Vote Kick System
+
+        /// <summary>
+        /// CONQUEST: Start a vote to kick a player from the fellowship
+        /// </summary>
+        public bool StartVoteKick(Player initiator, Player target)
+        {
+            if (initiator == null || target == null)
+                return false;
+
+            // Can't vote kick yourself
+            if (initiator.Guid.Full == target.Guid.Full)
+            {
+                initiator.Session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You cannot vote to kick yourself.", ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // Can't kick the leader via vote
+            if (target.Guid.Full == FellowshipLeaderGuid)
+            {
+                initiator.Session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You cannot vote to kick the fellowship leader.", ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // Check if target is in fellowship
+            if (!FellowshipMembers.ContainsKey(target.Guid.Full))
+            {
+                initiator.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {target.Name} is not in your fellowship.", ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // Check if there's already an active vote
+            if (ActiveVoteKick != null && !ActiveVoteKick.IsExpired())
+            {
+                initiator.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: A vote kick for {ActiveVoteKick.TargetName} is already in progress. Wait for it to complete.", ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // Need at least 3 people for a vote (initiator, target, and at least one other voter)
+            if (FellowshipMembers.Count < 3)
+            {
+                initiator.Session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Fellowship must have at least 3 members to start a vote kick.", ChatMessageType.Broadcast));
+                return false;
+            }
+
+            // Start the vote
+            ActiveVoteKick = new VoteKickSession(target.Guid.Full, target.Name, initiator.Guid.Full, FellowshipMembers.Count);
+
+            // Initiator automatically votes yes
+            ActiveVoteKick.VotesYes.Add(initiator.Guid.Full);
+
+            // Notify all fellowship members
+            var fellowshipMembers = GetFellowshipMembers();
+            foreach (var member in fellowshipMembers.Values)
+            {
+                if (member.Guid.Full == target.Guid.Full)
+                {
+                    member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {initiator.Name} has started a vote to kick you from the fellowship! Members have 60 seconds to vote.", ChatMessageType.Broadcast));
+                }
+                else if (member.Guid.Full == initiator.Guid.Full)
+                {
+                    member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You started a vote to kick {target.Name}. Your vote: YES. Waiting for others... (60 seconds)", ChatMessageType.Broadcast));
+                }
+                else
+                {
+                    member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {initiator.Name} started a vote to kick {target.Name}. Type '/votekick yes' or '/votekick no' to vote. (60 seconds)", ChatMessageType.Broadcast));
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// CONQUEST: Cast a vote in the active vote kick
+        /// </summary>
+        public void CastVote(Player voter, bool voteYes)
+        {
+            if (voter == null)
+                return;
+
+            if (ActiveVoteKick == null || ActiveVoteKick.IsExpired())
+            {
+                voter.Session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: There is no active vote kick.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Can't vote if you're the target
+            if (voter.Guid.Full == ActiveVoteKick.TargetGuid)
+            {
+                voter.Session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You cannot vote on your own kick.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Check if already voted
+            if (ActiveVoteKick.VotesYes.Contains(voter.Guid.Full) || ActiveVoteKick.VotesNo.Contains(voter.Guid.Full))
+            {
+                voter.Session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You have already voted.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            // Cast vote
+            if (voteYes)
+                ActiveVoteKick.VotesYes.Add(voter.Guid.Full);
+            else
+                ActiveVoteKick.VotesNo.Add(voter.Guid.Full);
+
+            voter.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Your vote: {(voteYes ? "YES" : "NO")}", ChatMessageType.Broadcast));
+
+            // Check if vote is complete
+            CheckVoteKickResult();
+        }
+
+        /// <summary>
+        /// CONQUEST: Check if vote kick has enough votes to pass or fail
+        /// Uses majority of votes CAST (not eligible voters) to handle AFK players
+        /// </summary>
+        public void CheckVoteKickResult()
+        {
+            if (ActiveVoteKick == null)
+                return;
+
+            var eligibleVoters = FellowshipMembers.Count - 1; // Exclude target
+            var yesVotes = ActiveVoteKick.VotesYes.Count;
+            var noVotes = ActiveVoteKick.VotesNo.Count;
+            var totalVotes = yesVotes + noVotes;
+            var remainingVoters = eligibleVoters - totalVotes;
+
+            // Check if vote passed: yes > no AND mathematically impossible for no to catch up
+            if (yesVotes > noVotes && yesVotes > (noVotes + remainingVoters))
+            {
+                // Vote passed - kick the player
+                var fellowshipMembers = GetFellowshipMembers();
+
+                foreach (var member in fellowshipMembers.Values)
+                {
+                    member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Vote passed ({yesVotes} yes, {noVotes} no). {ActiveVoteKick.TargetName} has been kicked from the fellowship.", ChatMessageType.Broadcast));
+                }
+
+                // Find and remove the target
+                if (FellowshipMembers.TryGetValue(ActiveVoteKick.TargetGuid, out var targetRef) && targetRef.TryGetTarget(out var targetPlayer))
+                {
+                    RemoveFellowshipMember(targetPlayer, null);
+                }
+
+                ActiveVoteKick = null;
+                return;
+            }
+
+            // Check if vote failed: no >= yes AND mathematically impossible for yes to win
+            if (noVotes >= yesVotes && noVotes >= (yesVotes + remainingVoters))
+            {
+                var fellowshipMembers = GetFellowshipMembers();
+                foreach (var member in fellowshipMembers.Values)
+                {
+                    member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Vote failed ({yesVotes} yes, {noVotes} no). {ActiveVoteKick.TargetName} stays in the fellowship.", ChatMessageType.Broadcast));
+                }
+                ActiveVoteKick = null;
+                return;
+            }
+
+            // Check if everyone has voted
+            if (totalVotes >= eligibleVoters)
+            {
+                var fellowshipMembers = GetFellowshipMembers();
+                // Majority of cast votes wins
+                if (yesVotes > noVotes)
+                {
+                    foreach (var member in fellowshipMembers.Values)
+                    {
+                        member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Vote passed ({yesVotes} yes, {noVotes} no). {ActiveVoteKick.TargetName} has been kicked from the fellowship.", ChatMessageType.Broadcast));
+                    }
+
+                    if (FellowshipMembers.TryGetValue(ActiveVoteKick.TargetGuid, out var targetRef) && targetRef.TryGetTarget(out var targetPlayer))
+                    {
+                        RemoveFellowshipMember(targetPlayer, null);
+                    }
+                }
+                else
+                {
+                    foreach (var member in fellowshipMembers.Values)
+                    {
+                        member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Vote failed ({yesVotes} yes, {noVotes} no). {ActiveVoteKick.TargetName} stays in the fellowship.", ChatMessageType.Broadcast));
+                    }
+                }
+                ActiveVoteKick = null;
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Called periodically to check for expired votes
+        /// Uses majority of votes CAST to determine outcome at timeout
+        /// </summary>
+        public void ProcessVoteKickTimeout()
+        {
+            if (ActiveVoteKick == null)
+                return;
+
+            if (ActiveVoteKick.IsExpired())
+            {
+                var yesVotes = ActiveVoteKick.VotesYes.Count;
+                var noVotes = ActiveVoteKick.VotesNo.Count;
+
+                var fellowshipMembers = GetFellowshipMembers();
+
+                // Majority of cast votes wins
+                if (yesVotes > noVotes)
+                {
+                    foreach (var member in fellowshipMembers.Values)
+                    {
+                        member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Vote passed ({yesVotes} yes, {noVotes} no). {ActiveVoteKick.TargetName} has been kicked.", ChatMessageType.Broadcast));
+                    }
+
+                    if (FellowshipMembers.TryGetValue(ActiveVoteKick.TargetGuid, out var targetRef) && targetRef.TryGetTarget(out var targetPlayer))
+                    {
+                        RemoveFellowshipMember(targetPlayer, null);
+                    }
+                }
+                else
+                {
+                    foreach (var member in fellowshipMembers.Values)
+                    {
+                        member.Session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Vote failed ({yesVotes} yes, {noVotes} no). {ActiveVoteKick.TargetName} stays in the fellowship.", ChatMessageType.Broadcast));
+                    }
+                }
+
+                ActiveVoteKick = null;
+            }
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// CONQUEST: Tracks an active vote kick session
+    /// </summary>
+    public class VoteKickSession
+    {
+        public uint TargetGuid { get; set; }
+        public string TargetName { get; set; }
+        public uint InitiatorGuid { get; set; }
+        public DateTime StartTime { get; set; }
+        public int TotalMembers { get; set; }
+        public HashSet<uint> VotesYes { get; set; }
+        public HashSet<uint> VotesNo { get; set; }
+
+        public const int VoteTimeoutSeconds = 60;
+
+        public VoteKickSession(uint targetGuid, string targetName, uint initiatorGuid, int totalMembers)
+        {
+            TargetGuid = targetGuid;
+            TargetName = targetName;
+            InitiatorGuid = initiatorGuid;
+            TotalMembers = totalMembers;
+            StartTime = DateTime.UtcNow;
+            VotesYes = new HashSet<uint>();
+            VotesNo = new HashSet<uint>();
+        }
+
+        public bool IsExpired()
+        {
+            return DateTime.UtcNow > StartTime.AddSeconds(VoteTimeoutSeconds);
         }
     }
 

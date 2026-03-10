@@ -539,48 +539,13 @@ namespace ACE.Server.Managers
         }
 
         /// <summary>
-        /// Stamps a quest as completed. Returns true if successful, false if blocked by IP restriction.
+        /// Stamps a quest as completed.
+        /// Note: IP restriction checks are handled by HandleIPQuestItem in Player_Inventory.cs
+        /// Do NOT add IP checks here - it would double-count and show erroneous error messages
         /// </summary>
         public bool Stamp(string questFormat)
         {
             var questName = GetQuestName(questFormat);
-
-            // CONQUEST: Check IP restrictions before stamping quest
-            var quest = DatabaseManager.World.GetCachedQuest(questName);
-            if (quest != null && quest.IsIpRestricted)
-            {
-                var player = Creature as Player;
-                if (player != null && player.Session != null)
-                {
-                    // Get player's IP address
-                    string playerIp = new System.Net.IPAddress(player.Account.LastLoginIP).ToString();
-
-                    // Calculate max attempts - double for multibox exempt accounts
-                    int maxAttempts = (int)quest.IpLootLimit.GetValueOrDefault(1);
-                    if (DatabaseManager.Authentication.IsAccountMultiboxExempt(player.Account.AccountId))
-                    {
-                        maxAttempts *= 2;
-                    }
-
-                    // Check IP restrictions
-                    var result = DatabaseManager.ShardDB.IncrementAndCheckIPQuestAttempts(
-                        questId: quest.Id,
-                        playerIp: playerIp,
-                        characterId: player.Character.Id,
-                        maxAttempts: maxAttempts
-                    );
-
-                    bool success = result.Item1;
-                    string message = result.Item2;
-
-                    if (!success)
-                    {
-                        player.Session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
-                        return false;
-                    }
-                }
-            }
-
             Update(questName);
             return true;
         }
@@ -840,37 +805,6 @@ namespace ACE.Server.Managers
             player.QuestCompletionCount = player.Account.CachedQuestBonusCount;
         }
 
-        /// <summary>
-        /// Check if a player can loot an IP-restricted quest item
-        /// </summary>
-        public bool CanPlayerLootIPQuestItem(string questName, string playerIp, Network.Session session)
-        {
-            var quest = DatabaseManager.World.GetCachedQuest(questName);
-            if (quest == null)
-                return true; // If the quest doesn't exist, allow looting
-
-            uint characterId = session.Player.Character.Id;
-            int maxAttempts = (int)quest.IpLootLimit.GetValueOrDefault(1); // Default to 1 if not set
-
-            // CONQUEST: Double the limit for multibox exempt accounts
-            if (DatabaseManager.Authentication.IsAccountMultiboxExempt(session.Player.Account.AccountId))
-            {
-                maxAttempts *= 2;
-            }
-
-            // Check and increment solves count
-            var result = DatabaseManager.ShardDB.IncrementAndCheckIPQuestAttempts(quest.Id, playerIp, characterId, maxAttempts);
-            bool success = result.Item1;
-            string message = result.Item2;
-            if (!success)
-            {
-                log.Debug($"Loot blocked for quest: {questName}, playerIp: {playerIp}, characterId: {characterId}. Reason: {message}");
-                session.Player.SendMessage(message, ChatMessageType.Broadcast);
-                return false;
-            }
-
-            return true; // Allow looting
-        }
     }
 }
 

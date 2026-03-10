@@ -6,6 +6,7 @@ using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
+using ACE.Server.Network.GameMessages.Messages;
 
 namespace ACE.Server.WorldObjects
 {
@@ -31,6 +32,14 @@ namespace ACE.Server.WorldObjects
             if (PKLogout)
             {
                 SendUseDoneEvent(WeenieError.YouHaveBeenInPKBattleTooRecently);
+                return;
+            }
+
+            // CONQUEST: Arena observers cannot use items on targets
+            if (IsArenaObserver || IsPendingArenaObserver)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot use items while observing an arena match.", ChatMessageType.Broadcast));
+                SendUseDoneEvent(WeenieError.YoureTooBusy);
                 return;
             }
 
@@ -178,6 +187,14 @@ namespace ACE.Server.WorldObjects
             if (PKLogout)
             {
                 SendUseDoneEvent(WeenieError.YouHaveBeenInPKBattleTooRecently);
+                return;
+            }
+
+            // CONQUEST: Arena observers cannot use items
+            if (IsArenaObserver || IsPendingArenaObserver)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot use items while observing an arena match.", ChatMessageType.Broadcast));
+                SendUseDoneEvent(WeenieError.YoureTooBusy);
                 return;
             }
 

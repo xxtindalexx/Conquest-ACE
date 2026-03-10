@@ -137,6 +137,9 @@ namespace ACE.Server.WorldObjects
 
             PhysicsObj.StopCompletely(true);
 
+            // CONQUEST: Try to spread Void DoTs to nearby targets (Void Contagion)
+            TrySpreadVoidDots(topDamager);
+
             // broadcast death animation
             var motionDeath = new Motion(MotionStance.NonCombat, MotionCommand.Dead);
             var deathAnimLength = ExecuteMotion(motionDeath);
@@ -1078,6 +1081,255 @@ namespace ACE.Server.WorldObjects
         }
 
         public bool IsOnNoDeathXPLandblock => Location != null ? NoDeathXP_Landblocks.Contains(Location.LandblockId.Landblock) : false;
+
+        /// <summary>
+        /// CONQUEST: Void Contagion - two modes controlled by server property "void_contagion_explosion_mode"
+        /// Mode 1 (default, explosion_mode=false): Spreads DoTs at 50% duration to nearby targets
+        /// Mode 2 (explosion_mode=true): Dying creature explodes, dealing % of DoT damage to ALL nearby enemies
+        /// Note: PvP protected - only triggers on monster deaths, never spreads/damages players
+        /// Master toggle: void_contagion_enabled must be TRUE for this feature to work
+        /// </summary>
+        private void TrySpreadVoidDots(DamageHistoryInfo killer)
+        {
+            // Master toggle - if disabled, skip all Void Contagion processing
+            if (!PropertyManager.GetBool("void_contagion_enabled"))
+                return;
+
+            // PvP Protection: Only trigger on monster deaths, not player deaths
+            if (this is Player)
+                return;
+
+            // Must have a player killer (or pet owned by a player)
+            if (killer == null || !killer.IsPlayerOrPetOfPlayer)
+                return;
+
+            // Get the actual player (pet owner if applicable)
+            var killerPlayer = killer.TryGetPetOwnerOrAttacker() as Player;
+            if (killerPlayer == null)
+                return;
+
+            // Calculate total spread targets from player and enlightenment bonus
+            var baseSpreadTargets = killerPlayer.GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
+            var enlightenmentBonus = killerPlayer.GetProperty(PropertyInt.EnlightenmentVoidDotSpreadBonus) ?? 0;
+
+            // Also check if weapon has imbued VoidDotSpreadTargets (like spell chain on weapons)
+            var weapon = killerPlayer.GetEquippedWeapon();
+            var weaponBonus = weapon?.GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
+
+            var totalSpreadTargets = baseSpreadTargets + enlightenmentBonus + weaponBonus;
+
+            if (totalSpreadTargets <= 0)
+                return;
+
+            // Get all Nether DoT enchantments on the dying creature
+            var type = EnchantmentTypeFlags.Int | EnchantmentTypeFlags.SingleStat | EnchantmentTypeFlags.Additive;
+            var netherDots = EnchantmentManager.GetEnchantments_TopLayer(type, (uint)PropertyInt.NetherOverTime);
+
+            if (netherDots == null || netherDots.Count == 0)
+                return;
+
+            // Check which mode to use
+            if (PropertyManager.GetBool("void_contagion_explosion_mode"))
+            {
+                // Mode 2: Explosion - deal burst damage to ALL nearby enemies
+                TryVoidContagionExplosion(killerPlayer, netherDots, totalSpreadTargets);
+            }
+            else
+            {
+                // Mode 1 (default): Spread DoTs to nearby targets
+                TryVoidContagionSpread(killerPlayer, netherDots, totalSpreadTargets);
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Void Contagion Mode 1 - Spreads DoTs at 50% duration to up to (totalSpreadTargets) nearby enemies
+        /// </summary>
+        private void TryVoidContagionSpread(Player killerPlayer, List<ACE.Entity.Models.PropertiesEnchantmentRegistry> netherDots, int totalSpreadTargets)
+        {
+            // Find nearby valid targets to spread DoTs to (limited to totalSpreadTargets)
+            var spreadTargets = FindVoidContagionTargets(killerPlayer, totalSpreadTargets);
+
+            if (spreadTargets.Count == 0)
+                return;
+
+            // Spread each DoT to the targets
+            foreach (var dotEnchantment in netherDots)
+            {
+                var spell = new Server.Entity.Spell(dotEnchantment.SpellId);
+                if (spell == null || spell.NotFound)
+                    continue;
+
+                // Calculate 50% of ORIGINAL duration (not remaining duration)
+                var originalDuration = spell.Duration;
+                var spreadDuration = originalDuration * 0.5;
+
+                // Apply the DoT to each spread target
+                foreach (var target in spreadTargets)
+                {
+                    ApplySpreadDot(killerPlayer, target, spell, spreadDuration, dotEnchantment);
+                }
+            }
+
+            // Notify the player
+            killerPlayer.Session?.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Your Void Contagion spreads DoTs to {spreadTargets.Count} nearby {(spreadTargets.Count == 1 ? "enemy" : "enemies")}!",
+                ChatMessageType.Magic));
+        }
+
+        /// <summary>
+        /// CONQUEST: Void Contagion Mode 2 - Dying creature explodes, dealing % of total DoT damage to ALL nearby enemies
+        /// Damage scales with perk level: +1 = 20%, +2 = 40%, +3 = 60%
+        /// </summary>
+        private void TryVoidContagionExplosion(Player killerPlayer, List<ACE.Entity.Models.PropertiesEnchantmentRegistry> netherDots, int totalSpreadTargets)
+        {
+            // Calculate total DoT damage from all active nether dots
+            float totalDotDamage = 0;
+            foreach (var dotEnchantment in netherDots)
+            {
+                var spell = new Server.Entity.Spell(dotEnchantment.SpellId);
+                if (spell == null || spell.NotFound)
+                    continue;
+
+                // Calculate remaining damage: damage per tick * remaining ticks
+                // StatModValue is damage per tick, Duration is total duration, StartTime tracks elapsed time
+                var remainingDuration = dotEnchantment.Duration + dotEnchantment.StartTime; // StartTime is negative
+                if (remainingDuration <= 0)
+                    continue;
+
+                var tickInterval = 5.0; // DoTs tick every 5 seconds
+                var remainingTicks = (int)Math.Ceiling(remainingDuration / tickInterval);
+                var damagePerTick = Math.Abs(dotEnchantment.StatModValue);
+                totalDotDamage += damagePerTick * remainingTicks;
+            }
+
+            if (totalDotDamage <= 0)
+                return;
+
+            // Calculate explosion damage: 20% per perk level (capped at 3 = 60%)
+            var damageMultiplier = Math.Min(totalSpreadTargets, 3) * 0.20f;
+            var explosionDamage = totalDotDamage * damageMultiplier;
+
+            // Find ALL nearby valid targets (no limit)
+            var explosionTargets = FindVoidContagionTargets(killerPlayer, int.MaxValue);
+
+            if (explosionTargets.Count == 0)
+                return;
+
+            // Play explosion visual effect on dying creature
+            EnqueueBroadcast(new GameMessageScript(Guid, PlayScript.HealthDownVoid));
+
+            // Deal nether damage to all targets
+            foreach (var target in explosionTargets)
+            {
+                // Apply nether damage
+                var damage = (int)explosionDamage;
+
+                // Factor in target's nether resistance
+                var resistMod = target.GetResistanceMod(DamageType.Nether, killerPlayer, null);
+                var finalDamage = (int)(damage * resistMod);
+
+                if (finalDamage > 0)
+                {
+                    target.TakeDamage(killerPlayer, DamageType.Nether, finalDamage);
+
+                    // Visual effect on each target
+                    target.EnqueueBroadcast(new GameMessageScript(target.Guid, PlayScript.HealthDownVoid));
+
+                    // Individual damage message per target
+                    killerPlayer.Session?.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"Your Void Contagion erupts onto {target.Name} for {finalDamage} points of nether damage!",
+                        ChatMessageType.Magic));
+                }
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Finds valid targets for Void Contagion (returns up to maxTargets closest valid targets)
+        /// Used by both spread mode and explosion mode
+        /// </summary>
+        private const float VoidContagionRange = 10.0f;  // Range to find targets (meters)
+
+        private List<Creature> FindVoidContagionTargets(Player caster, int maxTargets)
+        {
+            var result = new List<Creature>();
+
+            if (CurrentLandblock == null || maxTargets <= 0)
+                return result;
+
+            var deathPos = Location.ToGlobal(false);
+            var candidatesWithDistance = new List<(Creature creature, float distance)>();
+
+            // Search in this creature's landblock and adjacent landblocks
+            var allNearbyObjects = CurrentLandblock.GetWorldObjectsForPhysicsHandling().ToList();
+            foreach (var adjacentLb in CurrentLandblock.Adjacents)
+            {
+                if (adjacentLb != null)
+                    allNearbyObjects.AddRange(adjacentLb.GetWorldObjectsForPhysicsHandling());
+            }
+
+            foreach (var obj in allNearbyObjects)
+            {
+                // Only target creatures
+                if (!(obj is Creature creature) || !creature.IsAlive)
+                    continue;
+
+                // Skip this dying creature and the caster
+                if (creature == this || creature == caster)
+                    continue;
+
+                // Never spread to players (PvP protection)
+                if (creature is Player)
+                    continue;
+
+                // Check if caster can damage this target
+                if (!caster.CanDamage(creature))
+                    continue;
+
+                // Check distance from dying creature
+                var objPos = creature.Location.ToGlobal(false);
+                var distance = System.Numerics.Vector3.Distance(deathPos, objPos);
+
+                if (distance <= VoidContagionRange)
+                {
+                    candidatesWithDistance.Add((creature, distance));
+                }
+            }
+
+            // Sort by distance and take up to maxTargets
+            result = candidatesWithDistance
+                .OrderBy(c => c.distance)
+                .Take(maxTargets)
+                .Select(c => c.creature)
+                .ToList();
+
+            return result;
+        }
+
+        /// <summary>
+        /// CONQUEST: Applies a spread DoT enchantment to a target creature
+        /// Copies the exact enchantment properties from the original to ensure proper DoT ticking
+        /// </summary>
+        private void ApplySpreadDot(Player caster, Creature target, Server.Entity.Spell spell, double spreadDuration, ACE.Entity.Models.PropertiesEnchantmentRegistry originalEnchantment)
+        {
+            // Use the target's EnchantmentManager to properly add the spell
+            // This ensures all the proper registration happens for DoT ticking
+            var result = target.EnchantmentManager.Add(spell, caster, null);
+
+            if (result.Enchantment != null)
+            {
+                // Override the duration to our spread duration (50% of original)
+                result.Enchantment.Duration = spreadDuration;
+                result.Enchantment.StartTime = 0;
+
+                // Copy the damage value from the original enchantment
+                result.Enchantment.StatModValue = originalEnchantment.StatModValue;
+
+                target.ChangesDetected = true;
+            }
+
+            // Send visual effect to target
+            target.EnqueueBroadcast(new GameMessageScript(target.Guid, PlayScript.HealthDownVoid));
+        }
 
         /// <summary>
         /// A list of landblocks the player gains no xp from creature kills

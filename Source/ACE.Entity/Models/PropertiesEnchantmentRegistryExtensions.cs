@@ -146,11 +146,14 @@ namespace ACE.Entity.Models
             rwLock.EnterReadLock();
             try
             {
+                // CONQUEST: Include AugmentationLevelWhenCast in power comparison
+                // This ensures player-cast augmented spells remain "on top" over item spells
                 var results = from e in value
                     group e by e.SpellCategory
                     into categories
                     //select categories.OrderByDescending(c => c.LayerId).First();
-                    select categories.OrderByDescending(c => c.PowerLevel)
+                    select categories.OrderByDescending(c => c.PowerLevel + (c.AugmentationLevelWhenCast ?? 0))
+                        .ThenByDescending(c => c.StatModValue + (c.AugmentationLevelWhenCast ?? 0))
                         .ThenByDescending(c => Level8AuraSelfSpells.Contains(c.SpellId))
                         .ThenByDescending(c => setSpells.Contains(c.SpellId) ? c.SpellId : c.StartTime).First();
 
@@ -175,11 +178,14 @@ namespace ACE.Entity.Models
             {
                 var valuesByStatModType = value.Where(e => (e.StatModType & statModType) == statModType);
 
+                // CONQUEST: Include AugmentationLevelWhenCast in power comparison
+                // This ensures player-cast augmented spells remain "on top" over item spells
                 var results = from e in valuesByStatModType
                     group e by e.SpellCategory
                     into categories
                     //select categories.OrderByDescending(c => c.LayerId).First();
-                    select categories.OrderByDescending(c => c.PowerLevel)
+                    select categories.OrderByDescending(c => c.PowerLevel + (c.AugmentationLevelWhenCast ?? 0))
+                        .ThenByDescending(c => c.StatModValue + (c.AugmentationLevelWhenCast ?? 0))
                         .ThenByDescending(c => Level8AuraSelfSpells.Contains(c.SpellId))
                         .ThenByDescending(c => setSpells.Contains(c.SpellId) ? c.SpellId : c.StartTime).First();
 
@@ -220,11 +226,14 @@ namespace ACE.Entity.Models
                 // without this sorting criteria, it's already matched up to the client, but produces logically incorrect results for server spell stacking
                 // confirmed this bug still exists in acclient Enchantment.Duel(), unknown if it existed in retail server
 
+                // CONQUEST: Include AugmentationLevelWhenCast in power comparison
+                // This ensures player-cast augmented spells remain "on top" over item spells
                 var results = from e in valuesByStatModTypeAndKey
                     group e by e.SpellCategory
                     into categories
                     //select categories.OrderByDescending(c => c.LayerId).First();
-                    select categories.OrderByDescending(c => c.PowerLevel)
+                    select categories.OrderByDescending(c => c.PowerLevel + (c.AugmentationLevelWhenCast ?? 0))
+                        .ThenByDescending(c => c.StatModValue + (c.AugmentationLevelWhenCast ?? 0))
                         .ThenByDescending(c => Level8AuraSelfSpells.Contains(c.SpellId))
                         .ThenByDescending(c => setSpells.Contains(c.SpellId) ? c.SpellId : c.StartTime).First();
 

@@ -136,6 +136,24 @@ namespace ACE.Server.WorldObjects
 
             var bonusedAmount = (long)Math.Round(amount * enchantment * questBonus * pkDungeonBonus);
 
+            // CONQUEST: Show XP breakdown for fellowship shares if player has enabled xpdebugging
+            if (ShowXpBreakdown && (xpType == XpType.Kill || xpType == XpType.Quest || xpType == XpType.Fellowship))
+            {
+                var bonusXP = bonusedAmount - amount;
+                var questBonusPercent = (questBonus - 1.0) * 100;
+                var pkBonusPercent = (pkDungeonBonus - 1.0) * 100;
+                var enlightenmentBonusPercent = Enlightenment * 1.0;
+                var equipmentBonusPercent = EnchantmentManager.GetXPBonus() * 100;
+                var augBonusXp = AugmentationBonusXp;
+                var augBonusPercent = (xpType == XpType.Kill) ? (augBonusXp * 5.0) : 0.0;
+
+                var xpSource = xpType == XpType.Fellowship ? "Fellowship" : (xpType == XpType.Quest ? "Quest" : "Kill");
+                Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"XP Breakdown ({xpSource}): {amount:N0} share → {bonusedAmount:N0} total (+{bonusXP:N0} bonus)\n" +
+                    $"Modifiers: Quest {questBonusPercent:F2}% | PK {pkBonusPercent:F0}% | ENL {enlightenmentBonusPercent:F0}% | Aug {augBonusPercent:F0}% | Equip {equipmentBonusPercent:F0}%",
+                    ChatMessageType.Broadcast));
+            }
+
             // Make sure UpdateXpAndLevel is done on this players thread
             EnqueueAction(new ActionEventDelegate(ActionType.PlayerXp_UpdateXpAndLevel, () => UpdateXpAndLevel(bonusedAmount, xpType)));
 
@@ -664,7 +682,8 @@ namespace ACE.Server.WorldObjects
 
         /// <summary>
         /// CONQUEST: Quest Bonus System
-        /// Reads from the quest completion count property to get the running XP bonus
+        /// CONQUEST: Account-wide quest bonus system
+        /// Uses the account's cached quest count (from account_quest table)
         /// Formula: 1 + (quest_count * 0.0001)
         /// 10% XP bonus per 1,000 quests (0.01% per quest)
         /// Example: 5,000 QB = 50% XP bonus
@@ -672,7 +691,7 @@ namespace ACE.Server.WorldObjects
         public double GetQuestCountXPBonus()
         {
             const double questToBonusRatio = 0.0001; // 0.01% per quest = 10% per 1,000 quests
-            return 1.0 + (this.QuestCompletionCount ?? 0) * questToBonusRatio;
+            return 1.0 + (Account?.CachedQuestBonusCount ?? 0) * questToBonusRatio;
         }
 
         /// <summary>

@@ -7808,7 +7808,7 @@ namespace ACE.Server.Command.Handlers
                 var output = process.StandardOutput.ReadToEnd();
                 var error = process.StandardError.ReadToEnd();
 
-                if (process.ExitCode == 0)
+                if (process.ExitCode == 0 && output.Contains("Ok"))
                 {
                     var logMsg = $"[IP BAN] {session.Player.Name} banned IP {ipAddress} | Reason: {reason}";
                     log.Info(logMsg);
@@ -7820,7 +7820,11 @@ namespace ACE.Server.Command.Handlers
                 }
                 else
                 {
-                    CommandHandlerHelper.WriteOutputInfo(session, $"Failed to ban IP. Error: {error}");
+                    // Show more diagnostic info - netsh often outputs errors to stdout
+                    var errorInfo = !string.IsNullOrEmpty(error) ? error : output;
+                    if (string.IsNullOrEmpty(errorInfo))
+                        errorInfo = $"Exit code: {process.ExitCode}. ACE may need to run as Administrator to modify firewall rules.";
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Failed to ban IP: {errorInfo}");
                 }
             }
             catch (Exception ex)

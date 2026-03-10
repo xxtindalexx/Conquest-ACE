@@ -143,6 +143,17 @@ namespace ACE.Server.WorldObjects
                 // Retrieve caster's skill level in the Magic School
                 magicSkill = casterCreature.GetCreatureSkill(spell.School).Current;
 
+                // CONQUEST: For spell chain and similar weapon procs, also check weapon's ItemSpellcraft
+                // and use the higher of player's magic skill or weapon's spellcraft
+                // Works for wands, melee (cast on strike), and missile weapons
+                if (casterCreature is Player casterPlayer)
+                {
+                    var weapon = casterPlayer.GetEquippedWeapon();
+                    if (weapon?.ItemSpellcraft != null && weapon.ItemSpellcraft > magicSkill)
+                    {
+                        magicSkill = (uint)weapon.ItemSpellcraft;
+                    }
+                }
             }
             else if (caster.ItemSpellcraft != null)
             {
