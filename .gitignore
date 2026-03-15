@@ -23,6 +23,8 @@ bld/
 [Bb]in/
 [Oo]bj/
 [Ll]og/
+# Exception: Don't ignore the source code Models/Log folder
+!Source/ACE.Database/Models/Log/
 
 # Visual Studio / Visual Studio Code
 .vs/
