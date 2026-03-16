@@ -1392,7 +1392,11 @@ namespace ACE.Server.Command.Handlers.Processors
             // clear any cached instances for this landblock
             DatabaseManager.World.ClearCachedInstancesByLandblock(landblock, variation);
 
-            var instances = DatabaseManager.World.GetLandblockInstancesByLandblockBypassCache(landblock);
+            // CONQUEST: Use variation-aware query to get correct instances for this variation
+            var instances = DatabaseManager.World.GetLandblockInstancesByLandblockBypassCache(landblock, variation);
+
+            // CONQUEST: Get ALL instances (regardless of variation) for GUID calculation to avoid conflicts
+            var allInstances = DatabaseManager.World.GetLandblockInstancesByLandblockBypassCache(landblock);
 
             // for link mode, ensure parent guid instance exists
             WorldObject parentObj = null;
@@ -1417,7 +1421,8 @@ namespace ACE.Server.Command.Handlers.Processors
                 }
             }
 
-            var nextStaticGuid = GetNextStaticGuid(landblock, instances);
+            // CONQUEST: Use ALL instances (regardless of variation) for GUID calculation to avoid conflicts
+            var nextStaticGuid = GetNextStaticGuid(landblock, allInstances);
 
             var maxStaticGuid = firstStaticGuid | 0xFFF;
 
@@ -1759,9 +1764,10 @@ namespace ACE.Server.Command.Handlers.Processors
                     ctx.SaveChanges();
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-
+                var innerMsg = ex.InnerException?.Message ?? "no inner exception";
+                Console.WriteLine($"[CREATEINST] SAVE FAILED - GUID: {instance.Guid:X8}, LB: {instance.Landblock:X4}, Var: {instance.VariationId} | {innerMsg}");
             }
 
         }

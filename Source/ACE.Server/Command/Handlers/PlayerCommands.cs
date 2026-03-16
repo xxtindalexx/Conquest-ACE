@@ -4,6 +4,7 @@ using ACE.DatLoader;
 using ACE.Database.Models.Auth;
 using ACE.Database.Models.Shard;
 using ACE.Database.Models.Log;
+using Microsoft.EntityFrameworkCore;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -49,6 +50,8 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship queue to see your queue status, /fship queue leave to leave queues", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship votekick <name> to start a vote to kick a player", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship vote yes or /fship vote no to vote on an active kick", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /voteleader to start a vote to become the new leader", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /voteleader yes or /voteleader no to vote on leadership", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: tell any fellowship member 'xp' to join (or queue if full)", ChatMessageType.Broadcast));
                 return;
             }
@@ -69,7 +72,7 @@ namespace ACE.Server.Command.Handlers
                             var memberCount = fellowship.FellowshipMembers.Count;
 
                             // Only list if not full and we haven't already listed this fellowship
-                            if (memberCount < Entity.Fellowship.MaxFellows && !seenFellowships.Contains(fellowship.FellowshipLeaderGuid))
+                            if (memberCount < fellowship.GetMaxFellows() && !seenFellowships.Contains(fellowship.FellowshipLeaderGuid))
                             {
                                 seenFellowships.Add(fellowship.FellowshipLeaderGuid);
                                 var leader = PlayerManager.GetOnlinePlayer(fellowship.FellowshipLeaderGuid);
@@ -109,7 +112,7 @@ namespace ACE.Server.Command.Handlers
                                         }
                                     }
 
-                                    availableFellowships.Add((leaderName, fellowship.FellowshipName, memberCount, Entity.Fellowship.MaxFellows, locationName));
+                                    availableFellowships.Add((leaderName, fellowship.FellowshipName, memberCount, fellowship.GetMaxFellows(), locationName));
                                 }
                             }
                         }
@@ -155,7 +158,7 @@ namespace ACE.Server.Command.Handlers
                                 status = "HIDDEN";
                                 reason = "Locked";
                             }
-                            else if (memberCount >= Entity.Fellowship.MaxFellows)
+                            else if (memberCount >= fellowship.GetMaxFellows())
                             {
                                 status = "HIDDEN";
                                 reason = "Full";
@@ -180,7 +183,7 @@ namespace ACE.Server.Command.Handlers
                                 }
                             }
 
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"  {fellowship.FellowshipName} (Leader: {leaderName}) [{memberCount}/{Entity.Fellowship.MaxFellows}] - {status} {reason}", ChatMessageType.Broadcast));
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"  {fellowship.FellowshipName} (Leader: {leaderName}) [{memberCount}/{fellowship.GetMaxFellows()}] - {status} {reason}", ChatMessageType.Broadcast));
                         }
                     }
                     return;
@@ -202,7 +205,7 @@ namespace ACE.Server.Command.Handlers
 
                             for (int i = 0; i < fellowship.WaitingQueue.Count; i++)
                             {
-                                if (fellowship.WaitingQueue[i].TryGetTarget(out var queuedPlayer) && queuedPlayer.Guid.Full == session.Player.Guid.Full)
+                                if (fellowship.WaitingQueue[i].CharacterId == session.Player.Guid.Full)
                                 {
                                     queuedFor.Add((fellowship.FellowshipName, i + 1));
                                     break;
@@ -355,6 +358,19 @@ namespace ACE.Server.Command.Handlers
                     }
                     return;
                 }
+
+                // CONQUEST: Start vote for leadership
+                if (parameters[0] == "voteleader")
+                {
+                    if (session.Player.Fellowship == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    session.Player.Fellowship.StartVoteLeader(session.Player);
+                    return;
+                }
             }
 
             if (parameters.Count() == 2)
@@ -458,6 +474,65 @@ namespace ACE.Server.Command.Handlers
                     }
                     return;
                 }
+
+                // CONQUEST: Cast vote on active leadership vote
+                if (parameters[0] == "voteleader")
+                {
+                    if (session.Player.Fellowship == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var vote = parameters[1].ToLower();
+                    if (vote == "yes" || vote == "y")
+                    {
+                        session.Player.Fellowship.CastVoteLeader(session.Player, true);
+                    }
+                    else if (vote == "no" || vote == "n")
+                    {
+                        session.Player.Fellowship.CastVoteLeader(session.Player, false);
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Use /fship voteleader yes or /fship voteleader no", ChatMessageType.Broadcast));
+                    }
+                    return;
+                }
+            }
+        }
+
+        // CONQUEST: Vote for leadership
+        [CommandHandler("voteleader", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
+            "Vote for fellowship leadership",
+            "/voteleader - Start a vote to become the leader\n/voteleader yes - Vote yes\n/voteleader no - Vote no")]
+        public static void HandleVoteLeader(Session session, params string[] parameters)
+        {
+            if (session.Player.Fellowship == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (parameters == null || parameters.Length == 0)
+            {
+                // Start a vote to become leader
+                session.Player.Fellowship.StartVoteLeader(session.Player);
+                return;
+            }
+
+            var vote = parameters[0].ToLower();
+            if (vote == "yes" || vote == "y")
+            {
+                session.Player.Fellowship.CastVoteLeader(session.Player, true);
+            }
+            else if (vote == "no" || vote == "n")
+            {
+                session.Player.Fellowship.CastVoteLeader(session.Player, false);
+            }
+            else
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Use /voteleader yes or /voteleader no", ChatMessageType.Broadcast));
             }
         }
 
@@ -781,6 +856,43 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus: {totalBonusPercent:F2}% (aug bonus applies to kills only)", ChatMessageType.Broadcast));
         }
 
+        [CommandHandler("bonusdetail", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, "Shows detailed enchantment data for XP bonuses (debug)")]
+        public static void HandleBonusDetail(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+
+            // Get all TrinketXPRaising enchantments using the EnchantmentManager
+            var enchantments = player.EnchantmentManager.GetEnchantments(SpellCategory.TrinketXPRaising);
+
+            session.Network.EnqueueSend(new GameMessageSystemChat("=== XP Equipment Enchantment Debug ===", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Total TrinketXPRaising enchantments: {enchantments.Count}", ChatMessageType.Broadcast));
+
+            if (enchantments.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("No XP equipment enchantments found.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            foreach (var enchantment in enchantments.OrderByDescending(i => i.PowerLevel))
+            {
+                var spell = new ACE.Server.Entity.Spell(enchantment.SpellId);
+                var isMultiplicative = enchantment.StatModType.HasFlag(EnchantmentTypeFlags.Multiplicative);
+                var calculatedBonus = isMultiplicative ? enchantment.StatModValue - 1.0f : enchantment.StatModValue;
+                var bonusPercent = calculatedBonus * 100;
+
+                session.Network.EnqueueSend(new GameMessageSystemChat($"---", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Spell: {spell.Name} (ID: {enchantment.SpellId})", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"PowerLevel: {enchantment.PowerLevel}", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"StatModType: {enchantment.StatModType} (Multiplicative: {isMultiplicative})", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"StatModValue: {enchantment.StatModValue}", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Calculated Bonus: {bonusPercent:F2}%", ChatMessageType.Broadcast));
+            }
+
+            var finalBonus = player.EnchantmentManager.GetXPBonus();
+            session.Network.EnqueueSend(new GameMessageSystemChat($"---", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Final GetXPBonus() result: {finalBonus} ({finalBonus * 100:F2}%)", ChatMessageType.Broadcast));
+        }
+
         [CommandHandler("xpdebugging", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Toggle XP breakdown display when earning XP from kills and quests")]
         public static void HandleXpBreakdown(Session session, params string[] parameters)
         {
@@ -1024,7 +1136,7 @@ namespace ACE.Server.Command.Handlers
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"---------------------------", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Bank Commands:", ChatMessageType.System));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit (or /b d) - Deposit all Pyreals, Luminance, Conquest Coins, Soul Fragments, and Event Tokens", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit (or /b d) - Deposit all Pyreals, Luminance, Conquest Coins, Soul Fragments, Event Tokens, and Keys", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank deposit pyreals 100 (or /b d p 100) - Deposit specific amount", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw pyreals 100 (or /b w p 100) - Withdraw 100 pyreals", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank withdraw notes 5 (or /b w n 5) - Withdraw 5 trade notes (250k each)", ChatMessageType.System));
@@ -1117,7 +1229,8 @@ namespace ACE.Server.Command.Handlers
                     session.Player.DepositEventTokens();
                     session.Player.DepositConquestCoins();
                     session.Player.DepositSoulFragments();
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all Pyreals, Trade Notes, Peas, Luminance, Conquest Coins, Soul Fragments, and Event Tokens!", ChatMessageType.System));
+                    session.Player.DepositLegendaryKeys();
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Deposited all Pyreals, Trade Notes, Peas, Luminance, Conquest Coins, Soul Fragments, Event Tokens, and Keys!", ChatMessageType.System));
                 }
                 else
                 {
@@ -1435,7 +1548,7 @@ namespace ACE.Server.Command.Handlers
                     }
                 }
 
-                session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Event Tokens (Dragon Coins): {session.Player.EventTokens:N0}", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Event Tokens [Dragon Coins] (non-transferable): {session.Player.EventTokens:N0}", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Conquest Coins (non-transferable): {session.Player.ConquestCoins:N0}", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Soul Fragments (non-transferable): {session.Player.SoulFragments:N0}", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[BANK] Legendary Keys: {session.Player.BankedLegendaryKeys:N0}", ChatMessageType.System));
@@ -2790,6 +2903,177 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat(
                 "---- End of Account Quests ----",
                 ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// CONQUEST: Luminance transfer history - sent and received
+        /// Rate limited to once per 10 minutes per character
+        /// Records auto-cleanup after 7 days
+        /// </summary>
+        private static readonly TimeSpan LumHistoryCooldown = TimeSpan.FromMinutes(10);
+        private static readonly ConcurrentDictionary<uint, DateTime> LumHistorySentLastUsed = new ConcurrentDictionary<uint, DateTime>();
+        private static readonly ConcurrentDictionary<uint, DateTime> LumHistoryReceivedLastUsed = new ConcurrentDictionary<uint, DateTime>();
+
+        [CommandHandler("lhs", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows luminance you have sent in the last 7 days")]
+        public static void HandleLumHistorySent(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+            var characterId = player.Guid.Full;
+            var playerName = player.Name;
+
+            // Rate limit check (10 minutes per character)
+            var currentTime = DateTime.UtcNow;
+            if (LumHistorySentLastUsed.TryGetValue(characterId, out var lastUsed))
+            {
+                var elapsed = currentTime - lastUsed;
+                if (elapsed < LumHistoryCooldown)
+                {
+                    var remaining = LumHistoryCooldown - elapsed;
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"You can use /lhs again in {remaining.Minutes}m {remaining.Seconds}s.",
+                        ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            // Update last used time
+            LumHistorySentLastUsed[characterId] = currentTime;
+
+            // Query transfer_logs for luminance sent by this player in last 7 days
+            try
+            {
+                var cutoffDate = DateTime.UtcNow.AddDays(-7);
+                var playerNameLower = playerName.ToLower();
+
+                List<TransferLog> transfers;
+                using (var context = new ShardDbContext())
+                {
+                    transfers = context.TransferLogs
+                        .AsNoTracking()
+                        .Where(t => t.FromPlayerName.ToLower() == playerNameLower &&
+                                    t.ItemName == "Luminance" &&
+                                    t.TransferType == "Bank Transfer" &&
+                                    t.Timestamp >= cutoffDate)
+                        .OrderByDescending(t => t.Timestamp)
+                        .Take(20)
+                        .ToList();
+                }
+
+                if (transfers.Count == 0)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        "No luminance transfers sent in the last 7 days.",
+                        ChatMessageType.Broadcast));
+                    return;
+                }
+
+                // Calculate total sent
+                var totalSent = transfers.Sum(t => t.Quantity);
+
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"---- Luminance Sent (Last 7 Days) | Total: {totalSent:N0} ----",
+                    ChatMessageType.Broadcast));
+
+                foreach (var transfer in transfers)
+                {
+                    var localTime = transfer.Timestamp.ToLocalTime();
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"  {transfer.Quantity:N0} to {transfer.ToPlayerName} - {localTime:M/d/yyyy h:mm tt}",
+                        ChatMessageType.Broadcast));
+                }
+
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "---- End of Luminance History ----",
+                    ChatMessageType.Broadcast));
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error retrieving luminance history for {playerName}: {ex.Message}");
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "Error retrieving luminance history. Please try again later.",
+                    ChatMessageType.Broadcast));
+            }
+        }
+
+        [CommandHandler("lhr", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows luminance you have received in the last 7 days")]
+        public static void HandleLumHistoryReceived(Session session, params string[] parameters)
+        {
+            var player = session.Player;
+            var characterId = player.Guid.Full;
+            var playerName = player.Name;
+
+            // Rate limit check (10 minutes per character)
+            var currentTime = DateTime.UtcNow;
+            if (LumHistoryReceivedLastUsed.TryGetValue(characterId, out var lastUsed))
+            {
+                var elapsed = currentTime - lastUsed;
+                if (elapsed < LumHistoryCooldown)
+                {
+                    var remaining = LumHistoryCooldown - elapsed;
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"You can use /lhr again in {remaining.Minutes}m {remaining.Seconds}s.",
+                        ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            // Update last used time
+            LumHistoryReceivedLastUsed[characterId] = currentTime;
+
+            // Query transfer_logs for luminance received by this player in last 7 days
+            try
+            {
+                var cutoffDate = DateTime.UtcNow.AddDays(-7);
+                var playerNameLower = playerName.ToLower();
+
+                List<TransferLog> transfers;
+                using (var context = new ShardDbContext())
+                {
+                    transfers = context.TransferLogs
+                        .AsNoTracking()
+                        .Where(t => t.ToPlayerName.ToLower() == playerNameLower &&
+                                    t.ItemName == "Luminance" &&
+                                    t.TransferType == "Bank Transfer" &&
+                                    t.Timestamp >= cutoffDate)
+                        .OrderByDescending(t => t.Timestamp)
+                        .Take(20)
+                        .ToList();
+                }
+
+                if (transfers.Count == 0)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        "No luminance transfers received in the last 7 days.",
+                        ChatMessageType.Broadcast));
+                    return;
+                }
+
+                // Calculate total received
+                var totalReceived = transfers.Sum(t => t.Quantity);
+
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"---- Luminance Received (Last 7 Days) | Total: {totalReceived:N0} ----",
+                    ChatMessageType.Broadcast));
+
+                foreach (var transfer in transfers)
+                {
+                    var localTime = transfer.Timestamp.ToLocalTime();
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"  {transfer.Quantity:N0} from {transfer.FromPlayerName} - {localTime:M/d/yyyy h:mm tt}",
+                        ChatMessageType.Broadcast));
+                }
+
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "---- End of Luminance History ----",
+                    ChatMessageType.Broadcast));
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error retrieving luminance history for {playerName}: {ex.Message}");
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "Error retrieving luminance history. Please try again later.",
+                    ChatMessageType.Broadcast));
+            }
         }
     }
 }

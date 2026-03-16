@@ -184,6 +184,17 @@ namespace ACE.Server.WorldObjects
 
                 if (spell.MetaSpellType == SpellType.Dispel && !VerifyDispelPKStatus(this, player))
                     return;
+
+                // CONQUEST: Block portal gems during PvP combat (PK timer active)
+                if (player.PKTimerActive &&
+                    (spell.MetaSpellType == SpellType.PortalRecall ||
+                     spell.MetaSpellType == SpellType.PortalSending ||
+                     spell.MetaSpellType == SpellType.PortalSummon ||
+                     spell.MetaSpellType == SpellType.FellowPortalSending))
+                {
+                    player.SendWeenieError(WeenieError.YouHaveBeenInPKBattleTooRecently);
+                    return;
+                }
             }
 
             if (RareUsesTimer)

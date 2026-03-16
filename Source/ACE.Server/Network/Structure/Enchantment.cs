@@ -77,6 +77,13 @@ namespace ACE.Server.Network.Structure
             StatModValue = entry.StatModValue;
             SpellSetID = (uint)entry.SpellSetId;
 
+            // CONQUEST: Include AugmentationLevelWhenCast in PowerLevel sent to client
+            // This ensures the client's enchantment comparison correctly favors augmented spells
+            if (entry.AugmentationLevelWhenCast.HasValue && entry.AugmentationLevelWhenCast.Value > 0)
+            {
+                PowerLevel += (uint)entry.AugmentationLevelWhenCast.Value;
+            }
+
             Target = target;
             EnchantmentMask = (EnchantmentMask)entry.EnchantmentCategory;
         }

@@ -260,6 +260,10 @@ namespace ACE.Server.Managers
                 {
                     onlinePatron.AddAllegianceLum();
                 }
+
+                // CONQUEST: Track passup luminance for economy stats
+                EconomyStatsManager.RecordLuminance(patron.Guid.Full, passupAmount, EconomyStatsManager.SOURCE_PASSUP);
+
                 // call recursively with incremented depth
                 DoPassXP(patronNode, passupAmount, false, luminance, depth + 1);
             }

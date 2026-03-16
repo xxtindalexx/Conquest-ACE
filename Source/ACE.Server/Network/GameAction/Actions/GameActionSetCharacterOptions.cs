@@ -126,6 +126,15 @@ namespace ACE.Server.Network.GameAction.Actions
             if ((flags & (uint)CharacterOptionDataFlag.CharacterOptions2) != 0)
             {
                 characterOptions2Flag = message.Payload.ReadInt32();
+
+                // CONQUEST: Preserve server-side custom bits that the client doesn't know about
+                // The client's options UI doesn't include custom server options like HearArenaChat,
+                // so we need to preserve these bits from the current server value when the client
+                // sends its CharacterOptions2 (which would otherwise clear any custom bits)
+                var currentOptions2 = session.Player.Character.CharacterOptions2;
+                var serverOnlyBits = (int)CharacterOptions2.HearArenaChat;
+                characterOptions2Flag = (characterOptions2Flag & ~serverOnlyBits) | (currentOptions2 & serverOnlyBits);
+
                 session.Player.SetCharacterOptions2(characterOptions2Flag);
             }
 

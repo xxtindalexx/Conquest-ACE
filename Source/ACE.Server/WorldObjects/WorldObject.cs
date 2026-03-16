@@ -158,7 +158,8 @@ namespace ACE.Server.WorldObjects
                 }
                 // TODO: REMOVE ME?
 
-                PhysicsObj = PhysicsObj.makeObject(setupTableId, Guid.Full, isDynamic);
+                // CONQUEST: Pass VariationId to makeObject for proper outdoor v2 landblock visibility
+                PhysicsObj = PhysicsObj.makeObject(setupTableId, Guid.Full, isDynamic, false, VariationId);
             }
             else
             {

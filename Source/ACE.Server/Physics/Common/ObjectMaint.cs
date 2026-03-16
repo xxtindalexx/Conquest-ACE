@@ -368,7 +368,11 @@ namespace ACE.Server.Physics.Common
                 // and envcells seen from outside (all buildings)
                 var visibleObjs = PhysicsObj.CurLandblock.GetServerObjects(true);
 
-                return ApplyFilter(visibleObjs, type).Where(i => i.ID != PhysicsObj.ID && (i.CurCell is not EnvCell indoors || indoors.SeenOutside)).ToList();
+                // CONQUEST: Filter by variation for outdoor cells too (not just dungeons)
+                var filtered = ApplyFilter(visibleObjs, type).Where(i => i.ID != PhysicsObj.ID && (i.CurCell is not EnvCell indoors || indoors.SeenOutside));
+                if (VariationId != null)
+                    filtered = filtered.Where(i => i.Position.Variation == VariationId);
+                return filtered.ToList();
             }
             finally
             {

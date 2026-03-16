@@ -635,6 +635,38 @@ namespace ACE.Database
             }
         }
 
+        /// <summary>
+        /// CONQUEST: Get landblock instances with variation filtering, bypassing cache
+        /// </summary>
+        public List<LandblockInstance> GetLandblockInstancesByLandblockBypassCache(ushort landblockId, int? variation)
+        {
+            using (var context = new WorldDbContext())
+            {
+                List<LandblockInstance> results;
+                if (variation.HasValue)
+                {
+                    var varValue = variation.Value;
+                    int lbId = landblockId; // Cast ushort to int for proper comparison with int? Landblock field
+                    results = context.LandblockInstance
+                        .Include(r => r.LandblockInstanceLink)
+                        .AsNoTracking()
+                        .Where(r => r.Landblock == lbId && r.VariationId == varValue)
+                        .ToList();
+                }
+                else
+                {
+                    int lbId = landblockId;
+                    results = context.LandblockInstance
+                        .Include(r => r.LandblockInstanceLink)
+                        .AsNoTracking()
+                        .Where(r => r.Landblock == lbId && r.VariationId == null)
+                        .ToList();
+                }
+
+                return results;
+            }
+        }
+
         public List<LandblockInstance> GetCachedInstancesByLandblock(WorldDbContext context, ushort landblock, int? variation = null)
         {
             VariantCacheId cacheKey = new VariantCacheId { Landblock = landblock, Variant = variation ?? 0 };

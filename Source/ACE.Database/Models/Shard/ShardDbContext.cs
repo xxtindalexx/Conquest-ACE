@@ -105,6 +105,8 @@ public partial class ShardDbContext : DbContext
     public virtual DbSet<CharTracker> CharTracker { get; set; }
     public virtual DbSet<QuestIpTracking> QuestIpTracking { get; set; }
     public virtual DbSet<MysteryEggIpTracking> MysteryEggIpTracking { get; set; }
+    public virtual DbSet<EconomyDailyStats> EconomyDailyStats { get; set; }
+    public virtual DbSet<EconomyDailyContributors> EconomyDailyContributors { get; set; }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -222,6 +224,87 @@ public partial class ShardDbContext : DbContext
             entity.Property(e => e.LastEggTime)
                   .HasColumnName("last_egg_time");
         });
+
+        // CONQUEST: Economy Daily Stats tracking
+        modelBuilder.Entity<EconomyDailyStats>(entity =>
+        {
+            entity.ToTable("economy_daily_stats");
+
+            entity.HasKey(e => e.Id);
+
+            // Unique constraint on date + currency + source
+            entity.HasIndex(e => new { e.StatsDate, e.CurrencyType, e.Source }, "IX_economy_daily_stats_unique")
+                .IsUnique();
+
+            entity.Property(e => e.Id)
+                  .HasColumnName("id")
+                  .ValueGeneratedOnAdd();
+
+            entity.Property(e => e.StatsDate)
+                  .HasColumnName("stats_date")
+                  .IsRequired();
+
+            entity.Property(e => e.CurrencyType)
+                  .HasColumnName("currency_type")
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.Property(e => e.Source)
+                  .HasColumnName("source")
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.Property(e => e.TotalAmount)
+                  .HasColumnName("total_amount")
+                  .HasDefaultValue(0);
+
+            entity.Property(e => e.TransactionCount)
+                  .HasColumnName("transaction_count")
+                  .HasDefaultValue(0);
+
+            entity.Property(e => e.UniquePlayerCount)
+                  .HasColumnName("unique_player_count")
+                  .HasDefaultValue(0);
+
+            entity.Property(e => e.LastUpdated)
+                  .HasColumnName("last_updated");
+        });
+
+        // CONQUEST: Economy Daily Contributors for unique player tracking
+        modelBuilder.Entity<EconomyDailyContributors>(entity =>
+        {
+            entity.ToTable("economy_daily_contributors");
+
+            entity.HasKey(e => e.Id);
+
+            // Unique constraint to prevent duplicate entries
+            entity.HasIndex(e => new { e.StatsDate, e.CurrencyType, e.Source, e.PlayerGuid }, "IX_economy_daily_contributors_unique")
+                .IsUnique();
+
+            entity.HasIndex(e => e.StatsDate, "IX_economy_daily_contributors_date");
+
+            entity.Property(e => e.Id)
+                  .HasColumnName("id")
+                  .ValueGeneratedOnAdd();
+
+            entity.Property(e => e.StatsDate)
+                  .HasColumnName("stats_date")
+                  .IsRequired();
+
+            entity.Property(e => e.CurrencyType)
+                  .HasColumnName("currency_type")
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.Property(e => e.Source)
+                  .HasColumnName("source")
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.Property(e => e.PlayerGuid)
+                  .HasColumnName("player_guid");
+        });
+
         modelBuilder
             .UseCollation("utf8mb4_0900_ai_ci")
             .HasCharSet("utf8mb4");
@@ -737,6 +820,9 @@ public partial class ShardDbContext : DbContext
             entity.Property(e => e.StatModValue)
                 .HasComment("the effect value/amount")
                 .HasColumnName("stat_Mod_Value");
+            entity.Property(e => e.AugmentationLevelWhenCast)
+                .HasComment("Player Skill Augmentation Level when Enchantment Was Cast")
+                .HasColumnName("augmentation_Level_When_Cast");
 
             entity.HasOne(d => d.Object).WithMany(p => p.BiotaPropertiesEnchantmentRegistry)
                 .HasForeignKey(d => d.ObjectId)

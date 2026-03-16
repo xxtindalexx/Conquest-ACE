@@ -9,6 +9,7 @@ using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Factories;
+using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Physics.Common;
 using System;
@@ -538,6 +539,10 @@ namespace ACE.Server.WorldObjects
                         player.Session.Network.EnqueueSend(new GameMessageSystemChat(
                             $"You have received {quantityText}{reward.name}!",
                             ChatMessageType.System));
+
+                        // CONQUEST: Track conquest coins for economy stats
+                        if (reward.wcid == 13370001)
+                            EconomyStatsManager.RecordConquestCoins(player.Guid.Full, reward.quantity, EconomyStatsManager.SOURCE_TREASURE_MAP);
                     }
                     else
                     {
@@ -574,6 +579,10 @@ namespace ACE.Server.WorldObjects
                         player.Session.Network.EnqueueSend(new GameMessageSystemChat(
                             $"You have received {quantityText}{reward.name}!",
                             ChatMessageType.System));
+
+                        // CONQUEST: Track conquest coins for economy stats
+                        if (reward.wcid == 13370001)
+                            EconomyStatsManager.RecordConquestCoins(player.Guid.Full, givenCount, EconomyStatsManager.SOURCE_TREASURE_MAP);
                     }
                 }
             }

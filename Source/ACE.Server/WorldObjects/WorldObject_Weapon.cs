@@ -495,7 +495,7 @@ namespace ACE.Server.WorldObjects
 
             if (rendDamageType != ImbuedEffectType.Undef && weapon.HasImbuedEffect(rendDamageType) && skill != null && !isNetherPvP)
             {
-                var rendingMod = GetRendingMod(skill);
+                var rendingMod = GetRendingMod(skill, wielder);
 
                 resistMod = Math.Max(resistMod, rendingMod);
             }
@@ -732,7 +732,7 @@ namespace ACE.Server.WorldObjects
         // elemental rending cap, equivalent to level 6 vuln
         public static float MaxRendingMod = 2.5f;
 
-        public static float GetRendingMod(CreatureSkill skill)
+        public static float GetRendingMod(CreatureSkill skill, Creature wielder = null)
         {
             var baseSkill = GetBaseSkillImbued(skill);
 
@@ -750,7 +750,16 @@ namespace ACE.Server.WorldObjects
                     break;
             }
 
+            // Clamp base rending to max (equivalent to level 6 vuln)
             rendingMod = Math.Clamp(rendingMod, 1.0f, MaxRendingMod);
+
+            // CONQUEST: Add life aug bonus to rends AFTER base clamp (same 1% per aug as vulns)
+            // This allows rends to exceed the base 2.5x cap with enough life augs
+            if (wielder != null)
+            {
+                var lifeAugBonus = (wielder.LuminanceAugmentLifeCount ?? 0) * 0.01f;
+                rendingMod += lifeAugBonus;
+            }
 
             //Console.WriteLine($"RendingMod: {rendingMod}");
 

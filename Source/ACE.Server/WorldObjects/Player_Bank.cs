@@ -1342,6 +1342,9 @@ namespace ACE.Server.WorldObjects
                     Session.Network.EnqueueSend(new GameMessageCreateObject(item));
                 }
                 log.Debug($"[BANK_DEBUG] Player: {Name} | Sent batched network update for {createdItems.Count} enlightened coin stacks");
+
+                // CONQUEST: Track conquest coin withdrawal for economy stats
+                EconomyStatsManager.RecordConquestCoins(Guid.Full, (int)successfullyCreated, EconomyStatsManager.SOURCE_BANK_WITHDRAWAL);
             }
 
             // Return the amount that was successfully created
@@ -2077,6 +2080,13 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
+            // CONQUEST: Prevent self-transfers
+            if (tarplayer.Name.Equals(this.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot transfer luminance to yourself.", ChatMessageType.System));
+                return false;
+            }
+
             // CONQUEST: Check receiver's daily limit
             var baseReceiveLimit = PropertyManager.GetLong("luminance_receive_daily_limit");
             if (baseReceiveLimit > 0)
@@ -2225,7 +2235,7 @@ namespace ACE.Server.WorldObjects
             return true;
         }
 
-        public bool TransferEventTokens(long Amount, string CharacterDestination)
+       /* public bool TransferEventTokens(long Amount, string CharacterDestination)
         {
             // Validate amount
             if (Amount <= 0)
@@ -2309,7 +2319,7 @@ namespace ACE.Server.WorldObjects
             TransferLogger.LogBankTransfer(this, CharacterDestination, "Dragon Coins", Amount, TransferLogger.TransferTypeBankTransfer);
 
             return true;
-        }
+        }*/
 
         /* CONQUEST: Disabled - Conquest Coins are non-tradable
         public bool TransferConquestCoins(long Amount, string CharacterDestination)

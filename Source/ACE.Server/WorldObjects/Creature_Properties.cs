@@ -127,6 +127,18 @@ namespace ACE.Server.WorldObjects
                     var augFactor = Math.Min(1.0f, resistAug * 0.1f);
                     protMod *= 1.0f - augFactor;
                 }
+
+                // DEBUG: Show life aug protection info when taking damage
+                if (player.DebugDamage.HasFlag(Creature.DebugDamageType.Defender))
+                {
+                    var protPct = (1.0f - protMod) * 100f;
+                    var vulnPct = (vulnMod - 1.0f) * 100f;
+                    var finalMod = protMod * vulnMod;
+                    var finalReduction = (1.0f - finalMod) * 100f;
+                    player.Session?.Network?.EnqueueSend(new Network.GameMessages.Messages.GameMessageSystemChat(
+                        $"[LIFE AUG DEBUG] DmgType={damageType}, ProtMod={protMod:F4} ({protPct:F1}% reduction), VulnMod={vulnMod:F4} ({vulnPct:F1}% increase), Final={finalMod:F4} ({finalReduction:F1}% net reduction)",
+                        ChatMessageType.System));
+                }
             }
 
             // vulnerability mod becomes either life vuln or weapon resistance mod,

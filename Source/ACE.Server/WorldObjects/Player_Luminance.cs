@@ -236,7 +236,7 @@ namespace ACE.Server.WorldObjects
                 BankedLuminance = 0;
             }
             BankedLuminance += amount;
-            if (xpType == XpType.Quest || xpType == XpType.Kill || xpType == XpType.Fellowship)
+            if (xpType == XpType.Quest || xpType == XpType.Kill)
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"You've banked {amount:N0} Luminance.", ChatMessageType.Broadcast));
 
             if (shareType.HasFlag(ShareType.Allegiance))
@@ -244,6 +244,18 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Track luminance for /lph command
             LphTrackGain(amount);
+
+            // CONQUEST: Track luminance for economy stats
+            var econSource = xpType switch
+            {
+                XpType.Kill => EconomyStatsManager.SOURCE_KILL,
+                XpType.Quest => EconomyStatsManager.SOURCE_QUEST,
+                XpType.Fellowship => EconomyStatsManager.SOURCE_FELLOWSHIP,
+                XpType.Allegiance => EconomyStatsManager.SOURCE_ALLEGIANCE,
+                XpType.Admin => EconomyStatsManager.SOURCE_ADMIN,
+                _ => EconomyStatsManager.SOURCE_OTHER
+            };
+            EconomyStatsManager.RecordLuminance(Guid.Full, amount, econSource);
 
             // 20250203 - Don't spam the client with properties it doesn't use
             //UpdateLuminance();

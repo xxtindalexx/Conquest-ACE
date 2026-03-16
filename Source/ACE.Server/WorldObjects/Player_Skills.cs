@@ -141,6 +141,20 @@ namespace ACE.Server.WorldObjects
                     Session.Network.EnqueueSend(new GameMessageSystemChat("You must train Void Magic before you can train Summoning!", ChatMessageType.Advancement));
                     return false;
                 }
+
+                // CONQUEST: Auto-drop incompatible attack skills when training Summoning
+                ResetAttackSkillsForSummoning();
+            }
+
+            // CONQUEST: Block training attack skills if Summoning is trained
+            if (SummoningIncompatibleSkills.Contains(skill))
+            {
+                var summoningSkill = GetCreatureSkill(Skill.Summoning, false);
+                if (summoningSkill != null && summoningSkill.AdvancementClass >= SkillAdvancementClass.Trained)
+                {
+                    Session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot train {skill.ToSentence()} while Summoning is trained. Summoners must focus on their craft!", ChatMessageType.Advancement));
+                    return false;
+                }
             }
 
             // attempt to train the specified skill
@@ -191,6 +205,14 @@ namespace ACE.Server.WorldObjects
             {
                 var voidMagicSkill = GetCreatureSkill(Skill.VoidMagic, false);
                 if (voidMagicSkill == null || voidMagicSkill.AdvancementClass < SkillAdvancementClass.Trained)
+                    return false;
+            }
+
+            // CONQUEST: Server-side validation: Attack skills blocked if Summoning is trained
+            if (SummoningIncompatibleSkills.Contains(skill))
+            {
+                var summoningSkill = GetCreatureSkill(Skill.Summoning, false);
+                if (summoningSkill != null && summoningSkill.AdvancementClass >= SkillAdvancementClass.Trained)
                     return false;
             }
 
@@ -581,6 +603,21 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// CONQUEST: Enforces Summoning skill restrictions on login
+        /// If a player has Summoning trained along with incompatible attack skills,
+        /// the attack skills are automatically dropped and refunded
+        /// </summary>
+        public void EnforceSummoningSkillRestrictions()
+        {
+            var summoningSkill = GetCreatureSkill(Skill.Summoning, false);
+            if (summoningSkill == null || summoningSkill.AdvancementClass < SkillAdvancementClass.Trained)
+                return;
+
+            // Player has Summoning trained - check for and drop any incompatible attack skills
+            ResetAttackSkillsForSummoning();
+        }
+
+        /// <summary>
         /// Increases a skill by some amount of points
         /// </summary>
         public void AwardSkillPoints(Skill skill, uint amount)
@@ -859,6 +896,20 @@ namespace ACE.Server.WorldObjects
             Skill.LifeMagic,
             Skill.VoidMagic,
             Skill.WarMagic
+        };
+
+        /// <summary>
+        /// CONQUEST: Attack skills that are incompatible with Summoning
+        /// Players with Summoning cannot have these skills trained, and vice versa
+        /// </summary>
+        public static HashSet<Skill> SummoningIncompatibleSkills = new HashSet<Skill>()
+        {
+            Skill.MissileWeapons,
+            Skill.WarMagic,
+            Skill.TwoHandedCombat,
+            Skill.HeavyWeapons,
+            Skill.LightWeapons,
+            Skill.FinesseWeapons
         };
 
         public static List<Skill> AlwaysTrained = new List<Skill>()
@@ -1238,6 +1289,57 @@ namespace ACE.Server.WorldObjects
             var msg = new GameMessageSystemChat($"Your Summoning skill has been reset because Void Magic is no longer trained. All experience and skill credits have been refunded.", ChatMessageType.Broadcast);
 
             Session.Network.EnqueueSend(updateSkill, updateCredits, msg);
+        }
+
+        /// <summary>
+        /// CONQUEST: Resets all attack skills that are incompatible with Summoning
+        /// Called when a player trains Summoning - they must give up their attack skills
+        /// </summary>
+        private void ResetAttackSkillsForSummoning()
+        {
+            var skillsReset = new List<string>();
+
+            foreach (var skill in SummoningIncompatibleSkills)
+            {
+                var creatureSkill = GetCreatureSkill(skill, false);
+                if (creatureSkill == null || creatureSkill.AdvancementClass < SkillAdvancementClass.Trained)
+                    continue;
+
+                // Get skill base for credit refunds
+                if (!DatManager.PortalDat.SkillTable.SkillBaseHash.TryGetValue((uint)skill, out var skillBase))
+                    continue;
+
+                var wasSpecialized = creatureSkill.AdvancementClass == SkillAdvancementClass.Specialized;
+
+                // Refund XP
+                RefundXP(creatureSkill.ExperienceSpent);
+
+                // Refund skill credits
+                var creditsRefunded = skillBase.TrainedCost;
+                if (wasSpecialized)
+                    creditsRefunded += skillBase.UpgradeCostFromTrainedToSpecialized;
+
+                AvailableSkillCredits += creditsRefunded;
+
+                // Reset skill to untrained
+                creatureSkill.AdvancementClass = SkillAdvancementClass.Untrained;
+                creatureSkill.InitLevel = 0;
+                creatureSkill.Ranks = 0;
+                creatureSkill.ExperienceSpent = 0;
+
+                // Send skill update
+                Session.Network.EnqueueSend(new GameMessagePrivateUpdateSkill(this, creatureSkill));
+
+                skillsReset.Add(skill.ToSentence());
+            }
+
+            if (skillsReset.Count > 0)
+            {
+                var updateCredits = new GameMessagePrivateUpdatePropertyInt(this, PropertyInt.AvailableSkillCredits, AvailableSkillCredits ?? 0);
+                var skillList = string.Join(", ", skillsReset);
+                var msg = new GameMessageSystemChat($"The following skills have been reset to embrace Summoning: {skillList}. All experience and skill credits have been refunded.", ChatMessageType.Broadcast);
+                Session.Network.EnqueueSend(updateCredits, msg);
+            }
         }
 
         /// <summary>

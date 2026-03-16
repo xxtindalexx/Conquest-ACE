@@ -142,6 +142,7 @@ namespace ACE.Server.WorldObjects.Managers
             if (entries.Count == 0)
             {
                 var newEntry = BuildEntry(spell, caster, weapon, equip);
+
                 newEntry.LayerId = 1;
                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
                 WorldObject.ChangesDetected = true;
@@ -174,6 +175,7 @@ namespace ACE.Server.WorldObjects.Managers
             if (refreshSpell == null)
             {
                 var newEntry = BuildEntry(spell, caster, weapon, equip);
+
                 newEntry.LayerId = result.NextLayerId;
                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
 
@@ -221,12 +223,19 @@ namespace ACE.Server.WorldObjects.Managers
         /// </summary>
         private PropertiesEnchantmentRegistry BuildEntry(Spell spell, WorldObject caster = null, WorldObject weapon = null, bool equip = false)
         {
-            var entry = new PropertiesEnchantmentRegistry();
-
-            entry.EnchantmentCategory = (uint)spell.MetaSpellType;
-            entry.SpellId = (int)spell.Id;
-            entry.SpellCategory = spell.Category;
-            entry.PowerLevel = spell.Power;
+            var entry = new PropertiesEnchantmentRegistry
+            {
+                EnchantmentCategory = (uint)spell.MetaSpellType,
+                SpellId = (int)spell.Id,
+                SpellCategory = spell.Category,
+                PowerLevel = spell.Power,
+                CasterObjectId = caster?.Guid.Full ?? WorldObject.Guid.Full,
+                DegradeModifier = spell.DegradeModifier,
+                DegradeLimit = spell.DegradeLimit,
+                StatModType = spell.StatModType,
+                StatModKey = spell.StatModKey,
+                StatModValue = spell.StatModVal,
+            };
 
             if (caster is Creature)
             {
@@ -235,7 +244,6 @@ namespace ACE.Server.WorldObjects.Managers
                 if (caster is Player player && !spell.IsFellowshipSpell && (player.AugmentationIncreasedSpellDuration > 0 || (player.LuminanceAugmentSpellDurationCount ?? 0) > 0) && spell.DotDuration == 0)
                 {
                     entry.Duration *= 1.0f + (player.AugmentationIncreasedSpellDuration * 0.2f) + ((player.LuminanceAugmentSpellDurationCount ?? 0) * 0.05f);
-                    //entry.Duration *= (caster as Player).LuminanceAugmentSpellDurationCount ?? 0 * 0.001f;
                 }
             }
             else
@@ -252,32 +260,23 @@ namespace ACE.Server.WorldObjects.Managers
                 }
             }
 
-            if (caster == null)
-                entry.CasterObjectId = WorldObject.Guid.Full;
-            else
-                entry.CasterObjectId = caster.Guid.Full;
-
-            entry.DegradeModifier = spell.DegradeModifier;
-            entry.DegradeLimit = spell.DegradeLimit;
-            entry.StatModType = spell.StatModType;
-            entry.StatModKey = spell.StatModKey;
             bool selfCastEligible = (spell.IsBeneficial && spell.IsSelfTargeted) || spell.IsHarmful;
 
-            //calculate luminance aug additions for statmod
-            var luminanceAug = 0.0f;
-
+            // Augmentation bonuses only apply when caster is a Creature (player casting spells)
+            // Equipped items do NOT get augmentation bonuses
             if (caster != null && caster is Creature)
             {
-                var player = caster as Creature;
+                var creatureCaster = caster as Creature;
+
                 if (spell.School == MagicSchool.CreatureEnchantment && !spell.IsFellowshipSpell && spell.Id != 5753 && spell.IsBeneficial && spell.IsSelfTargeted)
                 {
-                    luminanceAug += player.LuminanceAugmentCreatureCount ?? 0.0f;
-                    entry.AugmentationLevelWhenCast = player.LuminanceAugmentCreatureCount ?? 0;
+                    entry.StatModValue += creatureCaster.LuminanceAugmentCreatureCount ?? 0.0f;
+                    entry.AugmentationLevelWhenCast = creatureCaster.LuminanceAugmentCreatureCount ?? 0;
                 }
                 else if (spell.School == MagicSchool.CreatureEnchantment && spell.IsHarmful)
                 {
-                    luminanceAug -= player.LuminanceAugmentCreatureCount ?? 0.0f;
-                    entry.AugmentationLevelWhenCast = player.LuminanceAugmentCreatureCount ?? 0;
+                    entry.StatModValue -= creatureCaster.LuminanceAugmentCreatureCount ?? 0.0f;
+                    entry.AugmentationLevelWhenCast = creatureCaster.LuminanceAugmentCreatureCount ?? 0;
                 }
 
                 if (spell.School == MagicSchool.ItemEnchantment)
@@ -288,37 +287,38 @@ namespace ACE.Server.WorldObjects.Managers
                         if (spell.Id == 1487 || spell.Id == 1488 || spell.Id == 1489 || spell.Id == 1490 ||
                             spell.Id == 1491 || spell.Id == 1492 || spell.Id == 4399 || spell.Id == 2100) // Brittlemail/Tattercoat
                         {
-                            luminanceAug -= (player.LuminanceAugmentItemCount ?? 0.0f) * 1.00f;
+                            entry.StatModValue -= (creatureCaster.LuminanceAugmentItemCount ?? 0.0f) * 1.00f;
                         }
                         else // Impen
                         {
-                            luminanceAug += (player.LuminanceAugmentItemCount ?? 0.0f) * 1.00f;
+                            entry.StatModValue += (creatureCaster.LuminanceAugmentItemCount ?? 0.0f) * 1.00f;
                         }
+                        entry.AugmentationLevelWhenCast = creatureCaster.LuminanceAugmentItemCount ?? 0;
                     }
                     else if (spell.StatModKey == 360 && selfCastEligible) //blood drinker buffed
                     {
-                        luminanceAug += (player.LuminanceAugmentItemCount ?? 0.0f) * 0.5f;
+                        entry.StatModValue += (creatureCaster.LuminanceAugmentItemCount ?? 0.0f) * 0.5f;
                     }
                     else if (spell.StatModKey == 170 && selfCastEligible) //spirit drinker
                     {
-                        luminanceAug += (player.LuminanceAugmentItemCount ?? 0.0f) * 0.005f;
+                        entry.StatModValue += (creatureCaster.LuminanceAugmentItemCount ?? 0.0f) * 0.005f;
                     }
                     else if (spell.Name.Contains("Bane") || spell.StatModKey == 171
                         || spell.StatModKey == 318 || spell.StatModKey == 317) //banes and surges
                     {
-                        luminanceAug += (player.LuminanceAugmentItemCount ?? 0.0f) * 0.01f;
+                        entry.StatModValue += (creatureCaster.LuminanceAugmentItemCount ?? 0.0f) * 0.01f;
                     }
                     else if (spell.StatModKey == 168 || spell.StatModKey == 169 && selfCastEligible)
                     {
-                        luminanceAug += GetItemAugPercentageRating(player.LuminanceAugmentItemCount ?? 0); //(player.LuminanceAugmentItemCount ?? 0.0f) * 0.01f;
+                        entry.StatModValue += GetItemAugPercentageRating(creatureCaster.LuminanceAugmentItemCount ?? 0);
                     }
                     else if (spell.StatModKey == 361 && selfCastEligible) //eg atlans alacrity
                     {
-                        luminanceAug -= (player.LuminanceAugmentItemCount ?? 0.0f) * 1.0f;
+                        entry.StatModValue -= (creatureCaster.LuminanceAugmentItemCount ?? 0.0f) * 1.0f;
                     }
                     if (selfCastEligible)
                     {
-                        entry.AugmentationLevelWhenCast = player.LuminanceAugmentItemCount ?? 0;
+                        entry.AugmentationLevelWhenCast = creatureCaster.LuminanceAugmentItemCount ?? 0;
                     }
                 }
                 if (spell.School == MagicSchool.LifeMagic)
@@ -327,44 +327,64 @@ namespace ACE.Server.WorldObjects.Managers
                     {
                         if (spell.StatModKey == 0) //armor -- single point
                         {
-                            luminanceAug += (player.LuminanceAugmentLifeCount ?? 0.0f);
+                            entry.StatModValue += (creatureCaster.LuminanceAugmentLifeCount ?? 0.0f);
                         }
                         else if (spell.StatModKey == 64 || spell.StatModKey == 65 || spell.StatModKey == 66 //slash, pierce, bludge
                             || spell.StatModKey == 67 || spell.StatModKey == 68 || spell.StatModKey == 69 || spell.StatModKey == 70) //fire, cold, acid, electric
                         {
-                            luminanceAug -= GetLifeAugProtectRating(player.LuminanceAugmentLifeCount ?? 0);
+                            var lifeAugCount = creatureCaster.LuminanceAugmentLifeCount ?? 0;
+                            var lifeAugBonus = GetLifeAugProtectRating(lifeAugCount);
+                            var originalValue = entry.StatModValue;
+                            entry.StatModValue -= lifeAugBonus;
+
+                            // DEBUG: Log life aug protection bonus
+                            if (lifeAugCount > 0 && WorldObject is Player targetPlayer)
+                            {
+                                var protPct = (1.0f - entry.StatModValue) * 100f;
+                                var basePct = (1.0f - originalValue) * 100f;
+                                targetPlayer.Session?.Network?.EnqueueSend(new GameMessageSystemChat(
+                                    $"[LIFE AUG DEBUG] Protection cast: LifeAugs={lifeAugCount}, Bonus={lifeAugBonus:F4} ({lifeAugBonus*100:F2}%), Base={basePct:F1}%, Final={protPct:F1}%",
+                                    ChatMessageType.System));
+                            }
                         }
                         else
                         {
-                            luminanceAug += (player.LuminanceAugmentLifeCount ?? 0.0f) * 0.10f;
+                            entry.StatModValue += (creatureCaster.LuminanceAugmentLifeCount ?? 0.0f) * 0.10f;
                         }
                     }
                     else if (spell.IsHarmful) //debuffs -- single point
                     {
                         if (spell.StatModKey == 0)
                         {
-                            luminanceAug -= (player.LuminanceAugmentLifeCount ?? 0.0f);
+                            entry.StatModValue -= (creatureCaster.LuminanceAugmentLifeCount ?? 0.0f);
                         }
                         else if (spell.StatModKey == 64 || spell.StatModKey == 65 || spell.StatModKey == 66 //slash, pierce, bludge
                             || spell.StatModKey == 67 || spell.StatModKey == 68 || spell.StatModKey == 69 || spell.StatModKey == 70 //fire, cold, acid, electric
                             || spell.StatModKey == 312 || spell.StatModKey == 307 || spell.StatModKey == 318 || spell.StatModKey == 308 || spell.StatModKey == 317) //surge of regeneration
                         {
-                            luminanceAug += (player.LuminanceAugmentLifeCount ?? 0.0f) * 0.01f;
+                            entry.StatModValue += (creatureCaster.LuminanceAugmentLifeCount ?? 0.0f) * 0.01f;
                         }
                         else
                         {
-                            luminanceAug -= (player.LuminanceAugmentLifeCount ?? 0.0f) * 0.10f;
+                            entry.StatModValue -= (creatureCaster.LuminanceAugmentLifeCount ?? 0.0f) * 0.10f;
                         }
                     }
-                    entry.AugmentationLevelWhenCast = player.LuminanceAugmentLifeCount ?? 0;
+                    entry.AugmentationLevelWhenCast = creatureCaster.LuminanceAugmentLifeCount ?? 0;
                 }
-
-                entry.StatModValue = spell.StatModVal + luminanceAug;
-
             }
             else
             {
-                entry.StatModValue = spell.StatModVal;
+                // Handle ItemEnchantment spells on wielded items when caster is not a Creature
+                // (e.g., spells cast from scrolls, gems, or other items)
+                if (WorldObject.WielderId != null && spell.School == MagicSchool.ItemEnchantment && !equip)
+                {
+                    var wielder = WorldObject.CurrentLandblock?.GetObject(WorldObject.WielderId.Value) as Player;
+
+                    if (wielder != null)
+                    {
+                        entry.AugmentationLevelWhenCast = wielder.LuminanceAugmentItemCount ?? 0;
+                    }
+                }
             }
 
 

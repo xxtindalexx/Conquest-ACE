@@ -102,6 +102,13 @@ namespace ACE.Server.WorldObjects
 
             EnqueueBroadcast(new GameMessageSystemChat($"{Name} is recalling home.", ChatMessageType.Recall), LocalBroadcastRange, ChatMessageType.Recall);
 
+            // CONQUEST: Instant recalls (disabled for 2 minutes after PvP combat)
+            if (PropertyManager.GetBool("instant_recalls") && Time.GetUnixTime() - LastPkAttackTimestamp >= 120)
+            {
+                Teleport(house.SlumLord.Location);
+                return;
+            }
+
             SendMotionAsCommands(MotionCommand.HouseRecall, MotionStance.NonCombat);
 
             var startPos = new Position(Location);
@@ -170,6 +177,13 @@ namespace ACE.Server.WorldObjects
 
             EnqueueBroadcast(new GameMessageSystemChat($"{Name} is recalling to the lifestone.", ChatMessageType.Recall), LocalBroadcastRange, ChatMessageType.Recall);
 
+            // CONQUEST: Instant recalls (disabled for 2 minutes after PvP combat)
+            if (PropertyManager.GetBool("instant_recalls") && Time.GetUnixTime() - LastPkAttackTimestamp >= 120)
+            {
+                Teleport(Sanctuary);
+                return;
+            }
+
             SendMotionAsCommands(MotionCommand.LifestoneRecall, MotionStance.NonCombat);
 
             var startPos = new Position(Location);
@@ -233,6 +247,13 @@ namespace ACE.Server.WorldObjects
             }
 
             EnqueueBroadcast(new GameMessageSystemChat($"{Name} is recalling to the marketplace.", ChatMessageType.Recall), LocalBroadcastRange, ChatMessageType.Recall);
+
+            // CONQUEST: Instant recalls (disabled for 2 minutes after PvP combat)
+            if (PropertyManager.GetBool("instant_recalls") && Time.GetUnixTime() - LastPkAttackTimestamp >= 120)
+            {
+                Teleport(MarketplaceDrop);
+                return;
+            }
 
             SendMotionAsCommands(MotionCommand.MarketplaceRecall, MotionStance.NonCombat);
 
@@ -401,6 +422,13 @@ namespace ACE.Server.WorldObjects
 
             EnqueueBroadcast(new GameMessageSystemChat($"{Name} is going to the Allegiance hometown.", ChatMessageType.Recall), LocalBroadcastRange, ChatMessageType.Recall);
 
+            // CONQUEST: Instant recalls (disabled for 2 minutes after PvP combat)
+            if (PropertyManager.GetBool("instant_recalls") && Time.GetUnixTime() - LastPkAttackTimestamp >= 120)
+            {
+                Teleport(Allegiance.Sanctuary);
+                return;
+            }
+
             SendMotionAsCommands(MotionCommand.AllegianceHometownRecall, MotionStance.NonCombat);
 
             var startPos = new Position(Location);
@@ -494,6 +522,13 @@ namespace ACE.Server.WorldObjects
             }
 
             EnqueueBroadcast(new GameMessageSystemChat($"{Name} is recalling to the Allegiance housing.", ChatMessageType.Recall), LocalBroadcastRange, ChatMessageType.Recall);
+
+            // CONQUEST: Instant recalls (disabled for 2 minutes after PvP combat)
+            if (PropertyManager.GetBool("instant_recalls") && Time.GetUnixTime() - LastPkAttackTimestamp >= 120)
+            {
+                Teleport(allegianceHouse.SlumLord.Location);
+                return;
+            }
 
             SendMotionAsCommands(MotionCommand.HouseRecall, MotionStance.NonCombat);
 
@@ -992,6 +1027,9 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Apply Void Magic DoT spread bonus (Void Contagion) for existing characters
             ApplyVoidMagicDotSpreadBonus();
+
+            // CONQUEST: Enforce Summoning skill restrictions (drop attack skills if Summoning is trained)
+            EnforceSummoningSkillRestrictions();
 
             // CONQUEST: Enable arena chat messages by default for existing characters (one-time migration)
             ApplyArenaChatDefaultMigration();

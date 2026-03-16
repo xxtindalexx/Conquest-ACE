@@ -93,5 +93,11 @@ public partial class BiotaPropertiesEnchantmentRegistry
     /// </summary>
     public uint SpellSetId { get; set; }
 
+    /// <summary>
+    /// The caster's augmentation level when this spell was cast
+    /// Used for comparing spell power when augmented spells compete with item spells
+    /// </summary>
+    public long? AugmentationLevelWhenCast { get; set; }
+
     public virtual Biota Object { get; set; }
 }

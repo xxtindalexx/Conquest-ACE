@@ -61,24 +61,47 @@ namespace ACE.Server.Network.GameAction.Actions
                     return;
                 }
 
-                // Check if fellowship is locked
-                if (fellowship.IsLocked)
+                // CONQUEST: Check if player is a recent departure - they can rejoin immediately, bypassing queue and lock
+                var isRecentDeparture = fellowship.IsRecentDeparture(session.Player.Guid.Full);
+
+                // Check if fellowship is locked (recent departures can bypass this)
+                if (fellowship.IsLocked && !isRecentDeparture)
                 {
                     session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {targetPlayer.Name}'s fellowship is locked and not accepting new members.", ChatMessageType.Broadcast));
                     return;
                 }
 
+                // CONQUEST: Recent departures bypass the queue entirely - just send them straight to recruit
+                if (isRecentDeparture)
+                {
+                    // Get the fellowship leader - only the leader can actually recruit
+                    var leader = PlayerManager.GetOnlinePlayer(fellowship.FellowshipLeaderGuid);
+                    if (leader == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Fellowship leader is not online. Cannot rejoin.", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Welcome back! Rejoining {leader.Name}'s fellowship...", ChatMessageType.Broadcast));
+                    leader.FellowshipRecruit(session.Player);
+                    return;
+                }
+
+                // CONQUEST: Process any pending queue entries first - this handles cases where
+                // departed member windows expired but no one joined/left to trigger queue processing
+                fellowship.ProcessWaitingQueue();
+
                 // Check if fellowship is full OR if there are people waiting in queue
                 // CONQUEST: Fix queue bypass - if people are waiting, new joiners must queue
+                var maxFellows = fellowship.GetMaxFellows();
                 var queueCount = fellowship.GetWaitingQueueCount();
-                if (fellowship.FellowshipMembers.Count >= ACE.Server.Entity.Fellowship.MaxFellows || queueCount > 0)
+                if (fellowship.FellowshipMembers.Count >= maxFellows || queueCount > 0)
                 {
                     // Add to waiting queue
                     var position = fellowship.AddToWaitingQueue(session.Player);
-                    if (fellowship.FellowshipMembers.Count >= ACE.Server.Entity.Fellowship.MaxFellows)
+                    if (fellowship.FellowshipMembers.Count >= maxFellows)
                     {
                         session.Network.EnqueueSend(new GameMessageSystemChat(
-                            $"[FSHIP]: {targetPlayer.Name}'s fellowship is full ({fellowship.FellowshipMembers.Count}/{ACE.Server.Entity.Fellowship.MaxFellows}). You are #{position} in queue ({queueCount + 1} waiting).",
+                            $"[FSHIP]: {targetPlayer.Name}'s fellowship is full ({fellowship.FellowshipMembers.Count}/{maxFellows}). You are #{position} in queue ({queueCount + 1} waiting).",
                             ChatMessageType.Broadcast));
                     }
                     else

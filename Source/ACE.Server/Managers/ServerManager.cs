@@ -197,6 +197,9 @@ namespace ACE.Server.Managers
             // Disabled thread update loop
             WorldManager.StopWorld();
 
+            // Flush economy stats before shutdown
+            EconomyStatsManager.Shutdown();
+
             // Halt mods
             ModManager.Shutdown();
 

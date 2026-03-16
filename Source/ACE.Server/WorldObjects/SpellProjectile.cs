@@ -605,9 +605,10 @@ namespace ACE.Server.WorldObjects
 
                     // CONQUEST: War augmentation damage bonus
                     // Each war aug adds 0.5% damage bonus to war magic spells
-                    if (sourcePlayer != null && Spell.School == ACE.Entity.Enum.MagicSchool.WarMagic)
+                    // Works for both players and creatures (mobs)
+                    if (sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.WarMagic)
                     {
-                        var warAugCount = sourcePlayer.LuminanceAugmentWarCount ?? 0;
+                        var warAugCount = sourceCreature.LuminanceAugmentWarCount ?? 0;
                         if (warAugCount > 0)
                         {
                             var warAugMultiplier = 1.0f + (warAugCount * 0.005f);

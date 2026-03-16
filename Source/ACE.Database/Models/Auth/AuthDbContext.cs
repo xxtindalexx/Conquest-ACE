@@ -29,6 +29,9 @@ public partial class AuthDbContext : DbContext
     // CONQUEST: Multibox Exemption System
     public virtual DbSet<AccountMultiboxExempt> AccountMultiboxExempt { get; set; }
 
+    // CONQUEST: VPN Exemption System
+    public virtual DbSet<AccountVpnExempt> AccountVpnExempt { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -188,6 +191,37 @@ public partial class AuthDbContext : DbContext
                 .HasForeignKey(d => d.AccountId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("fk_account_exempt");
+        });
+
+        // CONQUEST: VPN Exemption System (IP-based)
+        modelBuilder.Entity<AccountVpnExempt>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("account_vpn_exempt");
+
+            entity.Property(e => e.Id)
+                .HasColumnName("id")
+                .ValueGeneratedOnAdd();
+            entity.Property(e => e.IpAddress)
+                .IsRequired()
+                .HasMaxLength(45)
+                .HasColumnName("ipAddress");
+            entity.Property(e => e.ExemptedBy)
+                .IsRequired()
+                .HasMaxLength(50)
+                .HasColumnName("exemptedBy");
+            entity.Property(e => e.ExemptedTime)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("datetime")
+                .HasColumnName("exemptedTime");
+            entity.Property(e => e.Reason)
+                .HasMaxLength(255)
+                .HasColumnName("reason");
+
+            entity.HasIndex(e => e.IpAddress)
+                .IsUnique()
+                .HasDatabaseName("idx_vpn_exempt_ip");
         });
 
         OnModelCreatingPartial(modelBuilder);

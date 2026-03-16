@@ -1407,6 +1407,13 @@ namespace ACE.Server.WorldObjects.Managers
 
                     if (player != null)
                     {
+                        // CONQUEST: Block teleport emotes during PvP combat (PK timer active)
+                        if (player.PKTimerActive)
+                        {
+                            player.SendWeenieError(WeenieError.YouHaveBeenInPKBattleTooRecently);
+                            break;
+                        }
+
                         if (emote.ObjCellId.HasValue && emote.OriginX.HasValue && emote.OriginY.HasValue && emote.OriginZ.HasValue && emote.AnglesX.HasValue && emote.AnglesY.HasValue && emote.AnglesZ.HasValue && emote.AnglesW.HasValue)
                         {
                             if (emote.ObjCellId.Value > 0)
@@ -1830,6 +1837,13 @@ namespace ACE.Server.WorldObjects.Managers
                     // Teleport player to their house
                     if (player != null)
                     {
+                        // CONQUEST: Block teleport emotes during PvP combat (PK timer active)
+                        if (player.PKTimerActive)
+                        {
+                            player.SendWeenieError(WeenieError.YouHaveBeenInPKBattleTooRecently);
+                            break;
+                        }
+
                         var house = player.House ?? player.GetAccountHouse();
 
                         if (house == null)
@@ -1851,6 +1865,13 @@ namespace ACE.Server.WorldObjects.Managers
                     // Teleport player to their monarch's mansion
                     if (player != null)
                     {
+                        // CONQUEST: Block teleport emotes during PvP combat (PK timer active)
+                        if (player.PKTimerActive)
+                        {
+                            player.SendWeenieError(WeenieError.YouHaveBeenInPKBattleTooRecently);
+                            break;
+                        }
+
                         if (player.Allegiance == null)
                         {
                             player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YouAreNotInAllegiance));
@@ -1879,6 +1900,13 @@ namespace ACE.Server.WorldObjects.Managers
                     // Teleport player to their allegiance hometown
                     if (player != null)
                     {
+                        // CONQUEST: Block teleport emotes during PvP combat (PK timer active)
+                        if (player.PKTimerActive)
+                        {
+                            player.SendWeenieError(WeenieError.YouHaveBeenInPKBattleTooRecently);
+                            break;
+                        }
+
                         if (player.Allegiance == null)
                         {
                             player.Session.Network.EnqueueSend(new GameEventWeenieError(player.Session, WeenieError.YouAreNotInAllegiance));

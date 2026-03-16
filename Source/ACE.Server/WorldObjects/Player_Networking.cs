@@ -2,6 +2,7 @@ using System;
 
 using ACE.Common;
 using ACE.Common.Extensions;
+using ACE.Database;
 using ACE.Database.Models.Shard;
 using ACE.Entity;
 using ACE.Entity.Enum;
@@ -40,7 +41,12 @@ namespace ACE.Server.WorldObjects
                 var playerIP = Session.EndPoint.Address.ToString();
                 var apiKey = PropertyManager.GetString("proxycheck_api_key");
 
-                if (!string.IsNullOrWhiteSpace(apiKey))
+                // Check if IP is whitelisted for VPN bypass
+                if (DatabaseManager.Authentication.IsIpVpnExempt(playerIP))
+                {
+                    log.Debug($"[VPN CHECK] Player {Name} logged in from whitelisted IP: {playerIP} - skipping VPN check");
+                }
+                else if (!string.IsNullOrWhiteSpace(apiKey))
                 {
                     var session = Session; // Capture session reference for async context
                     var playerName = Name;

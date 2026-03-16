@@ -34,6 +34,12 @@ namespace ACE.Server.Command.Handlers
             log.Info(msg);
             PlayerManager.BroadcastToAuditChannel(session?.Player, msg);
 
+            // DISCORD RELAY: Send shutdown cancelled notification to ServerStatus channel
+            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.ServerStatus > 0)
+            {
+                DiscordChatManager.SendDiscordMessage("Server", "✅ **Server shutdown has been CANCELLED**", ConfigManager.Config.Chat.ServerStatus);
+            }
+
             ServerManager.CancelShutdown();
         }
 
@@ -143,8 +149,8 @@ namespace ACE.Server.Command.Handlers
             else
                 PlayerManager.BroadcastToAll(new GameMessageSystemChat(genericMsgToPlayers, ChatMessageType.WorldBroadcast));
 
-            // DISCORD RELAY: Send shutdown notification to Events channel
-            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.EventsChannelId > 0)
+            // DISCORD RELAY: Send shutdown notification to ServerStatus channel
+            if (ConfigManager.Config.Chat.EnableDiscordConnection && ConfigManager.Config.Chat.ServerStatus > 0)
             {
                 var discordMsg = "";
                 if (sdt.TotalMilliseconds == 0)
@@ -157,7 +163,7 @@ namespace ACE.Server.Command.Handlers
                 if (!hideName && !string.IsNullOrEmpty(adminText))
                     discordMsg = $"**{adminName}**: {adminText}\n{discordMsg}";
 
-                DiscordChatManager.SendDiscordMessage("Server", discordMsg, ConfigManager.Config.Chat.EventsChannelId);
+                DiscordChatManager.SendDiscordMessage("Server", discordMsg, ConfigManager.Config.Chat.ServerStatus);
             }
 
             ServerManager.BeginShutdown();

@@ -271,5 +271,72 @@ namespace ACE.Database
                     .ToList();
             }
         }
+
+        // CONQUEST: VPN Exemption System (IP-based)
+
+        /// <summary>
+        /// Check if an IP address is exempt from VPN detection
+        /// </summary>
+        public bool IsIpVpnExempt(string ipAddress)
+        {
+            using (var context = new AuthDbContext())
+            {
+                return context.AccountVpnExempt
+                    .AsNoTracking()
+                    .Any(r => r.IpAddress == ipAddress);
+            }
+        }
+
+        /// <summary>
+        /// Add VPN exemption for an IP address
+        /// </summary>
+        public void AddVpnExemption(string ipAddress, string exemptedBy, string reason)
+        {
+            using (var context = new AuthDbContext())
+            {
+                var exemption = new AccountVpnExempt
+                {
+                    IpAddress = ipAddress,
+                    ExemptedBy = exemptedBy,
+                    ExemptedTime = DateTime.UtcNow,
+                    Reason = reason
+                };
+
+                context.AccountVpnExempt.Add(exemption);
+                context.SaveChanges();
+            }
+        }
+
+        /// <summary>
+        /// Remove VPN exemption for an IP address
+        /// </summary>
+        public bool RemoveVpnExemption(string ipAddress)
+        {
+            using (var context = new AuthDbContext())
+            {
+                var exemption = context.AccountVpnExempt
+                    .FirstOrDefault(r => r.IpAddress == ipAddress);
+
+                if (exemption == null)
+                    return false;
+
+                context.AccountVpnExempt.Remove(exemption);
+                context.SaveChanges();
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Get all VPN exemptions
+        /// </summary>
+        public List<AccountVpnExempt> GetAllVpnExemptions()
+        {
+            using (var context = new AuthDbContext())
+            {
+                return context.AccountVpnExempt
+                    .AsNoTracking()
+                    .ToList();
+            }
+        }
     }
 }

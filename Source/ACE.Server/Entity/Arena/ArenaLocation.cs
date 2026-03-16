@@ -180,11 +180,12 @@ namespace ACE.Server.Entity
                                 }
                             }
 
-                            //For team event types, add players to fellowships
-                            if (ActiveEvent.EventType.Equals("2v2"))
-                            {
-                                CreateTeamFellowships();
-                            }
+                            // CONQUEST: Don't force fellowship creation for 2v2 - players spawn together so they know
+                            // who their teammate is, and this way they don't lose their spot in their hunting fellowship
+                            // if (ActiveEvent.EventType.Equals("2v2"))
+                            // {
+                            //     CreateTeamFellowships();
+                            // }
 
                             //Make sure there's no way someone can remain as an observer while entering a match
                             foreach (var player in playerList)
@@ -211,12 +212,21 @@ namespace ACE.Server.Entity
                                 ActiveEvent.EventType.ToLower().Equals("group"))
                             {
                                 var teamPositions = new Dictionary<Guid, Position>();
+                                var availablePositions = new List<Position>(positions); // Copy list so we can remove used positions
+                                var rng = new Random(); // Single Random instance to avoid same-seed issues
+
                                 foreach (var arenaPlayer in ActiveEvent.Players)
                                 {
                                     if (arenaPlayer.TeamGuid.HasValue && !teamPositions.Keys.Contains(arenaPlayer.TeamGuid.Value))
                                     {
-                                        var posIndex = new Random().Next(positions.Count());
-                                        teamPositions.Add(arenaPlayer.TeamGuid.Value, positions[posIndex]);
+                                        if (availablePositions.Count == 0)
+                                        {
+                                            // Fallback: if we run out of positions, reuse the original list
+                                            availablePositions = new List<Position>(positions);
+                                        }
+                                        var posIndex = rng.Next(availablePositions.Count);
+                                        teamPositions.Add(arenaPlayer.TeamGuid.Value, availablePositions[posIndex]);
+                                        availablePositions.RemoveAt(posIndex); // Remove so next team gets a different position
                                     }
                                 }
 
@@ -949,7 +959,7 @@ namespace ACE.Server.Entity
                     //Handle PK quests
                     var hasWhitelistedOpponent = losers.FirstOrDefault(x => x.MonarchId != winner.MonarchId && TownControl.TownControlAllegiances.IsAllowedAllegiance((int)x.MonarchId)) != null && TownControl.TownControlAllegiances.IsAllowedAllegiance((int)winner.MonarchId);
                     var eventType = ActiveEvent.EventType.ToLower();
-                    if (hasWhitelistedOpponent || eventType.Equals("1v1") || eventType.Equals("2v2"))
+                    if (hasWhitelistedOpponent || eventType.Equals("1v1") || eventType.Equals("2v2") || eventType.Equals("ffa") || eventType.Equals("tugak") || eventType.Equals("group"))
                     {
                         player.CompletePkQuestTasks(PKQuests.PKQuests.PKQuests_ParticipateAnyArena);
                         player.CompletePkQuestTasks(PKQuests.PKQuests.PKQuests_WinAnyArena);
@@ -1735,28 +1745,32 @@ namespace ACE.Server.Entity
                     0xD50E,
                     new List<Position>()
                     {
-                            new Position(0xD50E0012, 48.137695f, 40.723217f, -0.095000f, 0.000000f, 0.000000f, 0.011873f, -0.999929f, false, 2),
-                            //0xD50E0012 [48.137695 40.723217 -0.095000] -0.999929 0.000000 0.000000 0.011873
-                            new Position(0xD50E000E, 47.949497f, 130.815628f, -0.095000f, 0.000000f, 0.000000f, -0.999986f, 0.005301f, false, 2),
-                            //0xD50E000E [47.949497 130.815628 -0.095000] 0.005301 0.000000 0.000000 -0.999986
-                            new Position(0xD50E000D, 36.021290f, 96.158844f, -0.095000f, 0.000000f, 0.000000f, -0.707318f, 0.706895f, false, 2),
-                            //0xD50E000D [36.021290 96.158844 -0.095000] 0.706895 0.000000 0.000000 -0.707318
-                            new Position(0xD50E0015, 61.040390f, 96.038742f, -0.445000f, 0.000000f, 0.000000f, -0.707665f, -0.706548f, false, 2),
-                            //0xD50E0015 [61.040390 96.038742 -0.445000] -0.706548 0.000000 0.000000 -0.707665
+                            // Center: 0xD50E0014 [48.788712 72.609299 -0.095000] - positions offset around center
+                            // Outdoor landblock - use null variation (not variation 2)
+                            new Position(0xD50E0014, 48.788712f, 62.609299f, -0.095000f, 0.000000f, 0.000000f, 0.011873f, -0.999929f, false, null),
+                            // South of center (Y - 10)
+                            new Position(0xD50E0014, 48.788712f, 82.609299f, -0.095000f, 0.000000f, 0.000000f, -0.999986f, 0.005301f, false, null),
+                            // North of center (Y + 10)
+                            new Position(0xD50E0014, 38.788712f, 72.609299f, -0.095000f, 0.000000f, 0.000000f, -0.707318f, 0.706895f, false, null),
+                            // West of center (X - 10)
+                            new Position(0xD50E0014, 58.788712f, 72.609299f, -0.095000f, 0.000000f, 0.000000f, -0.707665f, -0.706548f, false, null),
+                            // East of center (X + 10)
                     }); //Landing Strip
 
                     _arenaLocationStartingPositions.Add(
                     0x7222,
                     new List<Position>()
                     {
-                            new Position(0x7222002D, 131.824692f, 96.041451f, -0.445000f, 0.000000f, 0.000000f, -0.709499f, 0.704706f, false, 2),
-                            // 0x7222002D [131.824692 96.041451 -0.445000] 0.704706 0.000000 0.000000 -0.709499
-                            new Position(0x72220034, 156.016724f, 95.997833f, -0.445000f, 0.000000f, 0.000000f, -0.719308f, -0.694692f, false, 2),
-                            // 0x72220034 [156.016724 95.997833 -0.445000] -0.694692 0.000000 0.000000 -0.719308
-                            new Position(0x7222002D, 143.945587f, 110.087395f, -0.445000f, 0.000000f, 0.000000f, -0.999998f, -0.002127f, false, 2),
-                            // 0x7222002D [143.945587 110.087395 -0.445000] -0.002127 0.000000 0.000000 -0.999998
-                            new Position(0x7222002C, 143.886292f, 81.059364f, -0.445000f, 0.000000f, 0.000000f, 0.004404f, -0.999990f, false, 2),
-                            // 0x7222002C [143.886292 81.059364 -0.445000] -0.999990 0.000000 0.000000 0.004404
+                            // Center: 0x7222002C [143.056488 95.704987 -0.095000] - positions offset around center
+                            // Outdoor landblock - use null variation (not variation 2)
+                            new Position(0x7222002C, 133.056488f, 95.704987f, -0.095000f, 0.000000f, 0.000000f, -0.709499f, 0.704706f, false, null),
+                            // West of center (X - 10)
+                            new Position(0x7222002C, 153.056488f, 95.704987f, -0.095000f, 0.000000f, 0.000000f, -0.719308f, -0.694692f, false, null),
+                            // East of center (X + 10)
+                            new Position(0x7222002C, 143.056488f, 105.704987f, -0.095000f, 0.000000f, 0.000000f, -0.999998f, -0.002127f, false, null),
+                            // North of center (Y + 10)
+                            new Position(0x7222002C, 143.056488f, 85.704987f, -0.095000f, 0.000000f, 0.000000f, 0.004404f, -0.999990f, false, null),
+                            // South of center (Y - 10)
                     }); //The Heptagon
 
                     _arenaLocationStartingPositions.Add(

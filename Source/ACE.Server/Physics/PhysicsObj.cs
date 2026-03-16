@@ -2205,7 +2205,8 @@ namespace ACE.Server.Physics
 
             if (WeenieObj.IsCombatPet)
             {
-                var visibleMonsters = ObjMaint.GetVisibleObjects(CurCell, ObjectMaint.VisibleObjectType.AttackTargets);
+                // CONQUEST: Pass variation to filter visible monsters correctly on outdoor v2 landblocks
+                var visibleMonsters = ObjMaint.GetVisibleObjects(CurCell, ObjectMaint.VisibleObjectType.AttackTargets, this.Position.Variation);
                 _ = ObjMaint.AddVisibleTargets(visibleMonsters);
             }
         }
@@ -2321,9 +2322,9 @@ namespace ACE.Server.Physics
 
         public bool IsSightObj;
 
-        public static PhysicsObj makeObject(uint dataDID, uint objectIID, bool dynamic, bool sightObj = false)
+        public static PhysicsObj makeObject(uint dataDID, uint objectIID, bool dynamic, bool sightObj = false, int? variationId = null)
         {
-            var obj = new PhysicsObj(null);
+            var obj = new PhysicsObj(variationId);
             obj.InitObjectBegin(objectIID, dynamic);
             obj.InitPartArrayObject(dataDID, true);
             obj.InitObjectEnd();

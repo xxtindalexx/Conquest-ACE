@@ -78,11 +78,13 @@ namespace ACE.Server.Physics.Common
 
         public LandblockStruct(int? variationId)
         {
+            VariationId = variationId;
             Init(variationId);
         }
 
         public LandblockStruct(CellLandblock landblock, int? variationId)
         {
+            VariationId = variationId; // CONQUEST: Set VariationId BEFORE Generate() so InitPVArrays() uses correct variation
             Init(variationId);
             Height = landblock.Height;
             Terrain = landblock.Terrain;

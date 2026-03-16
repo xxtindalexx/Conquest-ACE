@@ -7396,6 +7396,167 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
+        // CONQUEST: VPN Whitelist System Commands
+
+        // wla <accountname> [reason] - Whitelist account's IP for VPN bypass
+        [CommandHandler("wla", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
+            "Whitelist an account's IP to bypass VPN detection (for false positives)",
+            "accountname [reason]\nExample: /wla JohnDoe ISP flagged as VPN")]
+        public static void HandleWhitelistAccount(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /wla <accountname> [reason]");
+                CommandHandlerHelper.WriteOutputInfo(session, "Example: /wla JohnDoe ISP flagged as VPN");
+                return;
+            }
+
+            var accountName = parameters[0];
+            var reason = parameters.Length > 1 ? string.Join(" ", parameters.Skip(1)) : "VPN false positive";
+
+            // Get the account
+            var account = DatabaseManager.Authentication.GetAccountByName(accountName);
+            if (account == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' not found.");
+                return;
+            }
+
+            // Get the last login IP
+            if (account.LastLoginIP == null || account.LastLoginIP.Length == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' has no recorded login IP.");
+                return;
+            }
+
+            var ipAddress = new System.Net.IPAddress(account.LastLoginIP).ToString();
+
+            // Check if IP is already whitelisted
+            if (DatabaseManager.Authentication.IsIpVpnExempt(ipAddress))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"IP '{ipAddress}' (from account '{accountName}') is already whitelisted for VPN bypass.");
+                return;
+            }
+
+            // Add exemption
+            try
+            {
+                DatabaseManager.Authentication.AddVpnExemption(ipAddress, session.Player.Name, reason);
+                CommandHandlerHelper.WriteOutputInfo(session, $"IP '{ipAddress}' (from account '{accountName}') has been whitelisted for VPN bypass.");
+                CommandHandlerHelper.WriteOutputInfo(session, $"Reason: {reason}");
+
+                // Audit logging
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"[VPN WHITELIST] Admin {session.Player.Name} whitelisted IP '{ipAddress}' (account: {accountName}). Reason: {reason}");
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error whitelisting IP: {ex.Message}");
+                log.Error($"Error whitelisting IP {ipAddress} for VPN bypass: {ex}");
+            }
+        }
+
+        // whitelistaccount - Alias for wla
+        [CommandHandler("whitelistaccount", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
+            "Whitelist an account's IP to bypass VPN detection (alias for /wla)",
+            "accountname [reason]\nExample: /whitelistaccount JohnDoe ISP flagged as VPN")]
+        public static void HandleWhitelistAccountFull(Session session, params string[] parameters)
+        {
+            HandleWhitelistAccount(session, parameters);
+        }
+
+        // rva <accountname> - Remove VPN whitelist for account's IP
+        [CommandHandler("rva", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
+            "Remove VPN whitelist for an account's IP",
+            "accountname\nExample: /rva JohnDoe")]
+        public static void HandleRevokeVpnAccount(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: /rva <accountname>");
+                return;
+            }
+
+            var accountName = parameters[0];
+
+            // Get the account
+            var account = DatabaseManager.Authentication.GetAccountByName(accountName);
+            if (account == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' not found.");
+                return;
+            }
+
+            // Get the last login IP
+            if (account.LastLoginIP == null || account.LastLoginIP.Length == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Account '{accountName}' has no recorded login IP.");
+                return;
+            }
+
+            var ipAddress = new System.Net.IPAddress(account.LastLoginIP).ToString();
+
+            // Check if IP is whitelisted
+            if (!DatabaseManager.Authentication.IsIpVpnExempt(ipAddress))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"IP '{ipAddress}' (from account '{accountName}') is not currently whitelisted.");
+                return;
+            }
+
+            // Remove exemption
+            try
+            {
+                bool removed = DatabaseManager.Authentication.RemoveVpnExemption(ipAddress);
+                if (removed)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"IP '{ipAddress}' (from account '{accountName}') VPN whitelist has been removed.");
+
+                    // Audit logging
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"[VPN WHITELIST] Admin {session.Player.Name} removed VPN whitelist for IP '{ipAddress}' (account: {accountName}).");
+                }
+                else
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Failed to remove VPN whitelist for IP '{ipAddress}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error removing VPN whitelist: {ex.Message}");
+                log.Error($"Error removing VPN whitelist for IP {ipAddress}: {ex}");
+            }
+        }
+
+        // lva - List all VPN whitelisted IPs
+        [CommandHandler("lva", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 0,
+            "List all VPN whitelisted IPs")]
+        public static void HandleListVpnAccounts(Session session, params string[] parameters)
+        {
+            try
+            {
+                var exemptions = DatabaseManager.Authentication.GetAllVpnExemptions();
+
+                if (exemptions == null || exemptions.Count == 0)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, "No IPs are currently whitelisted for VPN bypass.");
+                    return;
+                }
+
+                CommandHandlerHelper.WriteOutputInfo(session, $"=== VPN Whitelist ({exemptions.Count} total) ===");
+                foreach (var exemption in exemptions.OrderBy(e => e.ExemptedTime))
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"IP: {exemption.IpAddress}");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"  Whitelisted By: {exemption.ExemptedBy}");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"  Date: {exemption.ExemptedTime:yyyy-MM-dd HH:mm:ss} UTC");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"  Reason: {exemption.Reason ?? "None specified"}");
+                    CommandHandlerHelper.WriteOutputInfo(session, "");
+                }
+            }
+            catch (Exception ex)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Error listing VPN whitelist: {ex.Message}");
+                log.Error($"Error listing VPN whitelist: {ex}");
+            }
+        }
+
 
         // CONQUEST: Mystery Egg Pet Cache Commands
 
@@ -8425,6 +8586,77 @@ namespace ACE.Server.Command.Handlers
             Managers.EventManager.ReloadAllEvents();
             CommandHandlerHelper.WriteOutputInfo(session, $"All events reloaded from database ({Managers.EventManager.Events.Count} events)");
             PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared all event caches.");
+        }
+
+        /// <summary>
+        /// CONQUEST: Display economy stats for the current day
+        /// </summary>
+        [CommandHandler("economystats", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Shows economy statistics for today", "[luminance|coins]")]
+        public static void HandleEconomyStats(Session session, params string[] parameters)
+        {
+            string filter = null;
+            if (parameters.Length > 0)
+            {
+                var param = parameters[0].ToLower();
+                if (param == "luminance" || param == "lum")
+                    filter = Managers.EconomyStatsManager.CURRENCY_LUMINANCE;
+                else if (param == "coins" || param == "coin" || param == "conquest")
+                    filter = Managers.EconomyStatsManager.CURRENCY_CONQUEST_COIN;
+            }
+
+            // Calculate time since midnight UTC
+            var now = DateTime.UtcNow;
+            var elapsed = now - now.Date;
+            var elapsedStr = elapsed.TotalHours >= 1
+                ? $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m"
+                : $"{elapsed.Minutes}m";
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"=== Economy Stats (Today, {elapsedStr} elapsed) ===");
+
+            // Show luminance stats
+            if (filter == null || filter == Managers.EconomyStatsManager.CURRENCY_LUMINANCE)
+            {
+                var lumTotals = Managers.EconomyStatsManager.GetCurrencyTotals(Managers.EconomyStatsManager.CURRENCY_LUMINANCE);
+                CommandHandlerHelper.WriteOutputInfo(session, $"\n[LUMINANCE] Total: {lumTotals.totalAmount:N0} | Transactions: {lumTotals.totalTransactions:N0} | Unique Players: {lumTotals.totalUniquePlayers:N0}");
+
+                var lumStats = Managers.EconomyStatsManager.GetCurrentStats(Managers.EconomyStatsManager.CURRENCY_LUMINANCE);
+                foreach (var kvp in lumStats.OrderByDescending(x => x.Value.total))
+                {
+                    var source = kvp.Key.Replace("luminance:", "  ");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"  {source}: {kvp.Value.total:N0} ({kvp.Value.transactions:N0} txns, {kvp.Value.uniquePlayers} players)");
+                }
+            }
+
+            // Show conquest coin stats
+            if (filter == null || filter == Managers.EconomyStatsManager.CURRENCY_CONQUEST_COIN)
+            {
+                var coinTotals = Managers.EconomyStatsManager.GetCurrencyTotals(Managers.EconomyStatsManager.CURRENCY_CONQUEST_COIN);
+                CommandHandlerHelper.WriteOutputInfo(session, $"\n[CONQUEST COINS] Total: {coinTotals.totalAmount:N0} | Transactions: {coinTotals.totalTransactions:N0} | Unique Players: {coinTotals.totalUniquePlayers:N0}");
+
+                var coinStats = Managers.EconomyStatsManager.GetCurrentStats(Managers.EconomyStatsManager.CURRENCY_CONQUEST_COIN);
+                foreach (var kvp in coinStats.OrderByDescending(x => x.Value.total))
+                {
+                    var source = kvp.Key.Replace("conquest_coin:", "  ");
+                    CommandHandlerHelper.WriteOutputInfo(session, $"  {source}: {kvp.Value.total:N0} ({kvp.Value.transactions:N0} txns, {kvp.Value.uniquePlayers} players)");
+                }
+            }
+
+            if (filter == null)
+                CommandHandlerHelper.WriteOutputInfo(session, "\nUse '/economystats luminance' or '/economystats coins' to filter.");
+        }
+
+        /// <summary>
+        /// CONQUEST: Clean up old economy stats data
+        /// </summary>
+        [CommandHandler("economycleanup", AccessLevel.Admin, CommandHandlerFlag.None, 0, "Cleans up old economy stats data", "[days_to_keep]")]
+        public static void HandleEconomyCleanup(Session session, params string[] parameters)
+        {
+            int daysToKeep = 30;
+            if (parameters.Length > 0 && int.TryParse(parameters[0], out var days))
+                daysToKeep = days;
+
+            Managers.EconomyStatsManager.CleanupOldData(daysToKeep);
+            CommandHandlerHelper.WriteOutputInfo(session, $"Economy stats cleanup completed. Kept last {daysToKeep} days of data.");
         }
     }
 }

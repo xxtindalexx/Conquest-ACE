@@ -4195,6 +4195,18 @@ namespace ACE.Server.WorldObjects
             if (PropertyManager.GetBool("player_receive_immediate_save"))
                 RushNextPlayerSave(5);
 
+            // CONQUEST: Track conquest coins from emote/quest rewards for economy stats
+            if (itemBeingGiven.WeenieClassId == 13370001)
+            {
+                // Differentiate between death emote (kill reward) and quest NPC reward
+                // If giver is a Creature and is dead, it's a kill reward from death emote
+                var isDeathReward = giver is Creature creature && !creature.IsAlive;
+                var source = isDeathReward
+                    ? ACE.Server.Managers.EconomyStatsManager.SOURCE_KILL
+                    : ACE.Server.Managers.EconomyStatsManager.SOURCE_QUEST;
+                ACE.Server.Managers.EconomyStatsManager.RecordConquestCoins(Guid.Full, itemBeingGiven.StackSize ?? 1, source);
+            }
+
             return true;
         }
 
