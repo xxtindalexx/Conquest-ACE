@@ -1285,6 +1285,10 @@ namespace ACE.Server.WorldObjects
                 if (!caster.CanDamage(creature))
                     continue;
 
+                // CONQUEST: Cannot spread to targets in different variations
+                if (!AreVariationsCompatible(Location.Variation, creature.Location.Variation))
+                    continue;
+
                 // Check distance from dying creature
                 var objPos = creature.Location.ToGlobal(false);
                 var distance = System.Numerics.Vector3.Distance(deathPos, objPos);

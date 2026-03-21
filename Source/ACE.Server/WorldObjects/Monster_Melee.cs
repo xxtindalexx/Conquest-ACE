@@ -55,6 +55,13 @@ namespace ACE.Server.WorldObjects
                 return 0.0f;
             }
 
+            // CONQUEST: Cannot attack targets in different variations
+            if (!AreVariationsCompatible(Location.Variation, target.Location.Variation))
+            {
+                FindNextTarget();
+                return 0.0f;
+            }
+
             if (CurrentMotionState.Stance == MotionStance.NonCombat)
                 DoAttackStance();
 

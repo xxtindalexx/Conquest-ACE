@@ -795,6 +795,10 @@ namespace ACE.Server.WorldObjects
                         continue;
                 }
 
+                // CONQUEST: Cannot target creatures in different variations
+                if (!AreVariationsCompatible(primaryTarget.Location.Variation, creature.Location.Variation))
+                    continue;
+
                 // Calculate distance from PRIMARY TARGET to this potential target using global coordinates
                 var objPos = obj.Location.ToGlobal(false);
                 var distanceFromPrimaryTarget = Vector3.Distance(primaryTargetPos, objPos);

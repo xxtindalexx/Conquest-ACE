@@ -143,6 +143,10 @@ namespace ACE.Server.WorldObjects
                 var creature = obj.WeenieObj.WorldObject as Creature;
                 if (creature == null || creature.Teleporting || creature.IsDead) continue;
 
+                // CONQUEST: Cannot cleave targets in different variations
+                if (!AreVariationsCompatible(Location.Variation, creature.Location.Variation))
+                    continue;
+
                 // CONQUEST: Never cleave players (PvP protection)
                 if (creature is Player)
                     continue;

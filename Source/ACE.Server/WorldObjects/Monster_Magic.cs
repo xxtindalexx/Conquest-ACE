@@ -271,6 +271,10 @@ namespace ACE.Server.WorldObjects
         {
             if (AttackTarget == null) return;
 
+            // CONQUEST: Cannot cast spells on targets in different variations
+            if (!AreVariationsCompatible(Location.Variation, AttackTarget.Location.Variation))
+                return;
+
             var targetSelf = spell.Flags.HasFlag(SpellFlags.SelfTargeted);
             var untargeted = spell.NonComponentTargetType == ItemType.None;
 

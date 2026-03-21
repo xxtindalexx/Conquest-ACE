@@ -184,14 +184,16 @@ namespace ACE.Server.WorldObjects
                     case TargetingTactic.LastDamager:
 
                         var lastDamager = DamageHistory.LastDamager?.TryGetAttacker() as Creature;
-                        if (lastDamager != null)
+                        // CONQUEST: Verify damager is in same variation
+                        if (lastDamager != null && AreVariationsCompatible(Location.Variation, lastDamager.Location.Variation))
                             AttackTarget = lastDamager;
                         break;
 
                     case TargetingTactic.TopDamager:
 
                         var topDamager = DamageHistory.TopDamager?.TryGetAttacker() as Creature;
-                        if (topDamager != null)
+                        // CONQUEST: Verify damager is in same variation
+                        if (topDamager != null && AreVariationsCompatible(Location.Variation, topDamager.Location.Variation))
                             AttackTarget = topDamager;
                         break;
 
@@ -474,6 +476,10 @@ namespace ACE.Server.WorldObjects
                     // this is to prevent the faction mob from adding itself to its retaliate targets / visible targets,
                     // and setting itself to its AttackTarget
                     if (nearbyCreature == AttackTarget)
+                        continue;
+
+                    // CONQUEST: Don't alert mobs across variations
+                    if (!AreVariationsCompatible(nearbyCreature.Location.Variation, AttackTarget.Location.Variation))
                         continue;
 
                     if (nearbyCreature.SameFaction(targetCreature))

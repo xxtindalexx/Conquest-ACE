@@ -415,7 +415,9 @@ namespace ACE.Database
         {
             var result = true;
 
-            Parallel.ForEach(biotas, ConfigManager.Config.Server.Threading.DatabaseParallelOptions, biota =>
+            // Limit parallel database queries to prevent MySQL connection floods
+            var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 8) };
+            Parallel.ForEach(biotas, parallelOptions, biota =>
             {
                 if (!SaveBiota(biota.biota, biota.rwLock, doNotAddToCache))
                     result = false;
@@ -469,7 +471,9 @@ namespace ACE.Database
         {
             var result = true;
 
-            Parallel.ForEach(ids, ConfigManager.Config.Server.Threading.DatabaseParallelOptions, id =>
+            // Limit parallel database queries to prevent MySQL connection floods
+            var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 8) };
+            Parallel.ForEach(ids, parallelOptions, id =>
             {
                 if (!RemoveBiota(id))
                     result = false;
@@ -500,7 +504,9 @@ namespace ACE.Database
                     .Where(r => r.Type == (ushort)PropertyInstanceId.Container && r.Value == parentId)
                     .ToList();
 
-                Parallel.ForEach(results, ConfigManager.Config.Server.Threading.DatabaseParallelOptions, result =>
+                // Limit parallel database queries to prevent MySQL connection floods
+                var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 8) };
+                Parallel.ForEach(results, parallelOptions, result =>
                 {
                     var biota = GetBiota(result.ObjectId);
 
@@ -534,7 +540,9 @@ namespace ACE.Database
                     .Where(r => r.Type == (ushort)PropertyInstanceId.Wielder && r.Value == parentId)
                     .ToList();
 
-                Parallel.ForEach(results, ConfigManager.Config.Server.Threading.DatabaseParallelOptions, result =>
+                // Limit parallel database queries to prevent MySQL connection floods
+                var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 8) };
+                Parallel.ForEach(results, parallelOptions, result =>
                 {
                     var biota = GetBiota(result.ObjectId);
 
@@ -854,7 +862,9 @@ namespace ACE.Database
                     .AsNoTracking()
                     .ToList();
 
-                Parallel.ForEach(results, result =>
+                // Limit parallel database queries to prevent MySQL connection floods
+                var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 8) };
+                Parallel.ForEach(results, parallelOptions, result =>
                 {
                     var biota = GetBiota(result.Id, true);
 
@@ -1244,6 +1254,40 @@ namespace ACE.Database
             {
                 return context.QuestIpTracking
                     .FirstOrDefault(q => q.QuestId == questId && q.IpAddress == playerIp);
+            }
+        }
+
+        /// <summary>
+        /// Increments the IP quest solves counter (or creates a new record if one doesn't exist)
+        /// Used by StampIPQuest emote to track IP-based quest completions
+        /// </summary>
+        public void IncrementIPQuestSolves(uint questId, string playerIp)
+        {
+            using (var context = new ShardDbContext())
+            {
+                var ipTracking = context.QuestIpTracking
+                    .FirstOrDefault(q => q.QuestId == questId && q.IpAddress == playerIp);
+
+                if (ipTracking == null)
+                {
+                    // Create new record
+                    ipTracking = new QuestIpTracking
+                    {
+                        QuestId = questId,
+                        IpAddress = playerIp,
+                        SolvesCount = 1,
+                        LastSolveTime = DateTime.UtcNow
+                    };
+                    context.QuestIpTracking.Add(ipTracking);
+                }
+                else
+                {
+                    // Increment existing record
+                    ipTracking.SolvesCount++;
+                    ipTracking.LastSolveTime = DateTime.UtcNow;
+                }
+
+                context.SaveChanges();
             }
         }
 

@@ -256,7 +256,7 @@ namespace ACE.Server.Entity
             {
                 damageBonus = attacker.LuminanceAugmentMissileCount.Value;
             }
-            else if (attacker.LuminanceAugmentMeleeCount > 0)
+            else if (!isMissile && attacker.LuminanceAugmentMeleeCount > 0)
             {
                 damageBonus = attacker.LuminanceAugmentMeleeCount.Value;
             }

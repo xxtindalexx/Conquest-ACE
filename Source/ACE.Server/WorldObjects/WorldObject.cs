@@ -322,11 +322,25 @@ namespace ACE.Server.WorldObjects
         //public static PhysicsObj SightObj = PhysicsObj.makeObject(0x02000124, 0, false, true);     // arrow
 
         /// <summary>
+        /// CONQUEST: Checks if two variation values are compatible
+        /// Treats null as 0 (base world) for comparison
+        /// </summary>
+        public static bool AreVariationsCompatible(int? var1, int? var2)
+        {
+            // Treat null as 0 (base world)
+            return (var1 ?? 0) == (var2 ?? 0);
+        }
+
+        /// <summary>
         /// Returns TRUE if this object has direct line-of-sight visibility to input object
         /// </summary>
         public bool IsDirectVisible(WorldObject wo)
         {
             if (PhysicsObj == null || wo.PhysicsObj == null)
+                return false;
+
+            // CONQUEST: Objects in different variations are not visible to each other
+            if (!AreVariationsCompatible(PhysicsObj.Position.Variation, wo.PhysicsObj.Position.Variation))
                 return false;
 
             var SightObj = PhysicsObj.makeObject(0x02000124, 0, false, true);

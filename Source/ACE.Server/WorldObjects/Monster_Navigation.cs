@@ -205,6 +205,10 @@ namespace ACE.Server.WorldObjects
             if (AttackTarget == null)
                 return float.MaxValue;
 
+            // CONQUEST: Targets in different variations are unreachable
+            if (!AreVariationsCompatible(Location.Variation, AttackTarget.Location.Variation))
+                return float.MaxValue;
+
             //var matchIndoors = Location.Indoors == AttackTarget.Location.Indoors;
             //var targetPos = matchIndoors ? AttackTarget.Location.ToGlobal() : AttackTarget.Location.Pos;
             //var sourcePos = matchIndoors ? Location.ToGlobal() : Location.Pos;

@@ -177,7 +177,9 @@ namespace ACE.Server.Managers
 
         private static void RecordTransaction(string currencyType, uint playerGuid, long amount, string source)
         {
-            var key = new StatsKey(DateTime.UtcNow, currencyType, source);
+            // Use EST date for tracking to align with in-game daily reset at 8 PM EST
+            var estNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone);
+            var key = new StatsKey(estNow, currencyType, source);
             var accumulator = _stats.GetOrAdd(key, _ => new StatsAccumulator());
 
             lock (accumulator.Lock)
@@ -195,7 +197,7 @@ namespace ACE.Server.Managers
         {
             try
             {
-                var today = DateTime.UtcNow.Date;
+                var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone).Date;
 
                 using (var context = new ShardDbContext())
                 {
@@ -252,7 +254,7 @@ namespace ACE.Server.Managers
 
             try
             {
-                var today = DateTime.UtcNow.Date;
+                var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone).Date;
                 var now = DateTime.UtcNow;
 
                 using (var context = new ShardDbContext())
@@ -343,7 +345,7 @@ namespace ACE.Server.Managers
         public static Dictionary<string, (long total, long transactions, int uniquePlayers)> GetCurrentStats(string currencyType = null)
         {
             var result = new Dictionary<string, (long, long, int)>();
-            var today = DateTime.UtcNow.Date;
+            var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone).Date;
 
             foreach (var kvp in _stats)
             {
@@ -369,7 +371,7 @@ namespace ACE.Server.Managers
         /// </summary>
         public static (long totalAmount, long totalTransactions, int totalUniquePlayers) GetCurrencyTotals(string currencyType)
         {
-            var today = DateTime.UtcNow.Date;
+            var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone).Date;
             long totalAmount = 0;
             long totalTransactions = 0;
             var allPlayers = new HashSet<uint>();
@@ -426,7 +428,7 @@ namespace ACE.Server.Managers
         }
 
         /// <summary>
-        /// Check if it's time to send the daily report (11:59 PM EST)
+        /// Check if it's time to send the daily report (11:59 PM EST, before midnight reset)
         /// </summary>
         private static void CheckDailyReport(object state)
         {
@@ -439,7 +441,7 @@ namespace ACE.Server.Managers
                 if (_lastDailyReportDate == estDate)
                     return;
 
-                // Send report between 11:58 PM and 11:59 PM EST (just before midnight reset)
+                // Send report between 11:58 PM and 11:59 PM EST (just before midnight EST reset)
                 if (estNow.Hour == 23 && estNow.Minute >= 58 && estNow.Minute <= 59)
                 {
                     log.Info("[ECONOMY] Sending daily economy report to Discord...");
@@ -470,7 +472,7 @@ namespace ACE.Server.Managers
                 // Flush current data to ensure we have the latest
                 FlushToDatabase(null);
 
-                var today = reportDate ?? DateTime.UtcNow.Date;
+                var today = reportDate ?? TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone).Date;
                 var sb = new StringBuilder();
 
                 sb.AppendLine("**📊 DAILY ECONOMY REPORT**");

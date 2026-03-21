@@ -113,6 +113,13 @@ namespace ACE.Server.WorldObjects
             if (Attacking || MissileTarget != null && MissileTarget.IsAlive)
                 return;
 
+            // CONQUEST: Cannot attack targets in different variations
+            if (!AreVariationsCompatible(Location.Variation, target.Location.Variation))
+            {
+                OnAttackDone();
+                return;
+            }
+
             if (!CanDamage(target))
             {
                 SendTransientError($"You cannot attack {target.Name}");

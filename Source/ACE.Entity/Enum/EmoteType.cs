@@ -148,5 +148,7 @@ namespace ACE.Entity.Enum
         TeleportToHouse               = 141, //Custom - Teleport player to their house
         TeleportToMonarchMansion      = 142, //Custom - Teleport player to their monarch's mansion
         TeleportToAllegianceHometown  = 143, //Custom - Teleport player to their allegiance hometown
+        InqIPQuest                    = 144, //Custom - Check if player's IP can solve an IP-restricted quest (QuestSuccess = blocked, QuestFailure = allowed)
+        StampIPQuest                  = 145, //Custom - Increment the IP tracking counter for an IP-restricted quest
     }
 }

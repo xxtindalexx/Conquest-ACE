@@ -130,6 +130,13 @@ namespace ACE.Server.WorldObjects
 
             var itemsForSale = new Dictionary<(uint weenieClassId, int paletteTemplate, double shade), uint>();
 
+            if (Biota.PropertiesCreateList == null)
+            {
+                log.Warn($"[VENDOR] {Name} (0x{Guid}:{WeenieClassId}) has no PropertiesCreateList - vendor will have no items for sale.");
+                inventoryloaded = true;
+                return;
+            }
+
             foreach (var item in Biota.PropertiesCreateList.Where(x => x.DestinationType == DestinationType.Shop))
                 LoadInventoryItem(itemsForSale, item.WeenieClassId, item.Palette, item.Shade, item.StackSize);
 

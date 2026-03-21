@@ -694,6 +694,55 @@ namespace ACE.Server.WorldObjects.Managers
 
                     break;
 
+                case EmoteType.InqIPQuest:
+                    // Check if player's IP can solve an IP-restricted quest
+                    // QuestSuccess = IP is blocked (reached limit)
+                    // QuestFailure = IP can proceed (not blocked)
+                    if (player != null)
+                    {
+                        var questName = QuestManager.GetQuestName(emote.Message);
+                        var quest = DatabaseManager.World.GetCachedQuest(questName);
+
+                        if (quest == null || !quest.IsIpRestricted)
+                        {
+                            // Quest doesn't exist or isn't IP restricted - allow (QuestFailure = can proceed)
+                            ExecuteEmoteSet(EmoteCategory.QuestFailure, emote.Message, targetObject, true);
+                        }
+                        else
+                        {
+                            // Get player's IP address
+                            var playerIp = player.Session?.EndPoint?.Address?.ToString();
+
+                            if (string.IsNullOrEmpty(playerIp))
+                            {
+                                // Can't determine IP - block to be safe
+                                ExecuteEmoteSet(EmoteCategory.QuestSuccess, emote.Message, targetObject, true);
+                            }
+                            else
+                            {
+                                // Check IP tracking
+                                var ipTracking = DatabaseManager.Shard.GetQuestIpTracking(quest.Id, playerIp);
+                                var ipLimit = (int)quest.IpLootLimit.GetValueOrDefault(1);
+
+                                // Check if cooldown has expired (if quest has a timer)
+                                var ipSolves = ipTracking?.SolvesCount ?? 0;
+                                if (ipTracking != null && quest.MinDelta > 0)
+                                {
+                                    var timeSinceLastSolve = (DateTime.UtcNow - ipTracking.LastSolveTime)?.TotalSeconds ?? double.MaxValue;
+                                    if (timeSinceLastSolve >= quest.MinDelta)
+                                    {
+                                        // Cooldown expired, count resets
+                                        ipSolves = 0;
+                                    }
+                                }
+
+                                var ipBlocked = ipSolves >= ipLimit;
+                                ExecuteEmoteSet(ipBlocked ? EmoteCategory.QuestSuccess : EmoteCategory.QuestFailure, emote.Message, targetObject, true);
+                            }
+                        }
+                    }
+                    break;
+
                 case EmoteType.InqMyQuestBitsOff:
                 case EmoteType.InqQuestBitsOff:
 
@@ -1337,6 +1386,26 @@ namespace ACE.Server.WorldObjects.Managers
                         // Return -1 to signal the emote chain should be aborted (no Give, etc.)
                         if (!questTarget.QuestManager.Stamp(emote.Message))
                             return -1;
+                    }
+                    break;
+
+                case EmoteType.StampIPQuest:
+                    // Increment the IP tracking counter for an IP-restricted quest
+                    if (player != null)
+                    {
+                        var questName = QuestManager.GetQuestName(emote.Message);
+                        var quest = DatabaseManager.World.GetCachedQuest(questName);
+
+                        if (quest != null && quest.IsIpRestricted)
+                        {
+                            var playerIp = player.Session?.EndPoint?.Address?.ToString();
+
+                            if (!string.IsNullOrEmpty(playerIp))
+                            {
+                                // Increment the IP tracking - this uses the existing method that handles create/update
+                                DatabaseManager.Shard.IncrementIPQuestSolves(quest.Id, playerIp);
+                            }
+                        }
                     }
                     break;
 
@@ -2180,6 +2249,7 @@ namespace ACE.Server.WorldObjects.Managers
                 case EmoteType.InqMyQuestBitsOff:
                 case EmoteType.InqInt64Stat:
                 case EmoteType.InqContractsFull:
+                case EmoteType.InqIPQuest:
                     return true;
                 default:
                     return false;

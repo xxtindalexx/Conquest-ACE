@@ -2224,7 +2224,8 @@ namespace ACE.Server.Physics
             }
 
             var isVisible = CurCell.IsVisible(obj.CurCell);
-            if (isVisible && obj.Position.Variation != this.Position.Variation)  //todo I hate this?
+            // CONQUEST: Only allow visibility for compatible variations (same or one is null)
+            if (isVisible && !ACE.Server.Physics.Common.ObjectMaint.AreVariationsCompatible(this.Position.Variation, obj.Position.Variation))
             {
                 isVisible = false;
             }

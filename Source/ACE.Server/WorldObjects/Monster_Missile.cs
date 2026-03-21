@@ -34,6 +34,13 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // CONQUEST: Cannot attack targets in different variations
+            if (!AreVariationsCompatible(Location.Variation, target.Location.Variation))
+            {
+                FindNextTarget();
+                return;
+            }
+
             var weapon = GetEquippedMissileWeapon();
             var ammo = GetEquippedAmmo();
 

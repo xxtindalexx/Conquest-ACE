@@ -334,18 +334,7 @@ namespace ACE.Server.WorldObjects.Managers
                         {
                             var lifeAugCount = creatureCaster.LuminanceAugmentLifeCount ?? 0;
                             var lifeAugBonus = GetLifeAugProtectRating(lifeAugCount);
-                            var originalValue = entry.StatModValue;
                             entry.StatModValue -= lifeAugBonus;
-
-                            // DEBUG: Log life aug protection bonus
-                            if (lifeAugCount > 0 && WorldObject is Player targetPlayer)
-                            {
-                                var protPct = (1.0f - entry.StatModValue) * 100f;
-                                var basePct = (1.0f - originalValue) * 100f;
-                                targetPlayer.Session?.Network?.EnqueueSend(new GameMessageSystemChat(
-                                    $"[LIFE AUG DEBUG] Protection cast: LifeAugs={lifeAugCount}, Bonus={lifeAugBonus:F4} ({lifeAugBonus*100:F2}%), Base={basePct:F1}%, Final={protPct:F1}%",
-                                    ChatMessageType.System));
-                            }
                         }
                         else
                         {
@@ -430,16 +419,33 @@ namespace ACE.Server.WorldObjects.Managers
             if (LifeAugAmt <= 0)
                 return 0f;
 
-            // Get configurable constants from server properties
+            // CONQUEST: Hybrid system - 0.3% per aug for first 10, then diminishing returns
+            // This gives better early ROI while still capping at max bonus
             var maxBonus = (float)PropertyManager.GetDouble("life_aug_prot_max_bonus", 0.32);
+            var linearRate = (float)PropertyManager.GetDouble("life_aug_prot_linear_rate", 0.003); // 0.3% per aug
+            var linearCap = (int)PropertyManager.GetLong("life_aug_prot_linear_cap", 10); // First 10 augs are linear
             var tuningConstant = PropertyManager.GetDouble("life_aug_prot_tuning_constant", 0.0034597);
 
             // Clamp tuning constant to valid range (0, 1) to prevent math errors
             tuningConstant = Math.Clamp(tuningConstant, 0.0001, 0.9999);
 
-            // Formula: max_bonus * (1.0 - (1.0 - r)^a)
-            // As LifeAugAmt approaches infinity, bonus approaches max_bonus asymptotically
-            var bonus = maxBonus * (float)(1.0 - Math.Pow(1.0 - tuningConstant, LifeAugAmt));
+            float bonus;
+            if (LifeAugAmt <= linearCap)
+            {
+                // First N augs: linear scaling at linearRate per aug
+                bonus = LifeAugAmt * linearRate;
+            }
+            else
+            {
+                // After N augs: linear portion + diminishing returns on remainder
+                var linearBonus = linearCap * linearRate;
+                var remainingCap = maxBonus - linearBonus;
+                var remainingAugs = LifeAugAmt - linearCap;
+
+                // Formula: linearBonus + remainingCap * (1.0 - (1.0 - r)^a)
+                var diminishingBonus = remainingCap * (float)(1.0 - Math.Pow(1.0 - tuningConstant, remainingAugs));
+                bonus = linearBonus + diminishingBonus;
+            }
 
             // Ensure result is clamped to valid range
             return Math.Clamp(bonus, 0f, maxBonus);

@@ -740,8 +740,8 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            // Verify the treasure map is in the player's inventory
-            if (treasureMap.ContainerId != player.Guid.Full)
+            // Verify the treasure map is in the player's inventory (including side packs)
+            if (player.FindObject(treasureMap.Guid.Full, Player.SearchLocations.MyInventory) == null)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("[Treasure Map] The treasure map must be in your inventory.", ChatMessageType.Broadcast));
                 return;

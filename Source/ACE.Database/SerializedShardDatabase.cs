@@ -263,6 +263,26 @@ namespace ACE.Database
             }));
         }
 
+        #region Quest IP Tracking
+
+        /// <summary>
+        /// Gets the quest IP tracking record for a specific quest and IP address (read-only check)
+        /// </summary>
+        public QuestIpTracking GetQuestIpTracking(uint questId, string playerIp)
+        {
+            return BaseDatabase.GetQuestIpTracking(questId, playerIp);
+        }
+
+        /// <summary>
+        /// Increments the IP quest solves counter (or creates a new record if one doesn't exist)
+        /// Used by StampIPQuest emote to track IP-based quest completions
+        /// </summary>
+        public void IncrementIPQuestSolves(uint questId, string playerIp)
+        {
+            BaseDatabase.IncrementIPQuestSolves(questId, playerIp);
+        }
+
+        #endregion
 
         #region Mystery Egg IP Tracking
 

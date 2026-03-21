@@ -83,7 +83,8 @@ namespace ACE.Server.WorldObjects
                 //Console.WriteLine($"Player {Name} - AddTrackedObject({worldObject.Name}) skipped, already tracked");
                 return false;
             }
-            if (ObjMaint.PhysicsObj.Position.Variation != worldObject.Location.Variation)
+            // CONQUEST: Only track objects with compatible variations (same or one is null)
+            if (!AreVariationsCompatible(Location.Variation, worldObject.Location.Variation))
             {
                 return false;
             }

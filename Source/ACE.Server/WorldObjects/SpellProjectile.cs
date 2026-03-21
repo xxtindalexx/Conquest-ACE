@@ -301,6 +301,10 @@ namespace ACE.Server.WorldObjects
             if (sourceCreature != null && !sourceCreature.CanDamage(creatureTarget))
                 return;
 
+            // CONQUEST: Cannot damage targets in different variations
+            if (sourceCreature != null && !AreVariationsCompatible(sourceCreature.Location.Variation, creatureTarget.Location.Variation))
+                return;
+
             // if player target, ensure matching PK status
             var targetPlayer = creatureTarget as Player;
 
@@ -613,6 +617,19 @@ namespace ACE.Server.WorldObjects
                         {
                             var warAugMultiplier = 1.0f + (warAugCount * 0.005f);
                             finalDamage *= warAugMultiplier;
+                        }
+                    }
+
+                    // CONQUEST: Void augmentation damage bonus
+                    // Each void aug adds 0.5% damage bonus to void magic spells (same as war)
+                    // Works for both players and creatures (mobs)
+                    if (sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.VoidMagic)
+                    {
+                        var voidAugCount = sourceCreature.LuminanceAugmentVoidCount ?? 0;
+                        if (voidAugCount > 0)
+                        {
+                            var voidAugMultiplier = 1.0f + (voidAugCount * 0.005f);
+                            finalDamage *= voidAugMultiplier;
                         }
                     }
 
@@ -1173,6 +1190,10 @@ namespace ACE.Server.WorldObjects
 
                 // Check PK status
                 if (caster.CheckPKStatusVsTarget(creature, Spell) != null)
+                    continue;
+
+                // CONQUEST: Cannot chain to targets in different variations
+                if (!AreVariationsCompatible(primaryTarget.Location.Variation, creature.Location.Variation))
                     continue;
 
                 // Check distance from primary target

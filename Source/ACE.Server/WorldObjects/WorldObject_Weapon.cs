@@ -753,12 +753,19 @@ namespace ACE.Server.WorldObjects
             // Clamp base rending to max (equivalent to level 6 vuln)
             rendingMod = Math.Clamp(rendingMod, 1.0f, MaxRendingMod);
 
-            // CONQUEST: Add life aug bonus to rends AFTER base clamp (same 1% per aug as vulns)
-            // This allows rends to exceed the base 2.5x cap with enough life augs
+            // CONQUEST: Add life aug bonus to rends with diminishing returns (max +100% bonus)
+            // Uses same exponential decay formula as protection: maxBonus * (1.0 - (1.0 - r)^a)
+            // This allows rends to exceed the base 2.5x cap, approaching 3.5x max with enough life augs
             if (wielder != null)
             {
-                var lifeAugBonus = (wielder.LuminanceAugmentLifeCount ?? 0) * 0.01f;
-                rendingMod += lifeAugBonus;
+                var lifeAugCount = wielder.LuminanceAugmentLifeCount ?? 0;
+                if (lifeAugCount > 0)
+                {
+                    var maxBonus = 1.0f;  // 100% max bonus (rend can reach 3.5x total)
+                    var tuningConstant = 0.0034597f;  // Same as protection formula
+                    var lifeAugBonus = maxBonus * (1.0f - (float)Math.Pow(1.0 - tuningConstant, lifeAugCount));
+                    rendingMod += lifeAugBonus;
+                }
             }
 
             //Console.WriteLine($"RendingMod: {rendingMod}");

@@ -651,6 +651,7 @@ namespace ACE.Server.Managers
                 ("fellowship_max_members", new Property<long>(14, "CONQUEST: Maximum number of members allowed in a fellowship. Default is 14.")),
                 ("mansion_min_rank", new Property<long>(6, "overrides the default allegiance rank required to own a mansion")),
                 ("login_block_discord_max_alerts_per_minute", new Property<long>(3, "Item loss prevention: Max Discord alerts per minute for login blocking. Set to 0 to disable Discord alerts.")),
+                ("life_aug_prot_linear_cap", new Property<long>(10, "CONQUEST: the number of life augs that use linear scaling before diminishing returns kick in")),
                 ("luminance_transfer_daily_limit", new Property<long>(0, "CONQUEST: Maximum amount of luminance a player can transfer to others per day (resets midnight EST). 0 = unlimited.")),
                 ("luminance_receive_daily_limit", new Property<long>(0, "CONQUEST: Maximum amount of luminance a player can receive from others per day (resets midnight EST). 0 = unlimited.")),
                 ("max_chars_per_account", new Property<long>(11, "retail defaults to 11, client supports up to 20")),
@@ -723,6 +724,7 @@ namespace ACE.Server.Managers
                 ("new_life_aug_curve_pct", new Property<double>(1.0, "CONQUEST: Legacy property - the new exponential decay formula is now always used. This property is kept for compatibility but has no effect.")),
                 ("life_aug_prot_tuning_constant", new Property<double>(0.0034597, "the tuning constant r used in the  (1.0 - (1.0 - r)^a) life aug scaling formula - controls the size of step for each augmentation, relative to remaining cap (0.0034597 means every 200 augs halves the remaining bonus)")),
                 ("life_aug_prot_max_bonus", new Property<double>(0.32, "the maximum bonus that the life aug scaling can approach at infinite augs - T8 protection spells provide 68% base, so a bonus above 32% makes it possible to achieve full protection")),
+                ("life_aug_prot_linear_rate", new Property<double>(0.003, "CONQUEST: the linear rate (0.003 = 0.3%) applied per aug for the first N augs before diminishing returns kick in")),
 
                 // CONQUEST: Mystery Egg Drop System
                 ("mystery_egg_base_drop_rate", new Property<double>(0.002, "Base chance (0.002 = 0.2%) for a mystery egg to drop from mobs level 50-99. Higher level mobs have multipliers applied.")),

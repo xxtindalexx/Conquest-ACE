@@ -22,6 +22,16 @@ namespace ACE.Server.Physics.Common
         /// </summary>
         public const float DestructionTime = 25.0f;
 
+        /// <summary>
+        /// CONQUEST: Checks if two variation values are compatible
+        /// Treats null as 0 (base world) for comparison
+        /// </summary>
+        public static bool AreVariationsCompatible(int? var1, int? var2)
+        {
+            // Treat null as 0 (base world)
+            return (var1 ?? 0) == (var2 ?? 0);
+        }
+
         private static readonly ReaderWriterLockSlim rwLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
 
         /// <summary>
@@ -198,7 +208,8 @@ namespace ACE.Server.Physics.Common
             rwLock.EnterWriteLock();
             try
             {
-                if (this.PhysicsObj.Position.Variation != obj.Position.Variation)
+                // CONQUEST: Treat null and 0 as equivalent for variation comparison
+                if (!AreVariationsCompatible(this.PhysicsObj.Position.Variation, obj.Position.Variation))
                 {
                     return false;
                 }
@@ -319,7 +330,11 @@ namespace ACE.Server.Physics.Common
             rwLock.EnterReadLock();
             try
             {
-                return VisibleObjects.Values.Where(predicate).ToList();
+                // CONQUEST: Filter by variation - allow compatible variations (same or one is null)
+                return VisibleObjects.Values
+                    .Where(o => AreVariationsCompatible(PhysicsObj.Position.Variation, o.Position.Variation))
+                    .Where(predicate)
+                    .ToList();
             }
             finally
             {
@@ -334,7 +349,12 @@ namespace ACE.Server.Physics.Common
                 rwLock.EnterReadLock();
                 try
                 {
-                    return VisibleObjects.Values.Select(v => v.WeenieObj.WorldObject).OfType<Creature>().ToList();
+                    // CONQUEST: Filter by variation - allow compatible variations (same or one is null)
+                    return VisibleObjects.Values
+                        .Where(v => AreVariationsCompatible(PhysicsObj.Position.Variation, v.Position.Variation))
+                        .Select(v => v.WeenieObj.WorldObject)
+                        .OfType<Creature>()
+                        .ToList();
                 }
                 finally
                 {
@@ -369,9 +389,10 @@ namespace ACE.Server.Physics.Common
                 var visibleObjs = PhysicsObj.CurLandblock.GetServerObjects(true);
 
                 // CONQUEST: Filter by variation for outdoor cells too (not just dungeons)
+                // Allow compatible variations (same or one is null)
                 var filtered = ApplyFilter(visibleObjs, type).Where(i => i.ID != PhysicsObj.ID && (i.CurCell is not EnvCell indoors || indoors.SeenOutside));
                 if (VariationId != null)
-                    filtered = filtered.Where(i => i.Position.Variation == VariationId);
+                    filtered = filtered.Where(i => AreVariationsCompatible(VariationId, i.Position.Variation));
                 return filtered.ToList();
             }
             finally
@@ -405,12 +426,16 @@ namespace ACE.Server.Physics.Common
                 visibleObjs.AddRange(outsideObjs);
             }
 
+            // CONQUEST: Fixed variation filtering - apply all filters in one pass
+            var filtered = ApplyFilter(visibleObjs, type).Where(i => !i.DatObject && i.ID != PhysicsObj.ID);
+
+            // CONQUEST: Filter by variation if specified - allow compatible variations (same or one is null)
             if (VariationId != null)
             {
-                visibleObjs = ApplyFilter(visibleObjs, type).Where(i => i.Position.Variation == VariationId).Distinct().ToList(); //TODO: Test if this actually works?
+                filtered = filtered.Where(i => AreVariationsCompatible(VariationId, i.Position.Variation));
             }
 
-            return ApplyFilter(visibleObjs, type).Where(i => !i.DatObject && i.ID != PhysicsObj.ID).Distinct().ToList();
+            return filtered.Distinct().ToList();
         }
 
         public enum VisibleObjectType
@@ -458,7 +483,8 @@ namespace ACE.Server.Physics.Common
             rwLock.EnterWriteLock();
             try
             {
-                if (PhysicsObj.Position.Variation != obj.Position.Variation)
+                // CONQUEST: Only allow compatible variations (same or one is null)
+                if (!AreVariationsCompatible(PhysicsObj.Position.Variation, obj.Position.Variation))
                 {
                     return false;
                 }
@@ -748,7 +774,12 @@ namespace ACE.Server.Physics.Common
             rwLock.EnterReadLock();
             try
             {
-                return KnownPlayers.Values.Select(v => v.WeenieObj.WorldObject).OfType<Player>().ToList();
+                // CONQUEST: Filter by variation - allow compatible variations (same or one is null)
+                return KnownPlayers.Values
+                    .Where(v => AreVariationsCompatible(PhysicsObj.Position.Variation, v.Position.Variation))
+                    .Select(v => v.WeenieObj.WorldObject)
+                    .OfType<Player>()
+                    .ToList();
             }
             finally
             {
@@ -790,9 +821,9 @@ namespace ACE.Server.Physics.Common
                 log.Debug($"{PhysicsObj.Name}.ObjectMaint.AddKnownPlayer({obj.Name}): tried to add player for dat object");
                 return false;
             }
-            if (obj.Position.Variation != PhysicsObj.Position.Variation)
+            if (!AreVariationsCompatible(PhysicsObj.Position.Variation, obj.Position.Variation))
             {
-                log.Debug($"{PhysicsObj.Name}.ObjectMaint.AddKnownPlayer({obj.Name}): tried to add player in a different Variation");
+                log.Debug($"{PhysicsObj.Name}.ObjectMaint.AddKnownPlayer({obj.Name}): tried to add player in an incompatible Variation");
                 return false;
             }
 
@@ -939,22 +970,12 @@ namespace ACE.Server.Physics.Common
                         return new List<Creature>();
                     }
 
-                    int? curVariation = this.PhysicsObj?.Position?.Variation;
-                    if (curVariation.HasValue)
-                    {
-                        return VisibleTargets.Values
-                            .Where(v => v.WeenieObj.WorldObject?.Location.Variation == curVariation)
-                            .Select(v => v.WeenieObj.WorldObject)
-                            .OfType<Creature>()
-                            .ToList();
-                    }
-                    else
-                    {
-                        return VisibleTargets.Values
-                            .Select(v => v.WeenieObj.WorldObject)
-                            .OfType<Creature>()
-                            .ToList();
-                    }
+                    // CONQUEST: Filter by variation - allow compatible variations (same or one is null)
+                    return VisibleTargets.Values
+                        .Where(v => AreVariationsCompatible(PhysicsObj?.Position?.Variation, v.WeenieObj.WorldObject?.Location.Variation))
+                        .Select(v => v.WeenieObj.WorldObject)
+                        .OfType<Creature>()
+                        .ToList();
                 }
                 finally
                 {
@@ -975,6 +996,10 @@ namespace ACE.Server.Physics.Common
         /// </summary>
         private bool AddVisibleTarget(PhysicsObj obj, bool clamp = true, bool foeType = false)
         {
+            // CONQUEST: Verify target is in compatible variation before adding (same or one is null)
+            if (!AreVariationsCompatible(PhysicsObj.Position.Variation, obj.Position.Variation))
+                return false;
+
             if (PhysicsObj.WeenieObj.IsCombatPet)
             {
                 // only tracking monsters
@@ -1111,6 +1136,10 @@ namespace ACE.Server.Physics.Common
         /// </summary>
         public void AddRetaliateTarget(PhysicsObj obj)
         {
+            // CONQUEST: Don't add retaliate targets from incompatible variations
+            if (!AreVariationsCompatible(PhysicsObj.Position.Variation, obj.Position.Variation))
+                return;
+
             rwLock.EnterWriteLock();
             try
             {
