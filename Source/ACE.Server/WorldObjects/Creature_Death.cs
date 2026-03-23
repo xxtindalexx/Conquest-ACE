@@ -153,9 +153,28 @@ namespace ACE.Server.WorldObjects
             //var deathAnimLength = DatManager.PortalDat.ReadFromDat<MotionTable>(MotionTableId).GetAnimationLength(MotionCommand.Dead);
             dieChain.AddDelaySeconds(deathAnimLength);
 
+            // CONQUEST: Capture reference to this creature for the lambda
+            // This fixes ghost mobs when player kills from a different landblock
+            var creatureToRemove = this;
+
             dieChain.AddAction(this, ActionType.CreatureDeath_MakeCorpse, () =>
             {
                 CreateCorpse(topDamager);
+
+                // CONQUEST: Explicitly notify all damagers to remove this creature from their tracking
+                // EnqueueAction ensures thread-safe execution on the player's landblock
+                foreach (var damagerInfo in DamageHistory.Damagers)
+                {
+                    var damager = damagerInfo.TryGetAttacker() as Player;
+                    if (damager != null && damager != creatureToRemove)
+                    {
+                        damager.EnqueueAction(new ActionEventDelegate(ActionType.CreatureDeath_NotifyDamagerRemoveTracking, () =>
+                        {
+                            damager.RemoveTrackedObject(creatureToRemove, false);
+                        }));
+                    }
+                }
+
                 Destroy();
             });
 

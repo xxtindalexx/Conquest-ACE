@@ -278,6 +278,23 @@ namespace ACE.Server.WorldObjects
             // TODO: this should be factored in as a separate nether damage rating...
             var netherDotDamageRating = directDamage ? EnchantmentManager.GetNetherDotDamageRating() : 0;
 
+            // CONQUEST: Scale Void DoT DRR effectiveness based on target type
+            if (netherDotDamageRating > 0)
+            {
+                if (this is Player)
+                {
+                    // PvP: Scale how much extra damage players take when they have Void DoTs on them
+                    var pvpVoidDotDrrMod = (float)PropertyManager.GetDouble("pvp_dmg_mod_void_dot_rating_reduction");
+                    netherDotDamageRating = (int)Math.Round(netherDotDamageRating * pvpVoidDotDrrMod);
+                }
+                else
+                {
+                    // PvE: Scale how much extra damage mobs take when they have Void DoTs on them
+                    var pveVoidDotDrrMod = (float)PropertyManager.GetDouble("pve_void_dot_drr_mod");
+                    netherDotDamageRating = (int)Math.Round(netherDotDamageRating * pveVoidDotDrrMod);
+                }
+            }
+
             var augBonus = 0;
             var lumAugBonus = 0;
             var specBonus = 0;

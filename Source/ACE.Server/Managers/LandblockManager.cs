@@ -678,8 +678,10 @@ namespace ACE.Server.Managers
         {
             landblock.Adjacents = GetAdjacents(landblock);
 
-            if (pSync)
-                landblock.PhysicsLandblock.SetAdjacents(landblock.Adjacents);
+            // CONQUEST: Always sync physics adjacents, not just when pSync is true
+            // This fixes cross-landblock visibility where creatures on adjacent landblocks
+            // weren't visible until the player crossed over
+            landblock.PhysicsLandblock.SetAdjacents(landblock.Adjacents);
 
             if (traverse)
             {

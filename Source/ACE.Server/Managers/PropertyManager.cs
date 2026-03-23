@@ -738,7 +738,237 @@ namespace ACE.Server.Managers
 
                 // CONQUEST: Default Nether Resistance for Creatures
                 ("creature_default_resist_nether", new Property<double>(1.0, "Default ResistNether value for creatures without it defined. 1.0 = no resistance, 0.5 = 50% resistance, 2.0 = 200% damage (vulnerability)")),
-                ("creature_default_armor_mod_vs_nether", new Property<double>(1.0, "Default ArmorModVsNether value for creatures without it defined. 1.0 = normal damage, 0.5 = 50% damage, 2.0 = 200% damage"))
+                ("creature_default_armor_mod_vs_nether", new Property<double>(1.0, "Default ArmorModVsNether value for creatures without it defined. 1.0 = normal damage, 0.5 = 50% damage, 2.0 = 200% damage")),
+
+                // ===================================================================================
+                // PvP Damage Configuration System - Granular control over PvP damage scaling
+                // ===================================================================================
+
+                // Global Imbue Modifiers
+                ("pvp_dmg_mod_ar", new Property<double>(1.0, "PvP: Global Armor Rending damage modifier")),
+                ("pvp_dmg_mod_cb", new Property<double>(1.0, "PvP: Global Crippling Blow damage modifier")),
+                ("pvp_dmg_mod_cs", new Property<double>(1.0, "PvP: Global Critical Strike damage modifier")),
+                ("pvp_dmg_mod_hollow", new Property<double>(1.0, "PvP: Global Hollow weapon damage modifier")),
+                ("pvp_dmg_mod_phantom", new Property<double>(1.0, "PvP: Global Phantom weapon damage modifier")),
+                ("pvp_cs_critrate_mod", new Property<double>(1.0, "PvP: Critical Strike crit rate modifier")),
+
+                // Biting Strike (global + weapon-specific + crit)
+                ("pvp_dmg_mod_bs", new Property<double>(1.0, "PvP: Global Biting Strike damage modifier")),
+                ("pvp_dmg_mod_fw_bs", new Property<double>(1.0, "PvP: Finesse Weapons Biting Strike damage modifier")),
+                ("pvp_dmg_mod_fw_bs_crit", new Property<double>(1.0, "PvP: Finesse Weapons Biting Strike crit damage modifier")),
+                ("pvp_dmg_mod_lw_bs", new Property<double>(1.0, "PvP: Light Weapons Biting Strike damage modifier")),
+                ("pvp_dmg_mod_lw_bs_crit", new Property<double>(1.0, "PvP: Light Weapons Biting Strike crit damage modifier")),
+                ("pvp_dmg_mod_hw_bs", new Property<double>(1.0, "PvP: Heavy Weapons Biting Strike damage modifier")),
+                ("pvp_dmg_mod_hw_bs_crit", new Property<double>(1.0, "PvP: Heavy Weapons Biting Strike crit damage modifier")),
+                ("pvp_dmg_mod_2h_bs", new Property<double>(1.0, "PvP: Two-Handed Weapons Biting Strike damage modifier")),
+                ("pvp_dmg_mod_2h_bs_crit", new Property<double>(1.0, "PvP: Two-Handed Weapons Biting Strike crit damage modifier")),
+                ("pvp_dmg_mod_bow_bs", new Property<double>(1.0, "PvP: Bow Biting Strike damage modifier")),
+                ("pvp_dmg_mod_bow_bs_crit", new Property<double>(1.0, "PvP: Bow Biting Strike crit damage modifier")),
+                ("pvp_dmg_mod_xbow_bs", new Property<double>(1.0, "PvP: Crossbow Biting Strike damage modifier")),
+                ("pvp_dmg_mod_xbow_bs_crit", new Property<double>(1.0, "PvP: Crossbow Biting Strike crit damage modifier")),
+                ("pvp_dmg_mod_tw_bs", new Property<double>(1.0, "PvP: Thrown Weapons Biting Strike damage modifier")),
+                ("pvp_dmg_mod_tw_bs_crit", new Property<double>(1.0, "PvP: Thrown Weapons Biting Strike crit damage modifier")),
+
+                // Crushing Blow (global + weapon-specific + crit)
+                ("pvp_dmg_mod_crush", new Property<double>(1.0, "PvP: Global Crushing Blow damage modifier")),
+                ("pvp_dmg_mod_fw_crush", new Property<double>(1.0, "PvP: Finesse Weapons Crushing Blow damage modifier")),
+                ("pvp_dmg_mod_fw_crush_crit", new Property<double>(1.0, "PvP: Finesse Weapons Crushing Blow crit damage modifier")),
+                ("pvp_dmg_mod_lw_crush", new Property<double>(1.0, "PvP: Light Weapons Crushing Blow damage modifier")),
+                ("pvp_dmg_mod_lw_crush_crit", new Property<double>(1.0, "PvP: Light Weapons Crushing Blow crit damage modifier")),
+                ("pvp_dmg_mod_hw_crush", new Property<double>(1.0, "PvP: Heavy Weapons Crushing Blow damage modifier")),
+                ("pvp_dmg_mod_hw_crush_crit", new Property<double>(1.0, "PvP: Heavy Weapons Crushing Blow crit damage modifier")),
+                ("pvp_dmg_mod_2h_crush", new Property<double>(1.0, "PvP: Two-Handed Weapons Crushing Blow damage modifier")),
+                ("pvp_dmg_mod_2h_crush_crit", new Property<double>(1.0, "PvP: Two-Handed Weapons Crushing Blow crit damage modifier")),
+                ("pvp_dmg_mod_bow_crush", new Property<double>(1.0, "PvP: Bow Crushing Blow damage modifier")),
+                ("pvp_dmg_mod_bow_crush_crit", new Property<double>(1.0, "PvP: Bow Crushing Blow crit damage modifier")),
+                ("pvp_dmg_mod_xbow_crush", new Property<double>(1.0, "PvP: Crossbow Crushing Blow damage modifier")),
+                ("pvp_dmg_mod_xbow_crush_crit", new Property<double>(1.0, "PvP: Crossbow Crushing Blow crit damage modifier")),
+                ("pvp_dmg_mod_tw_crush", new Property<double>(1.0, "PvP: Thrown Weapons Crushing Blow damage modifier")),
+                ("pvp_dmg_mod_tw_crush_crit", new Property<double>(1.0, "PvP: Thrown Weapons Crushing Blow crit damage modifier")),
+
+                // Finesse Weapons
+                ("pvp_dmg_mod_fw", new Property<double>(1.0, "PvP: Finesse Weapons base damage modifier")),
+                ("pvp_dmg_mod_fw_ar", new Property<double>(1.0, "PvP: Finesse Weapons Armor Rending damage modifier")),
+                ("pvp_dmg_mod_fw_cb", new Property<double>(1.0, "PvP: Finesse Weapons Crippling Blow damage modifier")),
+                ("pvp_dmg_mod_fw_cb_crit", new Property<double>(1.0, "PvP: Finesse Weapons Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_fw_cs", new Property<double>(1.0, "PvP: Finesse Weapons Critical Strike damage modifier")),
+                ("pvp_dmg_mod_fw_hollow", new Property<double>(1.0, "PvP: Finesse Weapons Hollow damage modifier")),
+                ("pvp_dmg_mod_fw_phantom", new Property<double>(1.0, "PvP: Finesse Weapons Phantom damage modifier")),
+
+                // Light Weapons
+                ("pvp_dmg_mod_lw", new Property<double>(1.0, "PvP: Light Weapons base damage modifier")),
+                ("pvp_dmg_mod_lw_ar", new Property<double>(1.0, "PvP: Light Weapons Armor Rending damage modifier")),
+                ("pvp_dmg_mod_lw_cb", new Property<double>(1.0, "PvP: Light Weapons Crippling Blow damage modifier")),
+                ("pvp_dmg_mod_lw_cb_crit", new Property<double>(1.0, "PvP: Light Weapons Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_lw_cs", new Property<double>(1.0, "PvP: Light Weapons Critical Strike damage modifier")),
+                ("pvp_dmg_mod_lw_hollow", new Property<double>(1.0, "PvP: Light Weapons Hollow damage modifier")),
+                ("pvp_dmg_mod_lw_phantom", new Property<double>(1.0, "PvP: Light Weapons Phantom damage modifier")),
+                ("pvp_dmg_mod_lw_triplestrike", new Property<double>(1.0, "PvP: Light Weapons Triple Strike damage modifier")),
+                ("pvp_dmg_mod_lw_cb_crit_triplestrike", new Property<double>(1.0, "PvP: Light Weapons CB crit Triple Strike damage modifier")),
+
+                // Heavy Weapons
+                ("pvp_dmg_mod_hw", new Property<double>(1.0, "PvP: Heavy Weapons base damage modifier")),
+                ("pvp_dmg_mod_hw_ar", new Property<double>(1.0, "PvP: Heavy Weapons Armor Rending damage modifier")),
+                ("pvp_dmg_mod_hw_cb", new Property<double>(1.0, "PvP: Heavy Weapons Crippling Blow damage modifier")),
+                ("pvp_dmg_mod_hw_cb_crit", new Property<double>(1.0, "PvP: Heavy Weapons Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_hw_cs", new Property<double>(1.0, "PvP: Heavy Weapons Critical Strike damage modifier")),
+                ("pvp_dmg_mod_hw_hollow", new Property<double>(1.0, "PvP: Heavy Weapons Hollow damage modifier")),
+                ("pvp_dmg_mod_hw_phantom", new Property<double>(1.0, "PvP: Heavy Weapons Phantom damage modifier")),
+                ("pvp_dmg_mod_hw_multistrike", new Property<double>(1.0, "PvP: Heavy Weapons Multi-Strike damage modifier")),
+                ("pvp_dmg_mod_hw_cb_crit_multistrike", new Property<double>(1.0, "PvP: Heavy Weapons CB crit Multi-Strike damage modifier")),
+
+                // Two-Handed Weapons
+                ("pvp_dmg_mod_2h", new Property<double>(1.0, "PvP: Two-Handed Weapons base damage modifier")),
+                ("pvp_dmg_mod_2h_ar", new Property<double>(1.0, "PvP: Two-Handed Weapons Armor Rending damage modifier")),
+                ("pvp_dmg_mod_2h_cb", new Property<double>(1.0, "PvP: Two-Handed Weapons Crippling Blow damage modifier")),
+                ("pvp_dmg_mod_2h_cb_crit", new Property<double>(1.0, "PvP: Two-Handed Weapons Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_2h_cs", new Property<double>(1.0, "PvP: Two-Handed Weapons Critical Strike damage modifier")),
+                ("pvp_dmg_mod_2h_hollow", new Property<double>(1.0, "PvP: Two-Handed Weapons Hollow damage modifier")),
+                ("pvp_dmg_mod_2h_phantom", new Property<double>(1.0, "PvP: Two-Handed Weapons Phantom damage modifier")),
+
+                // Bow
+                ("pvp_dmg_mod_bow", new Property<double>(1.0, "PvP: Bow base damage modifier")),
+                ("pvp_dmg_mod_bow_ar", new Property<double>(1.0, "PvP: Bow Armor Rending damage modifier")),
+                ("pvp_dmg_mod_bow_cb", new Property<double>(1.0, "PvP: Bow Crippling Blow damage modifier")),
+                ("pvp_dmg_mod_bow_cb_crit", new Property<double>(1.0, "PvP: Bow Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_bow_cs", new Property<double>(1.0, "PvP: Bow Critical Strike damage modifier")),
+                ("pvp_dmg_mod_bow_hollow", new Property<double>(1.0, "PvP: Bow Hollow damage modifier")),
+                ("pvp_dmg_mod_bow_phantom", new Property<double>(1.0, "PvP: Bow Phantom damage modifier")),
+
+                // Crossbow
+                ("pvp_dmg_mod_xbow", new Property<double>(1.0, "PvP: Crossbow base damage modifier")),
+                ("pvp_dmg_mod_xbow_ar", new Property<double>(1.0, "PvP: Crossbow Armor Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_cb", new Property<double>(1.0, "PvP: Crossbow Crippling Blow damage modifier")),
+                ("pvp_dmg_mod_xbow_cb_crit", new Property<double>(1.0, "PvP: Crossbow Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_xbow_cs", new Property<double>(1.0, "PvP: Crossbow Critical Strike damage modifier")),
+                ("pvp_dmg_mod_xbow_hollow", new Property<double>(1.0, "PvP: Crossbow Hollow damage modifier")),
+                ("pvp_dmg_mod_xbow_phantom", new Property<double>(1.0, "PvP: Crossbow Phantom damage modifier")),
+
+                // Thrown Weapons
+                ("pvp_dmg_mod_tw", new Property<double>(1.0, "PvP: Thrown Weapons base damage modifier")),
+                ("pvp_dmg_mod_tw_ar", new Property<double>(1.0, "PvP: Thrown Weapons Armor Rending damage modifier")),
+                ("pvp_dmg_mod_tw_cb", new Property<double>(1.0, "PvP: Thrown Weapons Crippling Blow damage modifier")),
+                ("pvp_dmg_mod_tw_cb_crit", new Property<double>(1.0, "PvP: Thrown Weapons Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_tw_cs", new Property<double>(1.0, "PvP: Thrown Weapons Critical Strike damage modifier")),
+                ("pvp_dmg_mod_tw_hollow", new Property<double>(1.0, "PvP: Thrown Weapons Hollow damage modifier")),
+                ("pvp_dmg_mod_tw_phantom", new Property<double>(1.0, "PvP: Thrown Weapons Phantom damage modifier")),
+
+                // War Magic
+                ("pvp_dmg_mod_war", new Property<double>(1.0, "PvP: War Magic base damage modifier")),
+                ("pvp_dmg_mod_war_variance", new Property<double>(1.0, "PvP: War Magic damage variance modifier")),
+                ("pvp_dmg_mod_war_streak", new Property<double>(1.0, "PvP: War Magic Streak spell damage modifier")),
+                ("pvp_dmg_mod_war_blast", new Property<double>(1.0, "PvP: War Magic Blast spell damage modifier")),
+                ("pvp_dmg_mod_war_cb_crit", new Property<double>(1.0, "PvP: War Magic Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_war_cs_crit", new Property<double>(1.0, "PvP: War Magic Critical Strike crit damage modifier")),
+                ("pvp_dmg_mod_war_cs_dmg", new Property<double>(1.0, "PvP: War Magic Critical Strike damage modifier")),
+
+                // Void Magic
+                ("pvp_dmg_mod_void", new Property<double>(1.0, "PvP: Void Magic base damage modifier")),
+                ("pvp_dmg_mod_void_variance", new Property<double>(1.0, "PvP: Void Magic damage variance modifier")),
+                ("pvp_dmg_mod_void_streak", new Property<double>(1.0, "PvP: Void Magic Streak spell damage modifier")),
+                ("pvp_dmg_mod_void_dot", new Property<double>(1.0, "PvP: Void Magic DoT damage modifier")),
+                ("pvp_dmg_mod_void_crit", new Property<double>(1.0, "PvP: Void Magic crit damage modifier")),
+                ("pvp_dmg_mod_void_cb_crit", new Property<double>(1.0, "PvP: Void Magic Crippling Blow crit damage modifier")),
+                ("pvp_dmg_mod_void_dot_rating_reduction", new Property<double>(1.0, "PvP: Void Magic DoT rating reduction modifier")),
+                ("pvp_void_hybrid_mod", new Property<double>(1.0, "PvP: Void Magic hybrid modifier")),
+
+                // Rating Modifiers
+                ("pvp_ratings_mod_dmg", new Property<double>(1.0, "PvP: Damage rating modifier")),
+                ("pvp_ratings_mod_critdmg", new Property<double>(1.0, "PvP: Critical damage rating modifier")),
+
+                // Elemental Rending - Slash
+                ("pvp_dmg_mod_slash_rend", new Property<double>(1.0, "PvP: Global Slash Rending damage modifier")),
+                ("pvp_dmg_mod_fw_slash_rend", new Property<double>(1.0, "PvP: Finesse Weapons Slash Rending damage modifier")),
+                ("pvp_dmg_mod_lw_slash_rend", new Property<double>(1.0, "PvP: Light Weapons Slash Rending damage modifier")),
+                ("pvp_dmg_mod_hw_slash_rend", new Property<double>(1.0, "PvP: Heavy Weapons Slash Rending damage modifier")),
+                ("pvp_dmg_mod_2h_slash_rend", new Property<double>(1.0, "PvP: Two-Handed Weapons Slash Rending damage modifier")),
+                ("pvp_dmg_mod_bow_slash_rend", new Property<double>(1.0, "PvP: Bow Slash Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_slash_rend", new Property<double>(1.0, "PvP: Crossbow Slash Rending damage modifier")),
+                ("pvp_dmg_mod_tw_slash_rend", new Property<double>(1.0, "PvP: Thrown Weapons Slash Rending damage modifier")),
+
+                // Elemental Rending - Pierce
+                ("pvp_dmg_mod_pierce_rend", new Property<double>(1.0, "PvP: Global Pierce Rending damage modifier")),
+                ("pvp_dmg_mod_fw_pierce_rend", new Property<double>(1.0, "PvP: Finesse Weapons Pierce Rending damage modifier")),
+                ("pvp_dmg_mod_lw_pierce_rend", new Property<double>(1.0, "PvP: Light Weapons Pierce Rending damage modifier")),
+                ("pvp_dmg_mod_hw_pierce_rend", new Property<double>(1.0, "PvP: Heavy Weapons Pierce Rending damage modifier")),
+                ("pvp_dmg_mod_2h_pierce_rend", new Property<double>(1.0, "PvP: Two-Handed Weapons Pierce Rending damage modifier")),
+                ("pvp_dmg_mod_bow_pierce_rend", new Property<double>(1.0, "PvP: Bow Pierce Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_pierce_rend", new Property<double>(1.0, "PvP: Crossbow Pierce Rending damage modifier")),
+                ("pvp_dmg_mod_tw_pierce_rend", new Property<double>(1.0, "PvP: Thrown Weapons Pierce Rending damage modifier")),
+
+                // Elemental Rending - Bludgeon
+                ("pvp_dmg_mod_bludgeon_rend", new Property<double>(1.0, "PvP: Global Bludgeon Rending damage modifier")),
+                ("pvp_dmg_mod_fw_bludgeon_rend", new Property<double>(1.0, "PvP: Finesse Weapons Bludgeon Rending damage modifier")),
+                ("pvp_dmg_mod_lw_bludgeon_rend", new Property<double>(1.0, "PvP: Light Weapons Bludgeon Rending damage modifier")),
+                ("pvp_dmg_mod_hw_bludgeon_rend", new Property<double>(1.0, "PvP: Heavy Weapons Bludgeon Rending damage modifier")),
+                ("pvp_dmg_mod_2h_bludgeon_rend", new Property<double>(1.0, "PvP: Two-Handed Weapons Bludgeon Rending damage modifier")),
+                ("pvp_dmg_mod_bow_bludgeon_rend", new Property<double>(1.0, "PvP: Bow Bludgeon Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_bludgeon_rend", new Property<double>(1.0, "PvP: Crossbow Bludgeon Rending damage modifier")),
+                ("pvp_dmg_mod_tw_bludgeon_rend", new Property<double>(1.0, "PvP: Thrown Weapons Bludgeon Rending damage modifier")),
+
+                // Elemental Rending - Fire
+                ("pvp_dmg_mod_fire_rend", new Property<double>(1.0, "PvP: Global Fire Rending damage modifier")),
+                ("pvp_dmg_mod_fw_fire_rend", new Property<double>(1.0, "PvP: Finesse Weapons Fire Rending damage modifier")),
+                ("pvp_dmg_mod_lw_fire_rend", new Property<double>(1.0, "PvP: Light Weapons Fire Rending damage modifier")),
+                ("pvp_dmg_mod_hw_fire_rend", new Property<double>(1.0, "PvP: Heavy Weapons Fire Rending damage modifier")),
+                ("pvp_dmg_mod_2h_fire_rend", new Property<double>(1.0, "PvP: Two-Handed Weapons Fire Rending damage modifier")),
+                ("pvp_dmg_mod_bow_fire_rend", new Property<double>(1.0, "PvP: Bow Fire Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_fire_rend", new Property<double>(1.0, "PvP: Crossbow Fire Rending damage modifier")),
+                ("pvp_dmg_mod_tw_fire_rend", new Property<double>(1.0, "PvP: Thrown Weapons Fire Rending damage modifier")),
+
+                // Elemental Rending - Cold
+                ("pvp_dmg_mod_cold_rend", new Property<double>(1.0, "PvP: Global Cold Rending damage modifier")),
+                ("pvp_dmg_mod_fw_cold_rend", new Property<double>(1.0, "PvP: Finesse Weapons Cold Rending damage modifier")),
+                ("pvp_dmg_mod_lw_cold_rend", new Property<double>(1.0, "PvP: Light Weapons Cold Rending damage modifier")),
+                ("pvp_dmg_mod_hw_cold_rend", new Property<double>(1.0, "PvP: Heavy Weapons Cold Rending damage modifier")),
+                ("pvp_dmg_mod_2h_cold_rend", new Property<double>(1.0, "PvP: Two-Handed Weapons Cold Rending damage modifier")),
+                ("pvp_dmg_mod_bow_cold_rend", new Property<double>(1.0, "PvP: Bow Cold Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_cold_rend", new Property<double>(1.0, "PvP: Crossbow Cold Rending damage modifier")),
+                ("pvp_dmg_mod_tw_cold_rend", new Property<double>(1.0, "PvP: Thrown Weapons Cold Rending damage modifier")),
+
+                // Elemental Rending - Acid
+                ("pvp_dmg_mod_acid_rend", new Property<double>(1.0, "PvP: Global Acid Rending damage modifier")),
+                ("pvp_dmg_mod_fw_acid_rend", new Property<double>(1.0, "PvP: Finesse Weapons Acid Rending damage modifier")),
+                ("pvp_dmg_mod_lw_acid_rend", new Property<double>(1.0, "PvP: Light Weapons Acid Rending damage modifier")),
+                ("pvp_dmg_mod_hw_acid_rend", new Property<double>(1.0, "PvP: Heavy Weapons Acid Rending damage modifier")),
+                ("pvp_dmg_mod_2h_acid_rend", new Property<double>(1.0, "PvP: Two-Handed Weapons Acid Rending damage modifier")),
+                ("pvp_dmg_mod_bow_acid_rend", new Property<double>(1.0, "PvP: Bow Acid Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_acid_rend", new Property<double>(1.0, "PvP: Crossbow Acid Rending damage modifier")),
+                ("pvp_dmg_mod_tw_acid_rend", new Property<double>(1.0, "PvP: Thrown Weapons Acid Rending damage modifier")),
+
+                // Elemental Rending - Electric
+                ("pvp_dmg_mod_electric_rend", new Property<double>(1.0, "PvP: Global Electric Rending damage modifier")),
+                ("pvp_dmg_mod_fw_electric_rend", new Property<double>(1.0, "PvP: Finesse Weapons Electric Rending damage modifier")),
+                ("pvp_dmg_mod_lw_electric_rend", new Property<double>(1.0, "PvP: Light Weapons Electric Rending damage modifier")),
+                ("pvp_dmg_mod_hw_electric_rend", new Property<double>(1.0, "PvP: Heavy Weapons Electric Rending damage modifier")),
+                ("pvp_dmg_mod_2h_electric_rend", new Property<double>(1.0, "PvP: Two-Handed Weapons Electric Rending damage modifier")),
+                ("pvp_dmg_mod_bow_electric_rend", new Property<double>(1.0, "PvP: Bow Electric Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_electric_rend", new Property<double>(1.0, "PvP: Crossbow Electric Rending damage modifier")),
+                ("pvp_dmg_mod_tw_electric_rend", new Property<double>(1.0, "PvP: Thrown Weapons Electric Rending damage modifier")),
+
+                // Elemental Rending - Nether (PvP)
+                ("pvp_dmg_mod_nether_rend", new Property<double>(1.0, "PvP: Global Nether Rending damage modifier")),
+                ("pvp_dmg_mod_fw_nether_rend", new Property<double>(1.0, "PvP: Finesse Weapons Nether Rending damage modifier")),
+                ("pvp_dmg_mod_lw_nether_rend", new Property<double>(1.0, "PvP: Light Weapons Nether Rending damage modifier")),
+                ("pvp_dmg_mod_hw_nether_rend", new Property<double>(1.0, "PvP: Heavy Weapons Nether Rending damage modifier")),
+                ("pvp_dmg_mod_2h_nether_rend", new Property<double>(1.0, "PvP: Two-Handed Weapons Nether Rending damage modifier")),
+                ("pvp_dmg_mod_bow_nether_rend", new Property<double>(1.0, "PvP: Bow Nether Rending damage modifier")),
+                ("pvp_dmg_mod_xbow_nether_rend", new Property<double>(1.0, "PvP: Crossbow Nether Rending damage modifier")),
+                ("pvp_dmg_mod_tw_nether_rend", new Property<double>(1.0, "PvP: Thrown Weapons Nether Rending damage modifier")),
+
+                // PvE Nether Rending
+                ("pve_dmg_mod_nether_rend", new Property<double>(1.0, "PvE: Global Nether Rending damage modifier")),
+                ("pve_dmg_mod_fw_nether_rend", new Property<double>(1.0, "PvE: Finesse Weapons Nether Rending damage modifier")),
+                ("pve_dmg_mod_lw_nether_rend", new Property<double>(1.0, "PvE: Light Weapons Nether Rending damage modifier")),
+                ("pve_dmg_mod_hw_nether_rend", new Property<double>(1.0, "PvE: Heavy Weapons Nether Rending damage modifier")),
+                ("pve_dmg_mod_2h_nether_rend", new Property<double>(1.0, "PvE: Two-Handed Weapons Nether Rending damage modifier")),
+                ("pve_dmg_mod_bow_nether_rend", new Property<double>(1.0, "PvE: Bow Nether Rending damage modifier")),
+                ("pve_dmg_mod_xbow_nether_rend", new Property<double>(1.0, "PvE: Crossbow Nether Rending damage modifier")),
+                ("pve_dmg_mod_tw_nether_rend", new Property<double>(1.0, "PvE: Thrown Weapons Nether Rending damage modifier")),
+
+                // PvE Void DoT
+                ("pve_void_dot_damage_mod", new Property<double>(1.0, "PvE: Void DoT damage dealt to mobs modifier")),
+                ("pve_void_dot_drr_mod", new Property<double>(1.0, "PvE: Void DoT Damage Resistance Reduction effectiveness on mobs. Scales how much extra damage mobs take when they have Void DoTs applied (the DRR debuff portion)."))
 
                 );
 

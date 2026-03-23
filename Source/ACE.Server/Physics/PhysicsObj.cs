@@ -2192,6 +2192,12 @@ namespace ACE.Server.Physics
                 // players and combat pets
                 var visibleTargets = ObjMaint.GetVisibleObjects(CurCell, ObjectMaint.VisibleObjectType.AttackTargets, this.Position.Variation);
                 _ = ObjMaint.AddVisibleTargets(visibleTargets);
+
+                // CONQUEST: Also add players to KnownPlayers so they get notified when monster spawns
+                // Without this, NotifyPlayers() and enter_cell_server() won't reach any players
+                var knownPlayers = ObjectMaint.InitialClamp ? ObjMaint.GetVisibleObjectsDist(CurCell, ObjectMaint.VisibleObjectType.Players, this.Position.Variation)
+                    : ObjMaint.GetVisibleObjects(CurCell, ObjectMaint.VisibleObjectType.Players, this.Position.Variation);
+                ObjMaint.AddKnownPlayers(knownPlayers);
             }
             else
             {

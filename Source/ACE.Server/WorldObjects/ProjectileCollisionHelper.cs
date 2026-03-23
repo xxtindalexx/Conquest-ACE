@@ -76,6 +76,14 @@ namespace ACE.Server.WorldObjects
                         log.Error($"Error setting projectile tracking: {ex.Message}", ex);
                     }
 
+                    // CONQUEST: Enter PvP mode BEFORE damage calculation so enchantments are refreshed with zeroed augs
+                    var targetPlayer = targetCreature as Player;
+                    if (targetPlayer != null && PropertyManager.GetBool("pvp_disable_custom_augs"))
+                    {
+                        sourcePlayer.EnterPvPMode();
+                        targetPlayer.EnterPvPMode();
+                    }
+
                     // player damage monster or player
                     damageEvent = sourcePlayer.DamageTarget(targetCreature, worldObject);
 

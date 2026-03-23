@@ -56,14 +56,68 @@ namespace ACE.Server.Network.GameAction.Actions
                         return;
                     }
 
-                    // CONQUEST: Check if player is a recent departure - they can rejoin immediately, bypassing queue and lock
+                    // CONQUEST: Mules cannot join fellowships
+                    if (session.Player.IsMule)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Mules cannot join fellowships.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    // CONQUEST: Check if player is a recent departure - they can rejoin immediately, bypassing queue, lock, and landblock check
                     var isRecentDeparture = fellowship.IsRecentDeparture(session.Player.Guid.Full);
 
-                    // Check if fellowship is locked (recent departures can bypass this)
-                    if (fellowship.IsLocked && !isRecentDeparture)
+                    // CONQUEST: Landblock check - must be in same landblock as at least one fellowship member (recent departures bypass)
+                    if (!isRecentDeparture)
                     {
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {targetPlayer.Name}'s fellowship is locked and not accepting new members.", ChatMessageType.Broadcast));
-                        return;
+                        var senderLandblock = session.Player.CurrentLandblock?.Id.Landblock;
+                        var senderVariation = session.Player.Location?.Variation;
+
+                        // Block if sender is in Marketplace
+                        if (senderLandblock == 0x016C)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You cannot join fellowships from the Marketplace.", ChatMessageType.Broadcast));
+                            return;
+                        }
+
+                        bool inSameLandblock = false;
+                        foreach (var memberEntry in fellowship.FellowshipMembers)
+                        {
+                            var member = PlayerManager.GetOnlinePlayer(memberEntry.Key);
+                            if (member?.CurrentLandblock != null)
+                            {
+                                var memberLandblock = member.CurrentLandblock.Id.Landblock;
+                                var memberVariation = member.Location?.Variation;
+
+                                // Check landblock match and variation compatibility (same or one is null)
+                                if (senderLandblock == memberLandblock &&
+                                    (senderVariation == null || memberVariation == null || senderVariation == memberVariation))
+                                {
+                                    inSameLandblock = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (!inSameLandblock)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You must be in the same landblock as a fellowship member to join.", ChatMessageType.Broadcast));
+                            return;
+                        }
+                    }
+
+                    // Check if fellowship is locked or closed (recent departures can bypass this)
+                    if (!isRecentDeparture)
+                    {
+                        if (fellowship.IsLocked)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {targetPlayer.Name}'s fellowship is locked and not accepting new members.", ChatMessageType.Broadcast));
+                            return;
+                        }
+                        if (!fellowship.Open)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: {targetPlayer.Name}'s fellowship is closed and not accepting new members.", ChatMessageType.Broadcast));
+                            return;
+                        }
                     }
 
                     // CONQUEST: Recent departures bypass the queue entirely - just send them straight to recruit

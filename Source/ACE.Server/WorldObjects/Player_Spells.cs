@@ -371,6 +371,18 @@ namespace ACE.Server.WorldObjects
                     var critterBuffsForPlayer = buffsForPlayer.Where(k => k.Spell.School == MagicSchool.CreatureEnchantment).ToList();
                     var itemBuffsForPlayer = buffsForPlayer.Where(k => k.Spell.School == MagicSchool.ItemEnchantment).ToList();
 
+                    // CONQUEST: Weapon enchantment spell names that need to be applied to weapons, not player
+                    var weaponBuffSpellNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        "BloodDrinker", "HeartSeeker", "SwiftKiller", "Defender", "SpiritDrinker", "HermeticLink"
+                    };
+
+                    // Separate weapon buffs from other item buffs
+                    var weaponBuffsForPlayer = itemBuffsForPlayer.Where(k =>
+                        weaponBuffSpellNames.Any(name => k.Spell.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase))).ToList();
+                    var nonWeaponItemBuffs = itemBuffsForPlayer.Where(k =>
+                        !weaponBuffSpellNames.Any(name => k.Spell.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase))).ToList();
+
                     lifeBuffsForPlayer.ForEach(spl =>
                     {
                         CreateEnchantmentSilent(spl.Spell, targetPlayer);
@@ -379,21 +391,58 @@ namespace ACE.Server.WorldObjects
                     {
                         CreateEnchantmentSilent(spl.Spell, targetPlayer);
                     });
-                    itemBuffsForPlayer.ForEach(spl =>
+                    // Apply non-weapon item buffs to player
+                    nonWeaponItemBuffs.ForEach(spl =>
                     {
                         CreateEnchantmentSilent(spl.Spell, targetPlayer);
                     });
+
+                    // CONQUEST: Apply weapon buffs to equipped weapons
+                    var equippedWeapons = targetPlayer.EquippedObjects.Values.Where(i =>
+                        (i.WeenieType == WeenieType.MeleeWeapon ||
+                         i.WeenieType == WeenieType.MissileLauncher ||
+                         i.WeenieType == WeenieType.Caster) &&
+                        i.IsEnchantable).ToList();
+
+                    foreach (var weaponBuff in weaponBuffsForPlayer)
+                    {
+                        foreach (var weapon in equippedWeapons)
+                        {
+                            // SpiritDrinker and HermeticLink are for casters only
+                            bool isCasterOnlyBuff = weaponBuff.Spell.Name.StartsWith("SpiritDrinker", StringComparison.OrdinalIgnoreCase) ||
+                                                    weaponBuff.Spell.Name.StartsWith("HermeticLink", StringComparison.OrdinalIgnoreCase);
+
+                            if (isCasterOnlyBuff && weapon.WeenieType != WeenieType.Caster)
+                                continue;
+
+                            // BloodDrinker, HeartSeeker, SwiftKiller, Defender are for melee/missile only
+                            bool isMeleeOnlyBuff = weaponBuff.Spell.Name.StartsWith("BloodDrinker", StringComparison.OrdinalIgnoreCase) ||
+                                                   weaponBuff.Spell.Name.StartsWith("HeartSeeker", StringComparison.OrdinalIgnoreCase) ||
+                                                   weaponBuff.Spell.Name.StartsWith("SwiftKiller", StringComparison.OrdinalIgnoreCase) ||
+                                                   weaponBuff.Spell.Name.StartsWith("Defender", StringComparison.OrdinalIgnoreCase);
+
+                            if (isMeleeOnlyBuff && weapon.WeenieType == WeenieType.Caster)
+                                continue;
+
+                            CreateEnchantmentSilent(weaponBuff.Spell, weapon);
+                        }
+                    }
                 }
                 if (buffMessages.Any(k => k.Bane))
                 {
-                    // Impen/bane
+                    // Impen/bane - apply to clothing, shields, and weapons
                     var items = targetPlayer.EquippedObjects.Values.ToList();
                     var itembuffs = buffMessages.Where(k => k.Bane).ToList();
                     foreach (var itemBuff in itembuffs)
                     {
                         foreach (var item in items)
                         {
-                            if ((item.WeenieType == WeenieType.Clothing || item.IsShield) && item.IsEnchantable)
+                            if ((item.WeenieType == WeenieType.Clothing ||
+                                 item.IsShield ||
+                                 item.WeenieType == WeenieType.MeleeWeapon ||
+                                 item.WeenieType == WeenieType.MissileLauncher ||
+                                 item.WeenieType == WeenieType.Caster) &&
+                                item.IsEnchantable)
                                 CreateEnchantmentSilent(itemBuff.Spell, item);
                         }
                     }

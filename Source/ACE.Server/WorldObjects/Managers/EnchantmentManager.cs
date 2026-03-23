@@ -262,9 +262,24 @@ namespace ACE.Server.WorldObjects.Managers
 
             bool selfCastEligible = (spell.IsBeneficial && spell.IsSelfTargeted) || spell.IsHarmful;
 
+            // CONQUEST: Check if we should skip aug bonuses in PvP
+            // If pvp_disable_custom_augs is enabled and this is a harmful spell from one PK to another,
+            // skip applying aug bonuses so the first hit doesn't benefit from augs
+            bool skipPvPAugBonuses = false;
+            if (PropertyManager.GetBool("pvp_disable_custom_augs") && spell.IsHarmful && caster is Player casterPlayer)
+            {
+                // Check if target is a player (directly or via wielder for item enchantments)
+                var targetPlayer = WorldObject as Player;
+                if (targetPlayer == null && WorldObject.WielderId != null)
+                    targetPlayer = WorldObject.CurrentLandblock?.GetObject(WorldObject.WielderId.Value) as Player;
+
+                if (targetPlayer != null && casterPlayer.IsPKType && targetPlayer.IsPKType)
+                    skipPvPAugBonuses = true;
+            }
+
             // Augmentation bonuses only apply when caster is a Creature (player casting spells)
             // Equipped items do NOT get augmentation bonuses
-            if (caster != null && caster is Creature)
+            if (caster != null && caster is Creature && !skipPvPAugBonuses)
             {
                 var creatureCaster = caster as Creature;
 
@@ -308,7 +323,7 @@ namespace ACE.Server.WorldObjects.Managers
                     {
                         entry.StatModValue += (creatureCaster.LuminanceAugmentItemCount ?? 0.0f) * 0.01f;
                     }
-                    else if (spell.StatModKey == 168 || spell.StatModKey == 169 && selfCastEligible)
+                    else if ((spell.StatModKey == 168 || spell.StatModKey == 169) && selfCastEligible) // Heart Seeker (168) / Defender (169)
                     {
                         entry.StatModValue += GetItemAugPercentageRating(creatureCaster.LuminanceAugmentItemCount ?? 0);
                     }
@@ -1607,15 +1622,20 @@ namespace ACE.Server.WorldObjects.Managers
                     if (!targetPlayer.IsPKType)
                         continue;
 
-                    // CONQUEST: Scale Void/Nether DoT damage in PvP via config property
-                    // 1.0 = full damage, 0.5 = half damage, 0 = no damage
-                    // The enchantment still stays on the target (damage reduction debuff remains)
+                    // CONQUEST: Scale Void/Nether DoT damage in PvP via config properties
+                    // pvp_void_dot_damage_scale: legacy property (1.0 = full damage, 0 = disabled)
+                    // pvp_dmg_mod_void_dot: new PvP config system modifier (multiplicative)
+                    // Both are applied for backwards compatibility
                     if (damageType == DamageType.Nether)
                     {
                         var voidDotScale = (float)PropertyManager.GetDouble("pvp_void_dot_damage_scale", 0.0);
                         if (voidDotScale <= 0)
                             continue;
                         tickAmount *= voidDotScale;
+
+                        // Apply the PvP damage config system modifier
+                        var pvpVoidDotMod = (float)PropertyManager.GetDouble("pvp_dmg_mod_void_dot");
+                        tickAmount *= pvpVoidDotMod;
                     }
                 }
 

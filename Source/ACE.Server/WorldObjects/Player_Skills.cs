@@ -609,6 +609,10 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void EnforceSummoningSkillRestrictions()
         {
+            // CONQUEST: Skip restriction for admin characters
+            if (IsPlussed)
+                return;
+
             var summoningSkill = GetCreatureSkill(Skill.Summoning, false);
             if (summoningSkill == null || summoningSkill.AdvancementClass < SkillAdvancementClass.Trained)
                 return;

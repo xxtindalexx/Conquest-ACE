@@ -23,6 +23,7 @@ namespace ACE.Server.Entity.Actions
         Container_SortBiotasIntoInventory,
         Corpse_DiscoverGeneratedRare,
         CreatureDeath_MakeCorpse,
+        CreatureDeath_NotifyDamagerRemoveTracking,
         CreatureDeath_SaveInParallelCallback,
         CreatureEquipment_TryActivateItemSpellsOnWield,
         CreatureMissile_EnqueueBroadcast,

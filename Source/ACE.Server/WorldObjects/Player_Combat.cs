@@ -132,6 +132,13 @@ namespace ACE.Server.WorldObjects
                 return null;
             }
 
+            // CONQUEST: Enter PvP mode BEFORE damage calculation so enchantments are refreshed with zeroed augs
+            if (targetPlayer != null && PropertyManager.GetBool("pvp_disable_custom_augs"))
+            {
+                EnterPvPMode();
+                targetPlayer.EnterPvPMode();
+            }
+
             var damageEvent = DamageEvent.CalculateDamage(this, target, damageSource);
 
             if (damageEvent.HasDamage)
@@ -1299,30 +1306,40 @@ namespace ACE.Server.WorldObjects
         {
             var enchantmentsToRemove = new List<PropertiesEnchantmentRegistry>();
 
-            // Remove self-cast enchantments on the player
-            var lifeEnchantments = EnchantmentManager.GetEnchantments(MagicSchool.LifeMagic);
-            foreach (var enchantment in lifeEnchantments)
-            {
-                // Only remove if self-cast (caster is this player)
-                // IMPORTANT: Exclude vitae - it has CasterObjectId set to player but should never be removed here
-                if (enchantment.CasterObjectId == Guid.Full && enchantment.SpellId != (int)SpellId.Vitae)
-                    enchantmentsToRemove.Add(enchantment);
-            }
+            // CONQUEST: Get equipped weapon GUIDs so we can also strip their cantrip effects from the player
+            var equippedWeaponGuids = new HashSet<uint>(
+                EquippedObjects.Values
+                    .Where(i => i.WeenieType == WeenieType.MeleeWeapon ||
+                                i.WeenieType == WeenieType.MissileLauncher ||
+                                i.WeenieType == WeenieType.Caster)
+                    .Select(i => i.Guid.Full));
 
-            var creatureEnchantments = EnchantmentManager.GetEnchantments(MagicSchool.CreatureEnchantment);
-            foreach (var enchantment in creatureEnchantments)
+            // CONQUEST: Remove self-cast enchantments on the player
+            // IMPORTANT: Use Clone of ALL enchantments, not GetEnchantments which only returns top layer
+            // This ensures we catch ALL duplicate enchantments of the same spell
+            var allPlayerEnchantments = Biota.PropertiesEnchantmentRegistry?.Clone(BiotaDatabaseLock) ?? new List<PropertiesEnchantmentRegistry>();
+            foreach (var enchantment in allPlayerEnchantments)
             {
-                // Only remove if self-cast, exclude vitae
-                if (enchantment.CasterObjectId == Guid.Full && enchantment.SpellId != (int)SpellId.Vitae)
-                    enchantmentsToRemove.Add(enchantment);
-            }
+                // Skip vitae - it should never be removed
+                if (enchantment.SpellId == (int)SpellId.Vitae)
+                    continue;
 
-            var itemEnchantments = EnchantmentManager.GetEnchantments(MagicSchool.ItemEnchantment);
-            foreach (var enchantment in itemEnchantments)
-            {
-                // Only remove if self-cast, exclude vitae
-                if (enchantment.CasterObjectId == Guid.Full && enchantment.SpellId != (int)SpellId.Vitae)
-                    enchantmentsToRemove.Add(enchantment);
+                // Only remove if self-cast or cast by equipped weapon
+                if (enchantment.CasterObjectId == Guid.Full || equippedWeaponGuids.Contains(enchantment.CasterObjectId))
+                {
+                    // Get the spell to check its school
+                    var spell = new Spell((uint)enchantment.SpellId);
+                    if (spell.NotFound)
+                        continue;
+
+                    // Only remove Life, Creature, and Item enchantments (the buff schools)
+                    if (spell.School == MagicSchool.LifeMagic ||
+                        spell.School == MagicSchool.CreatureEnchantment ||
+                        spell.School == MagicSchool.ItemEnchantment)
+                    {
+                        enchantmentsToRemove.Add(enchantment);
+                    }
+                }
             }
 
             // Remove all collected player enchantments
@@ -1331,8 +1348,39 @@ namespace ACE.Server.WorldObjects
                 EnchantmentManager.Dispel(enchantment);
             }
 
-            // Now handle equipped items - remove self-cast banes/impen while preserving item cantrips
-            var equippedItems = EquippedObjects.Values.Where(i => (i.WeenieType == WeenieType.Clothing || i.IsShield) && i.IsEnchantable).ToList();
+            // CONQUEST: Force-remove any remaining self-cast Defender enchantments (StatModKey 169)
+            // This handles edge cases where duplicates exist and normal dispel only removes one
+            // Loop until ALL matching enchantments are removed (TryRemoveEnchantment only removes first match)
+            int removeAttempts = 0;
+            int maxAttempts = 10; // Safety limit
+            while (removeAttempts < maxAttempts)
+            {
+                var currentEnchants = Biota.PropertiesEnchantmentRegistry?.Clone(BiotaDatabaseLock) ?? new List<PropertiesEnchantmentRegistry>();
+                var remainingDefenders = currentEnchants.Where(e =>
+                    e.StatModKey == 169 &&
+                    (e.CasterObjectId == Guid.Full || equippedWeaponGuids.Contains(e.CasterObjectId))).ToList();
+
+                if (remainingDefenders.Count == 0)
+                    break;
+
+                removeAttempts++;
+                foreach (var e in remainingDefenders)
+                {
+                    Biota.PropertiesEnchantmentRegistry.TryRemoveEnchantment(e.SpellId, e.CasterObjectId, BiotaDatabaseLock);
+                    ChangesDetected = true;
+                    Session.Network.EnqueueSend(new GameEventMagicDispelEnchantment(Session, (ushort)e.SpellId, e.LayerId));
+                }
+            }
+
+            // Now handle equipped items - remove self-cast banes/impen/weapon buffs while preserving item cantrips
+            // CONQUEST: Include weapons so Blood Drinker, Heart Seeker, etc. get stripped and rebuffed properly
+            var equippedItems = EquippedObjects.Values.Where(i =>
+                (i.WeenieType == WeenieType.Clothing ||
+                 i.IsShield ||
+                 i.WeenieType == WeenieType.MeleeWeapon ||
+                 i.WeenieType == WeenieType.MissileLauncher ||
+                 i.WeenieType == WeenieType.Caster) &&
+                i.IsEnchantable).ToList();
 
             foreach (var item in equippedItems)
             {
@@ -1354,6 +1402,27 @@ namespace ACE.Server.WorldObjects
                 {
                     item.EnchantmentManager.Dispel(enchantment);
                 }
+            }
+
+            // CONQUEST: Remove and re-trigger weapon cantrips so they apply with current (zeroed) aug values
+            var equippedWeapons = EquippedObjects.Values.Where(i =>
+                i.WeenieType == WeenieType.MeleeWeapon ||
+                i.WeenieType == WeenieType.MissileLauncher ||
+                i.WeenieType == WeenieType.Caster).ToList();
+
+            foreach (var weapon in equippedWeapons)
+            {
+                var weaponSpells = weapon.Biota.GetKnownSpellsIds(weapon.BiotaDatabaseLock);
+
+                foreach (var spellId in weaponSpells)
+                {
+                    // Remove existing cantrip effect (with old aug values) and re-apply with current (zeroed) values
+                    RemoveItemSpell(weapon, (uint)spellId, silent: true);
+                    CreateItemSpell(weapon, (uint)spellId);
+                }
+
+                // CONQUEST: Send weapon update to client to refresh displayed stats after enchantment changes
+                Session.Network.EnqueueSend(new GameMessageUpdateObject(weapon));
             }
         }
 

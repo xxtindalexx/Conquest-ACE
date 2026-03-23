@@ -489,6 +489,13 @@ namespace ACE.Server.WorldObjects
 
             bool isPVP = sourcePlayer != null && targetPlayer != null;
 
+            // CONQUEST: Enter PvP mode BEFORE damage calculation so enchantments are refreshed with zeroed augs
+            if (isPVP && Spell.IsHarmful && PropertyManager.GetBool("pvp_disable_custom_augs"))
+            {
+                sourcePlayer.EnterPvPMode();
+                targetPlayer.EnterPvPMode();
+            }
+
             //http://acpedia.org/wiki/Announcements_-_2014/01_-_Forces_of_Nature - Aegis is 72% effective in PvP
             if (isPVP && (target.CombatMode == CombatMode.Melee || target.CombatMode == CombatMode.Missile))
             {
@@ -610,7 +617,10 @@ namespace ACE.Server.WorldObjects
                     // CONQUEST: War augmentation damage bonus
                     // Each war aug adds 0.5% damage bonus to war magic spells
                     // Works for both players and creatures (mobs)
-                    if (sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.WarMagic)
+                    // Skip in PvP if pvp_disable_custom_augs is enabled
+                    bool skipPvPWarVoidAugs = isPVP && PropertyManager.GetBool("pvp_disable_custom_augs");
+
+                    if (!skipPvPWarVoidAugs && sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.WarMagic)
                     {
                         var warAugCount = sourceCreature.LuminanceAugmentWarCount ?? 0;
                         if (warAugCount > 0)
@@ -623,7 +633,8 @@ namespace ACE.Server.WorldObjects
                     // CONQUEST: Void augmentation damage bonus
                     // Each void aug adds 0.5% damage bonus to void magic spells (same as war)
                     // Works for both players and creatures (mobs)
-                    if (sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.VoidMagic)
+                    // Skip in PvP if pvp_disable_custom_augs is enabled
+                    if (!skipPvPWarVoidAugs && sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.VoidMagic)
                     {
                         var voidAugCount = sourceCreature.LuminanceAugmentVoidCount ?? 0;
                         if (voidAugCount > 0)
@@ -634,6 +645,56 @@ namespace ACE.Server.WorldObjects
                     }
 
                     finalDamage *= elementalDamageMod * slayerMod * resistanceMod * absorbMod;
+
+                    // ===================================================================================
+                    // PvP Damage Configuration System - Apply granular PvP magic damage modifiers
+                    // ===================================================================================
+                    if (isPVP)
+                    {
+                        float pvpMagicMod = 1.0f;
+
+                        if (Spell.School == MagicSchool.WarMagic)
+                        {
+                            // Base war magic modifier
+                            pvpMagicMod = (float)PropertyManager.GetDouble("pvp_dmg_mod_war");
+
+                            // Spell type modifiers (streak and blast override base)
+                            if (SpellType == ProjectileSpellType.Streak)
+                                pvpMagicMod = (float)PropertyManager.GetDouble("pvp_dmg_mod_war_streak");
+                            else if (SpellType == ProjectileSpellType.Blast)
+                                pvpMagicMod = (float)PropertyManager.GetDouble("pvp_dmg_mod_war_blast");
+
+                            // Weapon imbue modifiers for war magic
+                            if (criticalHit && weapon?.HasImbuedEffect(ImbuedEffectType.CripplingBlow) == true)
+                                pvpMagicMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_war_cb_crit");
+
+                            if (weapon?.HasImbuedEffect(ImbuedEffectType.CriticalStrike) == true)
+                            {
+                                pvpMagicMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_war_cs_dmg");
+                                if (criticalHit)
+                                    pvpMagicMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_war_cs_crit");
+                            }
+                        }
+                        else if (Spell.DamageType == DamageType.Nether) // Void Magic
+                        {
+                            // Base void magic modifier
+                            pvpMagicMod = (float)PropertyManager.GetDouble("pvp_dmg_mod_void");
+
+                            // Spell type modifiers
+                            if (SpellType == ProjectileSpellType.Streak)
+                                pvpMagicMod = (float)PropertyManager.GetDouble("pvp_dmg_mod_void_streak");
+
+                            // Crit modifiers for void magic
+                            if (criticalHit)
+                            {
+                                pvpMagicMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_void_crit");
+                                if (weapon?.HasImbuedEffect(ImbuedEffectType.CripplingBlow) == true)
+                                    pvpMagicMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_void_cb_crit");
+                            }
+                        }
+
+                        finalDamage *= pvpMagicMod;
+                    }
                 }
             }
 

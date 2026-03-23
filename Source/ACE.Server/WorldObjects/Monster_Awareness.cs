@@ -241,7 +241,32 @@ namespace ACE.Server.WorldObjects
         {
             var visibleTargets = new List<Creature>();
 
-            foreach (var creature in PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature())
+            // CONQUEST: Check both VisibleTargets AND players/pets from adjacent landblocks
+            // This ensures mobs continue tracking targets that cross landblock boundaries
+            var targetsToCheck = new HashSet<Creature>(PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature());
+
+            // Also check players/pets from adjacent landblocks with compatible variations
+            if (CurrentLandblock != null)
+            {
+                foreach (var adjacent in CurrentLandblock.Adjacents)
+                {
+                    if (adjacent == null) continue;
+
+                    // Only check adjacents with compatible variation
+                    if (!AreVariationsCompatible(Location.Variation, adjacent.VariationId))
+                        continue;
+
+                    foreach (var wo in adjacent.GetWorldObjectsForPhysicsHandling())
+                    {
+                        if (wo is Player player && player.IsAlive)
+                            targetsToCheck.Add(player);
+                        else if (wo is CombatPet pet && pet.IsAlive)
+                            targetsToCheck.Add(pet);
+                    }
+                }
+            }
+
+            foreach (var creature in targetsToCheck)
             {
                 // ensure attackable
                 if (!creature.Attackable && creature.TargetingTactic == TargetingTactic.None || creature.Teleporting) continue;
@@ -350,7 +375,31 @@ namespace ACE.Server.WorldObjects
             Creature closestTarget = null;
             var closestDistSq = float.MaxValue;
 
-            foreach (var creature in PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature())
+            // CONQUEST: Check both VisibleTargets AND players from adjacent landblocks
+            var targetsToCheck = new HashSet<Creature>(PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature());
+
+            // Also check players from adjacent landblocks with compatible variations
+            if (CurrentLandblock != null)
+            {
+                foreach (var adjacent in CurrentLandblock.Adjacents)
+                {
+                    if (adjacent == null) continue;
+
+                    // Only check adjacents with compatible variation
+                    if (!AreVariationsCompatible(Location.Variation, adjacent.VariationId))
+                        continue;
+
+                    foreach (var wo in adjacent.GetWorldObjectsForPhysicsHandling())
+                    {
+                        if (wo is Player player && player.IsAlive)
+                            targetsToCheck.Add(player);
+                        else if (wo is CombatPet pet && pet.IsAlive)
+                            targetsToCheck.Add(pet);
+                    }
+                }
+            }
+
+            foreach (var creature in targetsToCheck)
             {
                 if (creature is Player player && (!player.Attackable || player.Teleporting || (player.Hidden ?? false)))
                     continue;
@@ -494,6 +543,11 @@ namespace ACE.Server.WorldObjects
                     }
 
                     alerted = true;
+
+                    // CONQUEST: Ensure the attack target is added to the alerted creature's VisibleTargets
+                    // This allows cross-landblock targeting to work properly
+                    if (AttackTarget?.PhysicsObj != null && nearbyCreature.PhysicsObj?.ObjMaint != null)
+                        nearbyCreature.PhysicsObj.ObjMaint.AddVisibleTargets(new[] { AttackTarget.PhysicsObj });
 
                     nearbyCreature.AttackTarget = AttackTarget;
                     nearbyCreature.WakeUp(false);

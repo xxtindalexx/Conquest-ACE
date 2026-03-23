@@ -298,24 +298,30 @@ namespace ACE.Server.Entity
 
             // CONQUEST: Melee/Missile augmentation critical damage bonus
             // Define configurable parameter for critical damage adjustment (default 0.015 = 1.5% per aug)
+            // Skip in PvP if pvp_disable_custom_augs is enabled
             float luminanceAugmentCritDamageMultiplier = 0.015f;
             float luminanceAugmentBonus = 0;
 
-            switch (CombatType)
-            {
-                case CombatType.Melee:
-                    if (attacker.LuminanceAugmentMeleeCount > 0)
-                    {
-                        luminanceAugmentBonus = attacker.LuminanceAugmentMeleeCount.Value * luminanceAugmentCritDamageMultiplier;
-                    }
-                    break;
+            bool skipPvPMeleeAugs = pkBattle && PropertyManager.GetBool("pvp_disable_custom_augs");
 
-                case CombatType.Missile:
-                    if (attacker.LuminanceAugmentMissileCount > 0)
-                    {
-                        luminanceAugmentBonus = attacker.LuminanceAugmentMissileCount.Value * luminanceAugmentCritDamageMultiplier;
-                    }
-                    break;
+            if (!skipPvPMeleeAugs)
+            {
+                switch (CombatType)
+                {
+                    case CombatType.Melee:
+                        if (attacker.LuminanceAugmentMeleeCount > 0)
+                        {
+                            luminanceAugmentBonus = attacker.LuminanceAugmentMeleeCount.Value * luminanceAugmentCritDamageMultiplier;
+                        }
+                        break;
+
+                    case CombatType.Missile:
+                        if (attacker.LuminanceAugmentMissileCount > 0)
+                        {
+                            luminanceAugmentBonus = attacker.LuminanceAugmentMissileCount.Value * luminanceAugmentCritDamageMultiplier;
+                        }
+                        break;
+                }
             }
 
             if (CriticalChance > ThreadSafeRandom.Next(0.0f, 1.0f))
@@ -432,6 +438,41 @@ namespace ACE.Server.Entity
 
             // calculate final output damage
             Damage = DamageBeforeMitigation * ArmorMod * ShieldMod * ResistanceMod * DamageResistanceRatingMod;
+
+            // ===================================================================================
+            // PvP Damage Configuration System - Apply granular PvP damage modifiers
+            // ===================================================================================
+            if (pkBattle && Weapon != null)
+            {
+                float pvpConfigMod = 1.0f;
+                var weaponSkill = attacker.GetCurrentWeaponSkill();
+
+                // Step 1: Determine weapon type prefix for property lookups
+                string weaponPrefix = GetPvPWeaponPrefix(weaponSkill, Weapon);
+
+                // Step 2: Apply base weapon type modifier
+                pvpConfigMod = (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}");
+
+                // Step 3: Apply special attack type modifiers (triple strike, multi-strike)
+                if (weaponSkill == Skill.LightWeapons && AttackType == AttackType.TripleStrike)
+                {
+                    pvpConfigMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_lw_triplestrike");
+                    if (IsCritical && Weapon.HasImbuedEffect(ImbuedEffectType.CripplingBlow))
+                        pvpConfigMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_lw_cb_crit_triplestrike");
+                }
+                else if (weaponSkill == Skill.HeavyWeapons && AttackType.HasFlag(AttackType.MultiStrike))
+                {
+                    pvpConfigMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_hw_multistrike");
+                    if (IsCritical && Weapon.HasImbuedEffect(ImbuedEffectType.CripplingBlow))
+                        pvpConfigMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_hw_cb_crit_multistrike");
+                }
+
+                // Step 4: Apply imbue effect modifiers (multiplicative)
+                pvpConfigMod *= GetPvPImbueMod(Weapon, weaponPrefix, IsCritical);
+
+                // Apply final PvP configuration modifier
+                Damage *= pvpConfigMod;
+            }
 
             // Apply split arrow damage multiplier if this is a split arrow
             if (DamageSource.GetProperty(PropertyBool.IsSplitArrow) == true)
@@ -779,6 +820,139 @@ namespace ACE.Server.Entity
 
                 return attackConditions;
             }
+        }
+
+        /// <summary>
+        /// Returns the weapon prefix string for PvP damage property lookups
+        /// </summary>
+        private static string GetPvPWeaponPrefix(Skill weaponSkill, WorldObject weapon)
+        {
+            switch (weaponSkill)
+            {
+                case Skill.FinesseWeapons:
+                    return "fw";
+                case Skill.LightWeapons:
+                    return "lw";
+                case Skill.HeavyWeapons:
+                    return "hw";
+                case Skill.TwoHandedCombat:
+                    return "2h";
+                case Skill.MissileWeapons:
+                    if (weapon.DefaultCombatStyle == CombatStyle.Bow)
+                        return "bow";
+                    else if (weapon.DefaultCombatStyle == CombatStyle.Crossbow)
+                        return "xbow";
+                    else // Thrown weapons and atlatls
+                        return "tw";
+                default:
+                    return "fw"; // Default fallback
+            }
+        }
+
+        /// <summary>
+        /// Calculates the combined PvP imbue modifier for a weapon
+        /// </summary>
+        private float GetPvPImbueMod(WorldObject weapon, string weaponPrefix, bool isCritical)
+        {
+            float imbueMod = 1.0f;
+
+            // Armor Rending
+            if (weapon.HasImbuedEffect(ImbuedEffectType.ArmorRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_ar");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_ar");
+            }
+
+            // Crippling Blow
+            if (weapon.HasImbuedEffect(ImbuedEffectType.CripplingBlow))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_cb");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_cb");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_cb_crit");
+            }
+
+            // Critical Strike
+            if (weapon.HasImbuedEffect(ImbuedEffectType.CriticalStrike))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_cs");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_cs");
+            }
+
+            // Hollow weapons (IgnoreMagicArmor + IgnoreMagicResist)
+            if (IgnoreMagicArmor && IgnoreMagicResist)
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_hollow");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_hollow");
+            }
+
+            // Phantom weapons (IgnoreAllArmor)
+            if (weapon.HasImbuedEffect(ImbuedEffectType.IgnoreAllArmor))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_phantom");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_phantom");
+            }
+
+            // Elemental Rending - Slash
+            if (weapon.HasImbuedEffect(ImbuedEffectType.SlashRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_slash_rend");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_slash_rend");
+            }
+
+            // Elemental Rending - Pierce
+            if (weapon.HasImbuedEffect(ImbuedEffectType.PierceRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_pierce_rend");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_pierce_rend");
+            }
+
+            // Elemental Rending - Bludgeon
+            if (weapon.HasImbuedEffect(ImbuedEffectType.BludgeonRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_bludgeon_rend");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_bludgeon_rend");
+            }
+
+            // Elemental Rending - Fire
+            if (weapon.HasImbuedEffect(ImbuedEffectType.FireRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_fire_rend");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_fire_rend");
+            }
+
+            // Elemental Rending - Cold
+            if (weapon.HasImbuedEffect(ImbuedEffectType.ColdRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_cold_rend");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_cold_rend");
+            }
+
+            // Elemental Rending - Acid
+            if (weapon.HasImbuedEffect(ImbuedEffectType.AcidRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_acid_rend");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_acid_rend");
+            }
+
+            // Elemental Rending - Electric
+            if (weapon.HasImbuedEffect(ImbuedEffectType.ElectricRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_electric_rend");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_electric_rend");
+            }
+
+            // Elemental Rending - Nether
+            if (weapon.HasImbuedEffect(ImbuedEffectType.NetherRending))
+            {
+                imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_nether_rend");
+                imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_nether_rend");
+            }
+
+            // Note: Biting Strike and Crushing Blow are not standard ImbuedEffectTypes
+            // They would need separate detection if implemented in the game
+
+            return imbueMod;
         }
     }
 }

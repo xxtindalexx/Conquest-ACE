@@ -330,9 +330,8 @@ namespace ACE.Server.Physics.Common
             rwLock.EnterReadLock();
             try
             {
-                // CONQUEST: Filter by variation - allow compatible variations (same or one is null)
+                // Note: Variation filtering is done at add-time in AddVisibleObject()
                 return VisibleObjects.Values
-                    .Where(o => AreVariationsCompatible(PhysicsObj.Position.Variation, o.Position.Variation))
                     .Where(predicate)
                     .ToList();
             }
@@ -349,9 +348,8 @@ namespace ACE.Server.Physics.Common
                 rwLock.EnterReadLock();
                 try
                 {
-                    // CONQUEST: Filter by variation - allow compatible variations (same or one is null)
+                    // Note: Variation filtering is done at add-time in AddVisibleObject()
                     return VisibleObjects.Values
-                        .Where(v => AreVariationsCompatible(PhysicsObj.Position.Variation, v.Position.Variation))
                         .Select(v => v.WeenieObj.WorldObject)
                         .OfType<Creature>()
                         .ToList();
@@ -774,9 +772,9 @@ namespace ACE.Server.Physics.Common
             rwLock.EnterReadLock();
             try
             {
-                // CONQUEST: Filter by variation - allow compatible variations (same or one is null)
+                // Note: Variation filtering is done at add-time in AddKnownPlayer()
+                // Don't filter here - we need to reach all players for destroy broadcasts
                 return KnownPlayers.Values
-                    .Where(v => AreVariationsCompatible(PhysicsObj.Position.Variation, v.Position.Variation))
                     .Select(v => v.WeenieObj.WorldObject)
                     .OfType<Player>()
                     .ToList();
@@ -970,9 +968,8 @@ namespace ACE.Server.Physics.Common
                         return new List<Creature>();
                     }
 
-                    // CONQUEST: Filter by variation - allow compatible variations (same or one is null)
+                    // Note: Variation filtering is done at add-time in AddVisibleTarget()
                     return VisibleTargets.Values
-                        .Where(v => AreVariationsCompatible(PhysicsObj?.Position?.Variation, v.WeenieObj.WorldObject?.Location.Variation))
                         .Select(v => v.WeenieObj.WorldObject)
                         .OfType<Creature>()
                         .ToList();
