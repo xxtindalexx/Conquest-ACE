@@ -38,5 +38,9 @@ namespace ACE.Common
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public long PvPChannelId { get; set; }
 
+        [System.ComponentModel.DefaultValue(0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public long SoloExportsChannelId { get; set; }
+
     }
 }

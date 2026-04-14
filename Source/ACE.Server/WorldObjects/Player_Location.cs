@@ -1249,17 +1249,20 @@ namespace ACE.Server.WorldObjects
                 return;
 
             var landblock = (ushort)(location.ObjCellId >> 16);
+            var variation = location.VariationId ?? 0;
 
-            if (!NoLog_Landblocks.Contains(landblock))
+            // CONQUEST: Check if player is in a PK dungeon (landblock + variation)
+            // PK dungeons are always no-log landblocks
+            var isInPKDungeon = ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((landblock, variation));
+
+            // Check standard no-log landblocks (base landblocks only, no variations)
+            var isInNoLogLandblock = !location.VariationId.HasValue && NoLog_Landblocks.Contains(landblock);
+
+            if (!isInPKDungeon && !isInNoLogLandblock)
                 return;
 
             if (!biota.PropertiesPosition.TryGetValue(PositionType.Sanctuary, out var lifestone))
                 return;
-
-            if (location.VariationId.HasValue)
-            {
-                return; // Variations can't be no-log landblocks. Reserved for base landblocks only.
-            }
 
             location.ObjCellId = lifestone.ObjCellId;
             location.PositionX = lifestone.PositionX;
@@ -1279,6 +1282,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// CONQUEST: Checks if player is locked out of a PK dungeon at the destination
         /// Returns true if locked out, with an appropriate message
+        /// Checks both death lockouts (scaling) and logout lockouts (fixed 20 min)
         /// </summary>
         private bool IsLockedOutOfPKDungeon(Position destination, out string message)
         {
@@ -1295,39 +1299,56 @@ namespace ACE.Server.WorldObjects
             if (!ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((destLandblock, destVariation)))
                 return false;
 
-            // Check if player has a lockout for this dungeon
+            var packedDestination = ((long)destLandblock << 16) | (long)destVariation;
+            var currentTime = Time.GetUnixTime();
+
+            // Check death lockout first (scaling duration)
             var lastDeathLocation = LastPKDungeonDeathLocation ?? 0;
             var lastDeathTime = LastPKDungeonDeathTime ?? 0;
 
-            if (lastDeathLocation == 0 || lastDeathTime == 0)
-                return false;
+            if (lastDeathLocation == packedDestination && lastDeathTime > 0)
+            {
+                var timeSinceDeath = currentTime - lastDeathTime;
+                var deathCount = (int)(PKDungeonDeathCount ?? 1);
+                var lockoutDuration = GetPKDungeonLockoutDuration(deathCount);
 
-            // Unpack the landblock and variation from stored death location
-            var deathLandblock = (ushort)(lastDeathLocation >> 16);
-            var deathVariation = (int)(lastDeathLocation & 0xFFFF);
+                if (timeSinceDeath < lockoutDuration)
+                {
+                    // Player is locked out due to death
+                    var remainingSeconds = (int)(lockoutDuration - timeSinceDeath);
+                    var hours = remainingSeconds / 3600;
+                    var minutes = (remainingSeconds % 3600) / 60;
 
-            // Check if they died in this specific dungeon
-            if (deathLandblock != destLandblock || deathVariation != destVariation)
-                return false;
+                    if (hours > 0)
+                        message = $"You are locked out of this dungeon for {hours} hour{(hours == 1 ? "" : "s")} and {minutes} minute{(minutes == 1 ? "" : "s")} after dying to a player there.";
+                    else
+                        message = $"You are locked out of this dungeon for {minutes} more minute{(minutes == 1 ? "" : "s")} after dying to a player there.";
 
-            // Check if lockout is still active
-            var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
-            var lockoutDuration = 7200; // 2 hours in seconds
+                    return true;
+                }
+            }
 
-            if (timeSinceDeath >= lockoutDuration)
-                return false;
+            // Check logout lockout (fixed 20-minute duration)
+            var logoutLockoutLocation = PKDungeonLogoutLockoutLocation ?? 0;
+            var logoutLockoutTime = PKDungeonLogoutLockoutTime ?? 0;
 
-            // Player is locked out
-            var remainingSeconds = (int)(lockoutDuration - timeSinceDeath);
-            var hours = remainingSeconds / 3600;
-            var minutes = (remainingSeconds % 3600) / 60;
+            if (logoutLockoutLocation == packedDestination && logoutLockoutTime > 0)
+            {
+                var timeSinceLogout = currentTime - logoutLockoutTime;
+                var logoutLockoutDuration = 20 * 60; // 20 minutes in seconds
 
-            if (hours > 0)
-                message = $"You are locked out of this dungeon for {hours} hour{(hours == 1 ? "" : "s")} and {minutes} minute{(minutes == 1 ? "" : "s")} after dying to a player there.";
-            else
-                message = $"You are locked out of this dungeon for {minutes} more minute{(minutes == 1 ? "" : "s")} after dying to a player there.";
+                if (timeSinceLogout < logoutLockoutDuration)
+                {
+                    // Player is locked out due to logout abuse
+                    var remainingSeconds = (int)(logoutLockoutDuration - timeSinceLogout);
+                    var minutes = (remainingSeconds + 59) / 60; // Round up
 
-            return true;
+                    message = $"You are locked out of this dungeon for {minutes} more minute{(minutes == 1 ? "" : "s")} after logging out there multiple times.";
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

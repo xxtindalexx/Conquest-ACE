@@ -97,5 +97,14 @@ namespace ACE.Entity.Enum.Properties
 
         // CONQUEST: Gem of Soul Recovery cooldown (20 hour cooldown)
         LastSoulRecoveryGemUseTime = 9056,  // Unix timestamp of last gem use
+
+        // CONQUEST: PK Dungeon death count for scaling lockout timers
+        PKDungeonDeathCount = 9057,  // Death count in current PK dungeon (resets at midnight)
+
+        // CONQUEST: PK Dungeon logout abuse tracking (2+ logouts in 1 hour = 20 min lockout)
+        FirstPKDungeonLogoutTime = 9058,      // Unix timestamp of first logout in current 1-hour window
+        PKDungeonLogoutCount = 9059,          // Number of logouts in current 1-hour window
+        PKDungeonLogoutLockoutTime = 9060,    // Unix timestamp when logout lockout was applied
+        PKDungeonLogoutLockoutLocation = 9061, // Packed landblock+variant for logout lockout
     }
 }

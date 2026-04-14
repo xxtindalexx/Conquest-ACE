@@ -586,6 +586,11 @@ namespace ACE.Server.Managers
                 ("pk_server", new Property<bool>(false, "set this to TRUE for darktide servers")),
                 ("pk_server_safe_training_academy", new Property<bool>(false, "set this to TRUE to disable pk fighting in training academy and time to exit starter town safely")),
                 ("pvp_disable_custom_augs", new Property<bool>(false, "CONQUEST: if TRUE, custom augmentations (PropertyInt64 9007-9026) are temporarily disabled during PvP combat for balanced fights. Augmentations are restored after pvp_custom_aug_timeout seconds without combat.")),
+                ("pvp_nether_protection_enabled", new Property<bool>(false, "CONQUEST: If TRUE, applies synthetic nether protection to players in PvP to balance nether weapon damage against elemental weapons. Uses pvp_nether_protection_spell and pvp_nether_protection_ward values.")),
+                ("pvp_disable_biting_strike", new Property<bool>(true, "PvP: Disable Biting Strike (CriticalFrequency property) on items - only Critical Strike imbue works")),
+                ("pvp_disable_crushing_blow", new Property<bool>(true, "PvP: Disable Crushing Blow (CriticalMultiplier property) on items - only Crippling Blow imbue works")),
+                ("pvp_disable_armor_cleaving", new Property<bool>(true, "PvP: Disable Armor Cleaving (IgnoreArmor property) on items - only Armor Rending imbue works")),
+                ("pvp_disable_ignore_all_armor", new Property<bool>(true, "PvP: Disable IgnoreAllArmor imbue (Phantom weapons) in PvP")),
                 ("dispel_rares_pvp", new Property<bool>(false, "CONQUEST: if TRUE, rare gem spell buffs are automatically dispelled when PvP combat begins, and rare gems cannot be used while PK timer is active.")),
                 ("enable_vpn_detection", new Property<bool>(true, "CONQUEST: if TRUE, enables VPN/proxy detection using proxycheck.io API. Requires proxycheck_api_key to be set. Logs detected VPNs and their ISP information.")),
                 ("pkl_server", new Property<bool>(false, "set this to TRUE for pink servers")),
@@ -687,6 +692,7 @@ namespace ACE.Server.Managers
                 ("major_cantrip_drop_rate", new Property<double>(1.0, "Scales the chance for major cantrips to drop, relative to other cantrip levels in the tier. Defaults to 1.0, as per end of retail")),
                 ("epic_cantrip_drop_rate", new Property<double>(1.0, "Scales the chance for epic cantrips to drop, relative to other cantrip levels in the tier. Defaults to 1.0, as per end of retail")),
                 ("legendary_cantrip_drop_rate", new Property<double>(1.0, "Scales the chance for legendary cantrips to drop, relative to other cantrip levels in the tier. Defaults to 1.0, as per end of retail")),
+                ("treasure_map_drop_rate", new Property<double>(0.01, "CONQUEST: Chance for treasure maps to drop from monsters. 0.01 = 1%, 0.10 = 10%, etc. Default is 0.01 (1%)")),
 
                 ("advocate_fane_auto_bestow_level", new Property<double>(1, "the level that advocates are automatically bestowed by Advocate Fane if advocate_fane_auto_bestow is true")),
                 ("aetheria_drop_rate", new Property<double>(1.0, "Modifier for Aetheria drop rate, 1 being normal")),
@@ -743,6 +749,15 @@ namespace ACE.Server.Managers
                 // ===================================================================================
                 // PvP Damage Configuration System - Granular control over PvP damage scaling
                 // ===================================================================================
+
+                // PvP Effect Caps - Maximum values for imbue/weapon property effects in PvP
+                // Set to 0 to disable cap (use full calculated value)
+                ("pvp_max_crippling_blow", new Property<double>(0, "PvP: Max Crippling Blow crit damage multiplier (0 = no cap, e.g. 3.5)")),
+                ("pvp_max_crushing_blow", new Property<double>(0, "PvP: Max Crushing Blow crit damage multiplier (0 = no cap, e.g. 2.0)")),
+                ("pvp_max_biting_strike", new Property<double>(0, "PvP: Max Biting Strike crit chance (0 = no cap, e.g. 0.25 = 25%)")),
+                ("pvp_max_critical_strike", new Property<double>(0, "PvP: Max Critical Strike crit chance (0 = no cap, e.g. 0.25 = 25%)")),
+                ("pvp_max_armor_rend", new Property<double>(0, "PvP: Max Armor Rending penetration multiplier (0 = no cap, e.g. 2.0)")),
+                ("pvp_max_armor_cleaving", new Property<double>(0, "PvP: Max Armor Cleaving reduction (0 = no cap, e.g. 0.5 = 50% armor ignored)")),
 
                 // Global Imbue Modifiers
                 ("pvp_dmg_mod_ar", new Property<double>(1.0, "PvP: Global Armor Rending damage modifier")),
@@ -968,7 +983,63 @@ namespace ACE.Server.Managers
 
                 // PvE Void DoT
                 ("pve_void_dot_damage_mod", new Property<double>(1.0, "PvE: Void DoT damage dealt to mobs modifier")),
-                ("pve_void_dot_drr_mod", new Property<double>(1.0, "PvE: Void DoT Damage Resistance Reduction effectiveness on mobs. Scales how much extra damage mobs take when they have Void DoTs applied (the DRR debuff portion)."))
+                ("pve_void_dot_drr_mod", new Property<double>(1.0, "PvE: Void DoT Damage Resistance Reduction effectiveness on mobs. Scales how much extra damage mobs take when they have Void DoTs applied (the DRR debuff portion).")),
+
+                // ===================================================================================
+                // PvP Synthetic Nether Protection - Simulates missing nether protection spells/wards
+                // ===================================================================================
+                // Since players cannot get Nether Protection spells or Nether Wards, nether weapon
+                // damage is significantly higher than elemental damage in PvP. These settings allow
+                // applying synthetic protection to balance nether weapons against elemental weapons.
+                //
+                // For reference, elemental damage typically has:
+                // - Protection VII spell: ~68% reduction (0.32 multiplier)
+                // - Legendary Ward: 25% additional reduction (0.75 multiplier)
+                // - Combined: 0.32 * 0.75 = 0.24 (takes 24% damage)
+                //
+                // Nether only has:
+                // - Natural "Asheron's Protection": 50% reduction (0.5 multiplier)
+                // - No protection spells or wards available
+                // - Result: takes 50% damage (more than double elemental!)
+                // ===================================================================================
+                ("pvp_nether_protection_spell", new Property<double>(0.32, "CONQUEST: Synthetic Nether Protection spell multiplier. 0.32 = equivalent to Protection VII (68% reduction). Only applies if pvp_nether_protection_enabled is TRUE.")),
+                ("pvp_nether_protection_ward", new Property<double>(0.75, "CONQUEST: Synthetic Nether Ward multiplier. 0.75 = equivalent to Legendary Ward (25% reduction). Only applies if pvp_nether_protection_enabled is TRUE.")),
+                // Weapon-specific Nether Armor Override for PvP
+                // These REPLACE the ArmorMod entirely for nether damage, simulating tinkered armor with nether bane
+                // 0 = disabled (use actual armor values), 0.3 = 70% protection, 0.5 = 50% protection, etc.
+                ("pvp_nether_armor_override_heavy", new Property<double>(0, "CONQUEST: Override ArmorMod for nether Heavy Weapons in PvP. 0 = use actual armor, 0.3 = 70% protection.")),
+                ("pvp_nether_armor_override_light", new Property<double>(0, "CONQUEST: Override ArmorMod for nether Light Weapons in PvP. 0 = use actual armor, 0.3 = 70% protection.")),
+                ("pvp_nether_armor_override_finesse", new Property<double>(0, "CONQUEST: Override ArmorMod for nether Finesse Weapons in PvP. 0 = use actual armor, 0.3 = 70% protection.")),
+                ("pvp_nether_armor_override_2h", new Property<double>(0, "CONQUEST: Override ArmorMod for nether Two-Handed Weapons in PvP. 0 = use actual armor, 0.3 = 70% protection.")),
+                ("pvp_nether_armor_override_bow", new Property<double>(0, "CONQUEST: Override ArmorMod for nether Bows in PvP. 0 = use actual armor, 0.3 = 70% protection.")),
+                ("pvp_nether_armor_override_xbow", new Property<double>(0, "CONQUEST: Override ArmorMod for nether Crossbows in PvP. 0 = use actual armor, 0.3 = 70% protection.")),
+                ("pvp_nether_armor_override_thrown", new Property<double>(0, "CONQUEST: Override ArmorMod for nether Thrown Weapons in PvP. 0 = use actual armor, 0.3 = 70% protection.")),
+                ("pvp_nether_armor_override_atlatl", new Property<double>(0, "CONQUEST: Override ArmorMod for nether Atlatls in PvP. 0 = use actual armor, 0.3 = 70% protection.")),
+
+                // Extremity penalty for nether armor override (head/hands/feet take slightly more damage)
+                ("pvp_nether_armor_extremity_penalty", new Property<double>(0, "CONQUEST: Added to nether armor override for head/hands/feet. E.g., 0.02 means extremities get 2% less protection.")),
+
+                // Weapon-specific Nether Damage multipliers for PvP (1.0 = no change, >1.0 = boost, <1.0 = reduce)
+                // Use these to compensate for lack of Nether Vuln spells and Asheron's Protection
+                ("pvp_nether_damage_mod_heavy", new Property<double>(1.0, "CONQUEST: Nether damage multiplier for Heavy Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_damage_mod_light", new Property<double>(1.0, "CONQUEST: Nether damage multiplier for Light Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_damage_mod_finesse", new Property<double>(1.0, "CONQUEST: Nether damage multiplier for Finesse Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_damage_mod_2h", new Property<double>(1.0, "CONQUEST: Nether damage multiplier for Two-Handed Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_damage_mod_bow", new Property<double>(1.0, "CONQUEST: Nether damage multiplier for Bows in PvP. 1.0 = no change.")),
+                ("pvp_nether_damage_mod_xbow", new Property<double>(1.0, "CONQUEST: Nether damage multiplier for Crossbows in PvP. 1.0 = no change.")),
+                ("pvp_nether_damage_mod_thrown", new Property<double>(1.0, "CONQUEST: Nether damage multiplier for Thrown Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_damage_mod_atlatl", new Property<double>(1.0, "CONQUEST: Nether damage multiplier for Atlatls in PvP. 1.0 = no change.")),
+
+                // Weapon-specific Nether CRIT damage multipliers for PvP (applied AFTER pvp_nether_damage_mod, only on crits)
+                // Use these to fine-tune nether crit damage independently from non-crit damage
+                ("pvp_nether_crit_mod_heavy", new Property<double>(1.0, "CONQUEST: Nether CRIT damage multiplier for Heavy Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_crit_mod_light", new Property<double>(1.0, "CONQUEST: Nether CRIT damage multiplier for Light Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_crit_mod_finesse", new Property<double>(1.0, "CONQUEST: Nether CRIT damage multiplier for Finesse Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_crit_mod_2h", new Property<double>(1.0, "CONQUEST: Nether CRIT damage multiplier for Two-Handed Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_crit_mod_bow", new Property<double>(1.0, "CONQUEST: Nether CRIT damage multiplier for Bows in PvP. 1.0 = no change.")),
+                ("pvp_nether_crit_mod_xbow", new Property<double>(1.0, "CONQUEST: Nether CRIT damage multiplier for Crossbows in PvP. 1.0 = no change.")),
+                ("pvp_nether_crit_mod_thrown", new Property<double>(1.0, "CONQUEST: Nether CRIT damage multiplier for Thrown Weapons in PvP. 1.0 = no change.")),
+                ("pvp_nether_crit_mod_atlatl", new Property<double>(1.0, "CONQUEST: Nether CRIT damage multiplier for Atlatls in PvP. 1.0 = no change."))
 
                 );
 

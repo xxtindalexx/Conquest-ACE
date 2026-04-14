@@ -58,8 +58,13 @@ namespace ACE.Server.Network.GameEvent.Events
                 if (session.Player.VendorBankMode)
                 {
                     var bankedAltCurrency = session.Player.GetBankedAlternateCurrency(vendor.AlternateCurrency.Value);
-                    var totalFunds = altCurrencyInInventory + (uint)bankedAltCurrency;
-                    Writer.Write(totalFunds + altCurrencySpent);
+                    var totalFunds = altCurrencyInInventory + (long)bankedAltCurrency + altCurrencySpent;
+
+                    // Cap at int.MaxValue to prevent overflow - client displays as signed int
+                    if (totalFunds > int.MaxValue)
+                        totalFunds = int.MaxValue;
+
+                    Writer.Write((uint)totalFunds);
 
                 }
                 else
@@ -75,9 +80,13 @@ namespace ACE.Server.Network.GameEvent.Events
                 // CONQUEST: VendorBankMode hack - send pyreals as alternate currency
                 var bankedPyreals = session.Player.BankedPyreals ?? 0;
                 var inventoryPyreals = session.Player.CoinValue ?? 0;
-                var totalFunds = (uint)(inventoryPyreals + bankedPyreals);
+                var totalFunds = inventoryPyreals + bankedPyreals;
 
-                Writer.Write(totalFunds);
+                // Cap at int.MaxValue to prevent overflow - client displays as signed int
+                if (totalFunds > int.MaxValue)
+                    totalFunds = int.MaxValue;
+
+                Writer.Write((uint)totalFunds);
                 Writer.WriteString16L("Pyreals");
 
             }

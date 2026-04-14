@@ -92,6 +92,8 @@ namespace ACE.Server.Entity
         public float DamageBeforeMitigation;
 
         public float ArmorMod;
+        public float EffectiveAL;        // Total effective armor level before conversion to ArmorMod
+        public int BodyArmorMod;         // Life magic armor buff/debuff (Armor Self / Imperil)
         public float ResistanceMod;
         public float ShieldMod;
         public float WeaponResistanceMod;
@@ -370,6 +372,27 @@ namespace ACE.Server.Entity
 
             var armorCleavingMod = attacker.GetArmorCleavingMod(Weapon);
 
+            // Apply PvP handling for Armor Cleaving (weapon property)
+            var isPvPCleave = attacker is Player && defender is Player;
+            if (isPvPCleave && armorCleavingMod < 1.0f)
+            {
+                // CONQUEST: Disable Armor Cleaving entirely in PvP - only Armor Rending imbue works
+                if (PropertyManager.GetBool("pvp_disable_armor_cleaving"))
+                {
+                    armorCleavingMod = 1.0f;
+                }
+                else
+                {
+                    var pvpCapCleaving = (float)PropertyManager.GetDouble("pvp_max_armor_cleaving");
+                    if (pvpCapCleaving > 0)
+                    {
+                        // armorCleavingMod is inverted (lower = more armor ignored), so we take Max
+                        // e.g. 0.3 means 70% armor ignored, cap of 0.5 means max 50% ignored
+                        armorCleavingMod = Math.Max(armorCleavingMod, 1.0f - pvpCapCleaving);
+                    }
+                }
+            }
+
             var ignoreArmorMod = Math.Min(armorRendingMod, armorCleavingMod);
 
             // get body part / armor pieces / armor modifier
@@ -383,6 +406,9 @@ namespace ACE.Server.Entity
 
                 // get armor modifiers
                 ArmorMod = attacker.GetArmorMod(playerDefender, DamageType, Armor, Weapon, ignoreArmorMod);
+
+                // Capture bodyArmorMod for debug output (Armor Self / Imperil effects)
+                BodyArmorMod = playerDefender.EnchantmentManager.GetBodyArmorMod();
             }
             else
             {
@@ -400,8 +426,48 @@ namespace ACE.Server.Entity
                 ArmorMod = CreaturePart.GetArmorMod(DamageType, Armor, Attacker, Weapon, ignoreArmorMod);
             }
 
+            // CONQUEST: Disable IgnoreAllArmor (Phantom weapons) in PvP if configured
             if (Weapon != null && Weapon.HasImbuedEffect(ImbuedEffectType.IgnoreAllArmor))
-                ArmorMod = 1.0f;
+            {
+                if (!pkBattle || !PropertyManager.GetBool("pvp_disable_ignore_all_armor"))
+                    ArmorMod = 1.0f;
+            }
+
+            // CONQUEST: Apply synthetic nether armor override in PvP
+            // Since players cannot get Nether Bane spells or tinker ArmorModVsNether,
+            // this REPLACES the ArmorMod entirely to simulate properly protected armor
+            if (pkBattle && DamageType == DamageType.Nether && PropertyManager.GetBool("pvp_nether_protection_enabled"))
+            {
+                var armorOverride = GetNetherArmorOverrideForWeapon(Weapon);
+                if (armorOverride > 0)
+                {
+                    // Convert the override ArmorMod to effective AL, apply Imperil, then convert back
+                    // ArmorMod = 66.67 / (AL + 66.67) for positive AL
+                    // So AL = 66.67 * (1 - ArmorMod) / ArmorMod
+                    const float ArmorModConstant = 200.0f / 3.0f; // ~66.67
+                    float syntheticAL = ArmorModConstant * (1.0f - armorOverride) / armorOverride;
+
+                    // Apply Imperil/Armor enchantments (negative = Imperil, positive = Armor Self)
+                    syntheticAL += BodyArmorMod;
+
+                    // Apply extremity penalty for head/hands/feet (reduces effective AL)
+                    var extremityPenalty = (float)PropertyManager.GetDouble("pvp_nether_armor_extremity_penalty");
+                    if (extremityPenalty > 0)
+                    {
+                        var bodyPart = PropertiesBodyPart.Key;
+                        if (bodyPart == CombatBodyPart.Head ||
+                            bodyPart == CombatBodyPart.Hand ||
+                            bodyPart == CombatBodyPart.Foot)
+                        {
+                            // Convert extremity penalty (ArmorMod delta) to AL reduction
+                            syntheticAL -= extremityPenalty * ArmorModConstant;
+                        }
+                    }
+
+                    // Convert back to ArmorMod using the standard formula
+                    ArmorMod = SkillFormula.CalcArmorMod(syntheticAL);
+                }
+            }
 
             // get resistance modifiers
             WeaponResistanceMod = WorldObject.GetWeaponResistanceModifier(Weapon, attacker, attackSkill, DamageType, defender);
@@ -409,6 +475,24 @@ namespace ACE.Server.Entity
             if (playerDefender != null)
             {
                 ResistanceMod = playerDefender.GetResistanceMod(DamageType, Attacker, Weapon, WeaponResistanceMod);
+
+                // CONQUEST: Apply synthetic nether protection in PvP
+                // Since players cannot get Nether Protection spells or Nether Wards,
+                // this simulates those protections to balance nether weapons against elemental weapons
+                if (pkBattle && DamageType == DamageType.Nether && PropertyManager.GetBool("pvp_nether_protection_enabled"))
+                {
+                    var syntheticProtSpell = (float)PropertyManager.GetDouble("pvp_nether_protection_spell");
+                    var syntheticProtWard = (float)PropertyManager.GetDouble("pvp_nether_protection_ward");
+
+                    // Apply synthetic protection spell (simulates Nether Protection VII)
+                    // Only apply if it would provide better protection than current
+                    if (syntheticProtSpell > 0 && syntheticProtSpell < ResistanceMod)
+                        ResistanceMod = syntheticProtSpell;
+
+                    // Apply synthetic ward (simulates Legendary Nether Ward) - multiplicative
+                    if (syntheticProtWard > 0 && syntheticProtWard < 1.0f)
+                        ResistanceMod *= syntheticProtWard;
+                }
             }
             else
             {
@@ -469,6 +553,21 @@ namespace ACE.Server.Entity
 
                 // Step 4: Apply imbue effect modifiers (multiplicative)
                 pvpConfigMod *= GetPvPImbueMod(Weapon, weaponPrefix, IsCritical);
+
+                // Step 5: Apply nether damage multiplier if this is nether damage
+                // This compensates for lack of Nether Vuln spells and Asheron's Protection
+                if (DamageType == DamageType.Nether)
+                {
+                    var netherDamageMod = GetNetherDamageModForWeapon(Weapon);
+                    pvpConfigMod *= netherDamageMod;
+
+                    // Apply additional nether crit modifier if this is a critical hit
+                    if (IsCritical)
+                    {
+                        var netherCritMod = GetNetherCritModForWeapon(Weapon);
+                        pvpConfigMod *= netherCritMod;
+                    }
+                }
 
                 // Apply final PvP configuration modifier
                 Damage *= pvpConfigMod;
@@ -755,6 +854,10 @@ namespace ACE.Server.Entity
             if (ArmorMod != 0.0f && ArmorMod != 1.0f)
                 info += $"ArmorMod: {ArmorMod}\n";
 
+            // Show BodyArmorMod (Armor Self / Imperil effect) - always show in debug if non-zero
+            if (BodyArmorMod != 0)
+                info += $"BodyArmorMod (Imperil/Armor): {BodyArmorMod}\n";
+
             if (ResistanceMod != 0.0f && ResistanceMod != 1.0f)
                 info += $"ResistanceMod: {ResistanceMod}\n";
 
@@ -953,6 +1056,180 @@ namespace ACE.Server.Entity
             // They would need separate detection if implemented in the game
 
             return imbueMod;
+        }
+
+        /// <summary>
+        /// CONQUEST: Gets the nether armor override value for PvP based on weapon type
+        /// When > 0, this REPLACES ArmorMod entirely to simulate tinkered armor with nether bane
+        /// Returns 0 if no override is configured (use actual armor values)
+        /// </summary>
+        private static float GetNetherArmorOverrideForWeapon(WorldObject weapon)
+        {
+            if (weapon == null)
+                return 0;
+
+            string configKey = null;
+
+            // Check missile weapons first by CombatStyle
+            if (weapon.WeaponSkill == Skill.MissileWeapons)
+            {
+                switch (weapon.DefaultCombatStyle)
+                {
+                    case CombatStyle.Bow:
+                        configKey = "pvp_nether_armor_override_bow";
+                        break;
+                    case CombatStyle.Crossbow:
+                        configKey = "pvp_nether_armor_override_xbow";
+                        break;
+                    case CombatStyle.ThrownWeapon:
+                    case CombatStyle.ThrownShield:
+                        configKey = "pvp_nether_armor_override_thrown";
+                        break;
+                    case CombatStyle.Atlatl:
+                        configKey = "pvp_nether_armor_override_atlatl";
+                        break;
+                }
+            }
+            else
+            {
+                // Check melee weapons by WeaponSkill
+                switch (weapon.WeaponSkill)
+                {
+                    case Skill.HeavyWeapons:
+                        configKey = "pvp_nether_armor_override_heavy";
+                        break;
+                    case Skill.LightWeapons:
+                        configKey = "pvp_nether_armor_override_light";
+                        break;
+                    case Skill.FinesseWeapons:
+                        configKey = "pvp_nether_armor_override_finesse";
+                        break;
+                    case Skill.TwoHandedCombat:
+                        configKey = "pvp_nether_armor_override_2h";
+                        break;
+                }
+            }
+
+            if (configKey != null)
+                return (float)PropertyManager.GetDouble(configKey);
+
+            return 0;
+        }
+
+        /// <summary>
+        /// CONQUEST: Gets the nether damage multiplier for PvP based on weapon type
+        /// Used to compensate for lack of Nether Vuln spells and Asheron's Protection
+        /// Returns 1.0 if no weapon-specific value is configured
+        /// </summary>
+        private static float GetNetherDamageModForWeapon(WorldObject weapon)
+        {
+            if (weapon == null)
+                return 1.0f;
+
+            string configKey = null;
+
+            // Check missile weapons first by CombatStyle
+            if (weapon.WeaponSkill == Skill.MissileWeapons)
+            {
+                switch (weapon.DefaultCombatStyle)
+                {
+                    case CombatStyle.Bow:
+                        configKey = "pvp_nether_damage_mod_bow";
+                        break;
+                    case CombatStyle.Crossbow:
+                        configKey = "pvp_nether_damage_mod_xbow";
+                        break;
+                    case CombatStyle.ThrownWeapon:
+                    case CombatStyle.ThrownShield:
+                        configKey = "pvp_nether_damage_mod_thrown";
+                        break;
+                    case CombatStyle.Atlatl:
+                        configKey = "pvp_nether_damage_mod_atlatl";
+                        break;
+                }
+            }
+            else
+            {
+                // Check melee weapons by WeaponSkill
+                switch (weapon.WeaponSkill)
+                {
+                    case Skill.HeavyWeapons:
+                        configKey = "pvp_nether_damage_mod_heavy";
+                        break;
+                    case Skill.LightWeapons:
+                        configKey = "pvp_nether_damage_mod_light";
+                        break;
+                    case Skill.FinesseWeapons:
+                        configKey = "pvp_nether_damage_mod_finesse";
+                        break;
+                    case Skill.TwoHandedCombat:
+                        configKey = "pvp_nether_damage_mod_2h";
+                        break;
+                }
+            }
+
+            if (configKey != null)
+                return (float)PropertyManager.GetDouble(configKey);
+
+            return 1.0f;
+        }
+
+        /// <summary>
+        /// CONQUEST: Gets the nether CRIT damage multiplier for PvP based on weapon type
+        /// Applied after the base nether damage mod, only on critical hits
+        /// Returns 1.0 if no weapon-specific value is configured
+        /// </summary>
+        private static float GetNetherCritModForWeapon(WorldObject weapon)
+        {
+            if (weapon == null)
+                return 1.0f;
+
+            string configKey = null;
+
+            // Check missile weapons first by CombatStyle
+            if (weapon.WeaponSkill == Skill.MissileWeapons)
+            {
+                switch (weapon.DefaultCombatStyle)
+                {
+                    case CombatStyle.Bow:
+                        configKey = "pvp_nether_crit_mod_bow";
+                        break;
+                    case CombatStyle.Crossbow:
+                        configKey = "pvp_nether_crit_mod_xbow";
+                        break;
+                    case CombatStyle.ThrownWeapon:
+                    case CombatStyle.ThrownShield:
+                        configKey = "pvp_nether_crit_mod_thrown";
+                        break;
+                    case CombatStyle.Atlatl:
+                        configKey = "pvp_nether_crit_mod_atlatl";
+                        break;
+                }
+            }
+            else
+            {
+                // Check melee weapons by WeaponSkill
+                switch (weapon.WeaponSkill)
+                {
+                    case Skill.HeavyWeapons:
+                        configKey = "pvp_nether_crit_mod_heavy";
+                        break;
+                    case Skill.LightWeapons:
+                        configKey = "pvp_nether_crit_mod_light";
+                        break;
+                    case Skill.FinesseWeapons:
+                        configKey = "pvp_nether_crit_mod_finesse";
+                        break;
+                    case Skill.TwoHandedCombat:
+                        configKey = "pvp_nether_crit_mod_2h";
+                        break;
+                }
+            }
+
+            if (configKey != null)
+                return (float)PropertyManager.GetDouble(configKey);
+
+            return 1.0f;
         }
     }
 }

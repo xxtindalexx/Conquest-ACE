@@ -610,6 +610,24 @@ namespace ACE.Server.WorldObjects
 
                         // this supposedly brings the direct damage from void spells in pvp closer to retail
                         resistanceMod *= (float)PropertyManager.GetDouble("void_pvp_modifier");
+
+                        // CONQUEST: Apply synthetic nether protection in PvP for void magic
+                        // Since players cannot get Nether Protection spells or Nether Wards,
+                        // this simulates those protections to balance void magic against other schools
+                        if (PropertyManager.GetBool("pvp_nether_protection_enabled"))
+                        {
+                            var syntheticProtSpell = (float)PropertyManager.GetDouble("pvp_nether_protection_spell");
+                            var syntheticProtWard = (float)PropertyManager.GetDouble("pvp_nether_protection_ward");
+
+                            // Apply synthetic protection spell (simulates Nether Protection VII)
+                            // Only apply if it would provide better protection than current
+                            if (syntheticProtSpell > 0 && syntheticProtSpell < resistanceMod)
+                                resistanceMod = syntheticProtSpell;
+
+                            // Apply synthetic ward (simulates Legendary Nether Ward) - multiplicative
+                            if (syntheticProtWard > 0 && syntheticProtWard < 1.0f)
+                                resistanceMod *= syntheticProtWard;
+                        }
                     }
 
                     finalDamage = baseDamage + critDamageBonus + skillBonus;

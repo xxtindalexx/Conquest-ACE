@@ -8658,5 +8658,20 @@ namespace ACE.Server.Command.Handlers
             Managers.EconomyStatsManager.CleanupOldData(daysToKeep);
             CommandHandlerHelper.WriteOutputInfo(session, $"Economy stats cleanup completed. Kept last {daysToKeep} days of data.");
         }
+
+        /// <summary>
+        /// CONQUEST: Export all player data to CSV for analysis
+        /// </summary>
+        [CommandHandler("export-players", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Exports all player data to CSV and uploads to Discord",
+            "Exports character data including account info, level, enlightenment, augmentations, and bank contents.\nExcludes deleted characters and mules. Uploads to SoloExportsChannelId.")]
+        public static void HandleExportPlayers(Session session, params string[] parameters)
+        {
+            var requestedBy = session?.Player?.Name ?? "Console";
+
+            CommandHandlerHelper.WriteOutputInfo(session, "Player export started. CSV will be uploaded to Discord when complete.");
+
+            Managers.PlayerExportManager.ExportPlayersAsync(requestedBy);
+        }
     }
 }

@@ -47,12 +47,7 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship leave", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship disband", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship list to see all fellowships looking for members", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship queue to see your queue status, /fship queue leave to leave queues", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship votekick <name> to start a vote to kick a player", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /fship vote yes or /fship vote no to vote on an active kick", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /voteleader to start a vote to become the new leader", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: use /voteleader yes or /voteleader no to vote on leadership", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: tell any fellowship member 'xp' to join (or queue if full)", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: tell any fellowship member 'xp' to join", ChatMessageType.Broadcast));
                 return;
             }
 
@@ -66,7 +61,7 @@ namespace ACE.Server.Command.Handlers
 
                     foreach (var player in PlayerManager.GetAllOnline())
                     {
-                        if (player.Fellowship != null && !player.Fellowship.IsLocked)
+                        if (player.Fellowship != null && !player.Fellowship.IsLocked && player.Fellowship.Open)
                         {
                             var fellowship = player.Fellowship;
                             var memberCount = fellowship.FellowshipMembers.Count;
@@ -158,6 +153,11 @@ namespace ACE.Server.Command.Handlers
                                 status = "HIDDEN";
                                 reason = "Locked";
                             }
+                            else if (!fellowship.Open)
+                            {
+                                status = "HIDDEN";
+                                reason = "Closed";
+                            }
                             else if (memberCount >= fellowship.GetMaxFellows())
                             {
                                 status = "HIDDEN";
@@ -185,47 +185,6 @@ namespace ACE.Server.Command.Handlers
 
                             session.Network.EnqueueSend(new GameMessageSystemChat($"  {fellowship.FellowshipName} (Leader: {leaderName}) [{memberCount}/{fellowship.GetMaxFellows()}] - {status} {reason}", ChatMessageType.Broadcast));
                         }
-                    }
-                    return;
-                }
-
-                // CONQUEST: Show queue status for player
-                if (parameters[0] == "queue")
-                {
-                    // Find which fellowships the player is queued for
-                    var queuedFor = new List<(string fellowName, int position)>();
-                    var seenFellowships = new HashSet<uint>();
-
-                    foreach (var onlinePlayer in PlayerManager.GetAllOnline())
-                    {
-                        if (onlinePlayer.Fellowship != null && !seenFellowships.Contains(onlinePlayer.Fellowship.FellowshipLeaderGuid))
-                        {
-                            seenFellowships.Add(onlinePlayer.Fellowship.FellowshipLeaderGuid);
-                            var fellowship = onlinePlayer.Fellowship;
-
-                            for (int i = 0; i < fellowship.WaitingQueue.Count; i++)
-                            {
-                                if (fellowship.WaitingQueue[i].CharacterId == session.Player.Guid.Full)
-                                {
-                                    queuedFor.Add((fellowship.FellowshipName, i + 1));
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (queuedFor.Count == 0)
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You are not in any fellowship queue. Tell a fellowship member 'xp' to join their queue.", ChatMessageType.Broadcast));
-                    }
-                    else
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You are queued for the following fellowships:", ChatMessageType.Broadcast));
-                        foreach (var (fellowName, position) in queuedFor)
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"  - {fellowName}: Position #{position}", ChatMessageType.Broadcast));
-                        }
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Use '/fship queue leave' to leave all queues.", ChatMessageType.Broadcast));
                     }
                     return;
                 }
@@ -304,73 +263,6 @@ namespace ACE.Server.Command.Handlers
                     return;
                 }
 
-                // CONQUEST: Vote kick with targeted player
-                if (parameters[0] == "votekick")
-                {
-                    if (session.Player.Fellowship == null)
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
-                        return;
-                    }
-
-                    var tPGuid = session.Player.CurrentAppraisalTarget;
-                    if (tPGuid != null)
-                    {
-                        var tplayer = PlayerManager.GetOnlinePlayer(tPGuid.Value);
-                        if (tplayer != null)
-                        {
-                            session.Player.Fellowship.StartVoteKick(session.Player, tplayer);
-                        }
-                        else
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Target player is not online.", ChatMessageType.Broadcast));
-                        }
-                    }
-                    else
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: No player targeted. Use /fship votekick <name> to vote kick by name.", ChatMessageType.Broadcast));
-                    }
-                    return;
-                }
-
-                // CONQUEST: Check vote status
-                if (parameters[0] == "vote")
-                {
-                    if (session.Player.Fellowship == null)
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
-                        return;
-                    }
-
-                    var vote = session.Player.Fellowship.ActiveVoteKick;
-                    if (vote == null || vote.IsExpired())
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: There is no active vote kick.", ChatMessageType.Broadcast));
-                    }
-                    else
-                    {
-                        var timeLeft = (int)(60 - (DateTime.UtcNow - vote.StartTime).TotalSeconds);
-                        var yesCount = vote.VotesYes.Count;
-                        var noCount = vote.VotesNo.Count;
-                        var status = yesCount > noCount ? "passing" : (yesCount < noCount ? "failing" : "tied");
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Vote to kick {vote.TargetName}: {yesCount} yes, {noCount} no (currently {status}). {timeLeft}s remaining.", ChatMessageType.Broadcast));
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Use /fship vote yes or /fship vote no to cast your vote.", ChatMessageType.Broadcast));
-                    }
-                    return;
-                }
-
-                // CONQUEST: Start vote for leadership
-                if (parameters[0] == "voteleader")
-                {
-                    if (session.Player.Fellowship == null)
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
-                        return;
-                    }
-
-                    session.Player.Fellowship.StartVoteLeader(session.Player);
-                    return;
-                }
             }
 
             if (parameters.Count() == 2)
@@ -378,28 +270,6 @@ namespace ACE.Server.Command.Handlers
                 if (parameters[0] == "create")
                 {
                     session.Player.FellowshipCreate(parameters[1], true);
-                    return;
-                }
-                // CONQUEST: Leave all fellowship queues
-                if (parameters[0] == "queue" && parameters[1].ToLower() == "leave")
-                {
-                    var removedCount = 0;
-                    var seenFellowships = new HashSet<uint>();
-
-                    foreach (var onlinePlayer in PlayerManager.GetAllOnline())
-                    {
-                        if (onlinePlayer.Fellowship != null && !seenFellowships.Contains(onlinePlayer.Fellowship.FellowshipLeaderGuid))
-                        {
-                            seenFellowships.Add(onlinePlayer.Fellowship.FellowshipLeaderGuid);
-                            if (onlinePlayer.Fellowship.RemoveFromWaitingQueue(session.Player))
-                                removedCount++;
-                        }
-                    }
-
-                    if (removedCount > 0)
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You have left {removedCount} fellowship queue(s).", ChatMessageType.Broadcast));
-                    else
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: You were not in any fellowship queues.", ChatMessageType.Broadcast));
                     return;
                 }
                 if (parameters[0] == "add")
@@ -429,110 +299,6 @@ namespace ACE.Server.Command.Handlers
                     return;
                 }
 
-                // CONQUEST: Vote kick by player name
-                if (parameters[0] == "votekick")
-                {
-                    if (session.Player.Fellowship == null)
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
-                        return;
-                    }
-
-                    var tplayer = PlayerManager.GetOnlinePlayer(parameters[1]);
-                    if (tplayer != null)
-                    {
-                        session.Player.Fellowship.StartVoteKick(session.Player, tplayer);
-                    }
-                    else
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[FSHIP]: Player '{parameters[1]}' is not online.", ChatMessageType.Broadcast));
-                    }
-                    return;
-                }
-
-                // CONQUEST: Cast vote on active vote kick
-                if (parameters[0] == "vote")
-                {
-                    if (session.Player.Fellowship == null)
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
-                        return;
-                    }
-
-                    var vote = parameters[1].ToLower();
-                    if (vote == "yes" || vote == "y")
-                    {
-                        session.Player.Fellowship.CastVote(session.Player, true);
-                    }
-                    else if (vote == "no" || vote == "n")
-                    {
-                        session.Player.Fellowship.CastVote(session.Player, false);
-                    }
-                    else
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Use /fship vote yes or /fship vote no", ChatMessageType.Broadcast));
-                    }
-                    return;
-                }
-
-                // CONQUEST: Cast vote on active leadership vote
-                if (parameters[0] == "voteleader")
-                {
-                    if (session.Player.Fellowship == null)
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
-                        return;
-                    }
-
-                    var vote = parameters[1].ToLower();
-                    if (vote == "yes" || vote == "y")
-                    {
-                        session.Player.Fellowship.CastVoteLeader(session.Player, true);
-                    }
-                    else if (vote == "no" || vote == "n")
-                    {
-                        session.Player.Fellowship.CastVoteLeader(session.Player, false);
-                    }
-                    else
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Use /fship voteleader yes or /fship voteleader no", ChatMessageType.Broadcast));
-                    }
-                    return;
-                }
-            }
-        }
-
-        // CONQUEST: Vote for leadership
-        [CommandHandler("voteleader", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
-            "Vote for fellowship leadership",
-            "/voteleader - Start a vote to become the leader\n/voteleader yes - Vote yes\n/voteleader no - Vote no")]
-        public static void HandleVoteLeader(Session session, params string[] parameters)
-        {
-            if (session.Player.Fellowship == null)
-            {
-                session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: You are not in a fellowship.", ChatMessageType.Broadcast));
-                return;
-            }
-
-            if (parameters == null || parameters.Length == 0)
-            {
-                // Start a vote to become leader
-                session.Player.Fellowship.StartVoteLeader(session.Player);
-                return;
-            }
-
-            var vote = parameters[0].ToLower();
-            if (vote == "yes" || vote == "y")
-            {
-                session.Player.Fellowship.CastVoteLeader(session.Player, true);
-            }
-            else if (vote == "no" || vote == "n")
-            {
-                session.Player.Fellowship.CastVoteLeader(session.Player, false);
-            }
-            else
-            {
-                session.Network.EnqueueSend(new GameMessageSystemChat("[FSHIP]: Use /voteleader yes or /voteleader no", ChatMessageType.Broadcast));
             }
         }
 

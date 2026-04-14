@@ -1416,13 +1416,18 @@ namespace ACE.Server.WorldObjects
 
                 foreach (var spellId in weaponSpells)
                 {
+                    // CONQUEST: Use same substitution as when spell was created
+                    var spellToUse = (uint)spellId;
+                    if (spellToUse == 4395)
+                        spellToUse = 5183;
+
                     // Remove existing cantrip effect (with old aug values) and re-apply with current (zeroed) values
-                    RemoveItemSpell(weapon, (uint)spellId, silent: true);
-                    CreateItemSpell(weapon, (uint)spellId);
+                    RemoveItemSpell(weapon, spellToUse, silent: true);
+                    CreateItemSpell(weapon, spellToUse);
                 }
 
-                // CONQUEST: Send weapon update to client to refresh displayed stats after enchantment changes
-                Session.Network.EnqueueSend(new GameMessageUpdateObject(weapon));
+                // NOTE: Removed GameMessageUpdateObject(weapon) as it was causing shortcuts to be removed from the hotbar
+                // CreateItemSpell should already send the necessary enchantment updates to the client
             }
         }
 

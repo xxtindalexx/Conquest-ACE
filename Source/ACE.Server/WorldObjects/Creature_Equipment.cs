@@ -305,7 +305,14 @@ namespace ACE.Server.WorldObjects
 
             // check activation requirements?
             foreach (var spell in item.Biota.GetKnownSpellsIds(BiotaDatabaseLock))
-                CreateItemSpell(item, (uint)spell);
+            {
+                // CONQUEST: Substitute spell 4395 with 5183 to prevent overriding player's custom item spell augs
+                var spellToUse = (uint)spell;
+                if (spellToUse == 4395)
+                    spellToUse = 5183;
+
+                CreateItemSpell(item, spellToUse);
+            }
         }
 
         /// <summary>
@@ -417,7 +424,14 @@ namespace ACE.Server.WorldObjects
 
             // remove item spells
             foreach (var spell in worldObject.Biota.GetKnownSpellsIds(BiotaDatabaseLock))
-                RemoveItemSpell(worldObject, (uint)spell, true);
+            {
+                // CONQUEST: Use same substitution as when spell was created
+                var spellToRemove = (uint)spell;
+                if (spellToRemove == 4395)
+                    spellToRemove = 5183;
+
+                RemoveItemSpell(worldObject, spellToRemove, true);
+            }
 
             return true;
         }
@@ -445,7 +459,12 @@ namespace ACE.Server.WorldObjects
                     if (worldObject.HasProcSpell((uint)spell.Key))
                         continue;
 
-                    RemoveItemSpell(worldObject, (uint)spell.Key, true);
+                    // CONQUEST: Use same substitution as when spell was created
+                    var spellToRemove = (uint)spell.Key;
+                    if (spellToRemove == 4395)
+                        spellToRemove = 5183;
+
+                    RemoveItemSpell(worldObject, spellToRemove, true);
                 }
             }
 

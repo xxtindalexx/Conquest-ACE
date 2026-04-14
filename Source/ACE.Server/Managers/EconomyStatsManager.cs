@@ -462,10 +462,10 @@ namespace ACE.Server.Managers
         {
             try
             {
-                var trackingChannelId = ConfigManager.Config.Chat.TrackingAuditChannelId;
-                if (trackingChannelId == 0 || !ConfigManager.Config.Chat.EnableDiscordConnection)
+                var exportsChannelId = ConfigManager.Config.Chat.SoloExportsChannelId;
+                if (exportsChannelId == 0 || !ConfigManager.Config.Chat.EnableDiscordConnection)
                 {
-                    log.Warn("[ECONOMY] TrackingAuditChannelId not configured or Discord not enabled");
+                    log.Warn("[ECONOMY] SoloExportsChannelId not configured or Discord not enabled");
                     return;
                 }
 
@@ -521,7 +521,7 @@ namespace ACE.Server.Managers
                 sb.AppendLine($"*Report generated at {DateTime.UtcNow:HH:mm:ss} UTC*");
 
                 // Send to Discord
-                DiscordChatManager.SendDiscordMessage("[ECONOMY]", sb.ToString(), trackingChannelId);
+                DiscordChatManager.SendDiscordMessage("[ECONOMY]", sb.ToString(), exportsChannelId);
                 log.Info("[ECONOMY] Daily report sent to Discord successfully.");
             }
             catch (Exception ex)

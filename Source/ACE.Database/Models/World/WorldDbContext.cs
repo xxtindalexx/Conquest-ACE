@@ -449,6 +449,9 @@ public partial class WorldDbContext : DbContext
             entity.Property(e => e.IpLootLimit)
                 .HasComment("Maximum number of characters per IP that can complete this quest")
                 .HasColumnName("ip_loot_limit");
+            entity.Property(e => e.ResetFromFirst)
+                .HasComment("If true, IP cooldown timer starts from first loot instead of last loot")
+                .HasColumnName("reset_from_first");
         });
 
         modelBuilder.Entity<Recipe>(entity =>

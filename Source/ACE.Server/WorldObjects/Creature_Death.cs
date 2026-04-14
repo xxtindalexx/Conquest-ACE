@@ -781,9 +781,10 @@ namespace ACE.Server.WorldObjects
         {
             var droppedItems = new List<WorldObject>();
 
-            // Treasure Map Drop Logic (adjust drop rate as needed: 0.01f = 1%, 0.10f = 10%)
+            // Treasure Map Drop Logic - configurable via server property "treasure_map_drop_rate"
             // Don't drop treasure maps for mobs that have NoCorpse set (they don't leave a corpse to loot)
-            if (IsMonster && !NoCorpse && ThreadSafeRandom.Next(0.0f, 1.0f) < 0.01f)  // 1% chance
+            var treasureMapDropRate = PropertyManager.GetDouble("treasure_map_drop_rate");
+            if (IsMonster && !NoCorpse && ThreadSafeRandom.Next(0.0f, 1.0f) < treasureMapDropRate)
             {
                 var map = TreasureMap.TryCreateTreasureMap(this);
 

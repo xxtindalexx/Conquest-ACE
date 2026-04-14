@@ -1173,12 +1173,14 @@ namespace ACE.Database
                         return (false, "You cannot loot this item. Your IP-wide limit has been reached.");
                     }
 
+                    var now = DateTime.UtcNow;
                     ipTracking = new QuestIpTracking
                     {
                         QuestId = questId,
                         IpAddress = playerIp,
                         SolvesCount = 1,
-                        LastSolveTime = DateTime.UtcNow
+                        LastSolveTime = now,
+                        FirstSolveTime = now  // Track when the window started
                     };
                     shardContext.QuestIpTracking.Add(ipTracking);
                     //Console.WriteLine($"[IPQuest][DB] Created new IP tracking entry with SolvesCount=1");
@@ -1212,13 +1214,19 @@ namespace ACE.Database
                     // Only reset the count if there's a cooldown AND it has expired
                     if (quest.MinDelta > 0)
                     {
-                        var timeSinceLastSolve = (DateTime.UtcNow - ipTracking.LastSolveTime)?.TotalSeconds ?? double.MaxValue;
-                        //Console.WriteLine($"[IPQuest][DB] Quest has cooldown: MinDelta={quest.MinDelta}s, TimeSinceLastSolve={timeSinceLastSolve}s");
-                        if (timeSinceLastSolve >= quest.MinDelta)
+                        // Use FirstSolveTime if ResetFromFirst is true, otherwise use LastSolveTime
+                        var referenceTime = quest.ResetFromFirst
+                            ? (ipTracking.FirstSolveTime ?? ipTracking.LastSolveTime)
+                            : ipTracking.LastSolveTime;
+                        var timeSinceReference = (DateTime.UtcNow - referenceTime)?.TotalSeconds ?? double.MaxValue;
+                        //Console.WriteLine($"[IPQuest][DB] Quest has cooldown: MinDelta={quest.MinDelta}s, TimeSinceReference={timeSinceReference}s, ResetFromFirst={quest.ResetFromFirst}");
+                        if (timeSinceReference >= quest.MinDelta)
                         {
                            // Console.WriteLine($"[IPQuest][DB] Cooldown expired, resetting counter to 0");
                             ipTracking.SolvesCount = 0; // Reset solves count if cooldown expired
-                            ipTracking.LastSolveTime = DateTime.UtcNow;
+                            var now = DateTime.UtcNow;
+                            ipTracking.LastSolveTime = now;
+                            ipTracking.FirstSolveTime = now;  // Reset the window start time too
                         }
                     }
 
@@ -1233,6 +1241,7 @@ namespace ACE.Database
                     // Increment the count
                     ipTracking.SolvesCount++;
                     ipTracking.LastSolveTime = DateTime.UtcNow;
+                    // Note: FirstSolveTime stays unchanged - it marks the start of the window
                     //Console.WriteLine($"[IPQuest][DB] Incremented counter to {ipTracking.SolvesCount}");
 
                     // Save the increment

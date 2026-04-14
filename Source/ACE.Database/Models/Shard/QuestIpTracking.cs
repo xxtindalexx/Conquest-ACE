@@ -18,6 +18,9 @@ namespace ACE.Database.Models.Shard
         [Column("last_solve_time")]
         public DateTime? LastSolveTime { get; set; }
 
+        [Column("first_solve_time")]
+        public DateTime? FirstSolveTime { get; set; }
+
         // Foreign Key Relationship to Quest
        // [ForeignKey("QuestId")]
         //public virtual Quest Quest { get; set; }

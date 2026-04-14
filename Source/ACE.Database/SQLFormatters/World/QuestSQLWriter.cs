@@ -25,12 +25,13 @@ namespace ACE.Database.SQLFormatters.World
 
         public void CreateSQLINSERTStatement(Quest input, StreamWriter writer)
         {
-            writer.WriteLine("INSERT INTO `quest` (`name`, `min_Delta`, `max_Solves`, `message`, `last_Modified`, `is_ip_restricted`, `ip_loot_limit`)");
+            writer.WriteLine("INSERT INTO `quest` (`name`, `min_Delta`, `max_Solves`, `message`, `last_Modified`, `is_ip_restricted`, `ip_loot_limit`, `reset_from_first`)");
 
             var isIpRestricted = input.IsIpRestricted ? 1 : 0;
             var ipLootLimit = input.IpLootLimit?.ToString() ?? "NULL";
+            var resetFromFirst = input.ResetFromFirst ? 1 : 0;
 
-            var output = $"VALUES ({GetSQLString(input.Name)}, {input.MinDelta}, {input.MaxSolves}, {GetSQLString(input.Message)}, '{input.LastModified:yyyy-MM-dd HH:mm:ss}', {isIpRestricted}, {ipLootLimit});";
+            var output = $"VALUES ({GetSQLString(input.Name)}, {input.MinDelta}, {input.MaxSolves}, {GetSQLString(input.Message)}, '{input.LastModified:yyyy-MM-dd HH:mm:ss}', {isIpRestricted}, {ipLootLimit}, {resetFromFirst});";
 
             output = FixNullFields(output);
 

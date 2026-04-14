@@ -251,6 +251,21 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            // CONQUEST: Check enlightenment requirement
+            var requiredEnlightenment = GetProperty(PropertyInt.VendorRequiredEnlightenment) ?? 0;
+            if (requiredEnlightenment > 0)
+            {
+                var playerEnlightenment = player.GetProperty(PropertyInt.Enlightenment) ?? 0;
+                if (playerEnlightenment < requiredEnlightenment)
+                {
+                    player.Session.Network.EnqueueSend(
+                        new GameMessageSystemChat(
+                            $"{Name} ignores you. \"You have not yet proven yourself through enlightenment. Return when you have.\"",
+                            ChatMessageType.System));
+                    return;
+                }
+            }
+
             var rotateTime = Rotate(player);    // vendor rotates towards player
 
             // TODO: remove this when DelayManager is not forward propagating current tick time

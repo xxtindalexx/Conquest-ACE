@@ -46,6 +46,12 @@ public partial class Quest
     public int? IpLootLimit { get; set; }
 
     /// <summary>
+    /// If true, the IP cooldown timer starts from the FIRST loot in the window
+    /// If false (default), the timer resets from the LAST loot
+    /// </summary>
+    public bool ResetFromFirst { get; set; }
+
+    /// <summary>
     /// IP tracking records for this quest (from shard database)
     /// </summary>
     //public virtual ICollection<QuestIpTracking> QuestIpTrackings { get; set; } = new HashSet<QuestIpTracking>();

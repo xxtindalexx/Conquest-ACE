@@ -1179,7 +1179,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// CONQUEST: Tracks player death in PK-only dungeon variants
         /// Stores the specific landblock+variant where they died
-        /// Used to enforce 2-hour re-entry cooldown for that specific dungeon
+        /// Uses scaling lockout timers based on death count
         /// Only tracks PK vs PK deaths (not deaths to mobs)
         /// </summary>
         public void TrackPKDungeonDeath(DamageHistoryInfo topDamager)
@@ -1202,9 +1202,142 @@ namespace ACE.Server.WorldObjects
             // Pack landblock and variant into a single long: (landblock << 16 | variant)
             var packedLocation = ((long)currentLandblock << 16) | (long)currentVariation;
 
-            // Store the location and timestamp
+            // Check if this is the same dungeon as last death
+            var lastDeathLocation = LastPKDungeonDeathLocation ?? 0;
+            var isSameDungeon = lastDeathLocation == packedLocation;
+
+            // Check if we need to reset death count (resets at midnight EST)
+            var shouldResetCount = ShouldResetPKDungeonDeathCount();
+
+            // Calculate new death count
+            long newDeathCount;
+            if (shouldResetCount || !isSameDungeon)
+            {
+                // Different dungeon or past midnight reset - start fresh
+                newDeathCount = 1;
+            }
+            else
+            {
+                // Same dungeon, increment count
+                newDeathCount = (PKDungeonDeathCount ?? 0) + 1;
+            }
+
+            // Store the location, timestamp, and death count
             LastPKDungeonDeathLocation = packedLocation;
             LastPKDungeonDeathTime = (long)Time.GetUnixTime();
+            PKDungeonDeathCount = newDeathCount;
+
+            // Notify player of their lockout
+            var lockoutSeconds = GetPKDungeonLockoutDuration((int)newDeathCount);
+            var lockoutMinutes = lockoutSeconds / 60;
+            var hours = lockoutMinutes / 60;
+            var minutes = lockoutMinutes % 60;
+
+            string lockoutMsg;
+            if (hours > 0)
+                lockoutMsg = $"You have been locked out of this dungeon for {hours} hour{(hours == 1 ? "" : "s")}{(minutes > 0 ? $" and {minutes} minute{(minutes == 1 ? "" : "s")}" : "")}. (Death #{newDeathCount} today)";
+            else
+                lockoutMsg = $"You have been locked out of this dungeon for {minutes} minute{(minutes == 1 ? "" : "s")}. (Death #{newDeathCount} today)";
+
+            Session.Network.EnqueueSend(new GameMessageSystemChat(lockoutMsg, ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// CONQUEST: Check if PK dungeon death count should reset (resets at midnight EST)
+        /// </summary>
+        private bool ShouldResetPKDungeonDeathCount()
+        {
+            var lastDeathTime = LastPKDungeonDeathTime ?? 0;
+            if (lastDeathTime == 0)
+                return true;
+
+            // Get current time and last death time in EST
+            var estZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+            var nowUtc = DateTime.UtcNow;
+            var nowEst = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, estZone);
+
+            var lastDeathUtc = DateTimeOffset.FromUnixTimeSeconds(lastDeathTime).UtcDateTime;
+            var lastDeathEst = TimeZoneInfo.ConvertTimeFromUtc(lastDeathUtc, estZone);
+
+            // Check if we've crossed midnight since last death
+            return nowEst.Date > lastDeathEst.Date;
+        }
+
+        /// <summary>
+        /// CONQUEST: Calculate PK dungeon lockout duration based on death count
+        /// 1st death: 20 minutes
+        /// 2nd death: 60 minutes
+        /// 3rd+ death: 60 + (count-2) * 30 minutes, capped at 240 minutes (4 hours)
+        /// </summary>
+        public static int GetPKDungeonLockoutDuration(int deathCount)
+        {
+            if (deathCount <= 0)
+                return 0;
+
+            if (deathCount == 1)
+                return 20 * 60; // 20 minutes in seconds
+
+            if (deathCount == 2)
+                return 60 * 60; // 60 minutes in seconds
+
+            // 3rd+ death: 60 + (count-2) * 30, capped at 240
+            var minutes = 60 + (deathCount - 2) * 30;
+            minutes = Math.Min(minutes, 240); // Cap at 4 hours
+
+            return minutes * 60; // Convert to seconds
+        }
+
+        /// <summary>
+        /// CONQUEST: Tracks player logout in PK-only dungeon variants
+        /// 2+ logouts within 1 hour triggers a 20-minute lockout
+        /// This prevents logout abuse to escape fights
+        /// </summary>
+        public void TrackPKDungeonLogout()
+        {
+            // Check if player is in a PK-only dungeon variant
+            if (CurrentLandblock == null || Location == null)
+                return;
+
+            var currentLandblock = (ushort)CurrentLandblock.Id.Landblock;
+            var currentVariation = Location.Variation ?? 0;
+
+            // Only track if logging out in a PK-only dungeon variant
+            if (!Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                return;
+
+            // Pack landblock and variant into a single long: (landblock << 16 | variant)
+            var packedLocation = ((long)currentLandblock << 16) | (long)currentVariation;
+            var currentTime = (long)Time.GetUnixTime();
+
+            // Check if first logout was more than 1 hour ago - if so, reset the tracking
+            var firstLogoutTime = FirstPKDungeonLogoutTime ?? 0;
+            var timeSinceFirstLogout = currentTime - firstLogoutTime;
+            var oneHourInSeconds = 3600;
+
+            if (firstLogoutTime == 0 || timeSinceFirstLogout > oneHourInSeconds)
+            {
+                // Start new 1-hour tracking window
+                FirstPKDungeonLogoutTime = currentTime;
+                PKDungeonLogoutCount = 1;
+                // First logout - no lockout yet, just tracking
+                return;
+            }
+
+            // Increment logout count
+            var newLogoutCount = (PKDungeonLogoutCount ?? 0) + 1;
+            PKDungeonLogoutCount = newLogoutCount;
+
+            // 2+ logouts within 1 hour triggers lockout
+            if (newLogoutCount >= 2)
+            {
+                // Apply 20-minute lockout
+                PKDungeonLogoutLockoutLocation = packedLocation;
+                PKDungeonLogoutLockoutTime = currentTime;
+
+                Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"Logging out multiple times in a PK dungeon has locked you out for 20 minutes. (Logout #{newLogoutCount} this hour)",
+                    ChatMessageType.Broadcast));
+            }
         }
     }
 }

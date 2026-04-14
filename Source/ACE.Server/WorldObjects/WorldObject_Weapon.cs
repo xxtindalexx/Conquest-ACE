@@ -4,6 +4,7 @@ using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
+using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects.Entity;
 
@@ -295,11 +296,33 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public static float GetWeaponCriticalChance(WorldObject weapon, Creature wielder, CreatureSkill skill, Creature target)
         {
+            var isPvP = wielder is Player && target is Player;
             var critRate = (float)(weapon?.CriticalFrequency ?? defaultPhysicalCritFrequency);
+
+            // CONQUEST: Disable Biting Strike (CriticalFrequency property) in PvP - only imbues work
+            if (isPvP && PropertyManager.GetBool("pvp_disable_biting_strike"))
+            {
+                critRate = defaultPhysicalCritFrequency;
+            }
+            // Apply PvP cap to Biting Strike (weapon property) if not disabled
+            else if (isPvP && critRate > defaultPhysicalCritFrequency)
+            {
+                var pvpCapBiting = (float)PropertyManager.GetDouble("pvp_max_biting_strike").Item;
+                if (pvpCapBiting > 0)
+                    critRate = Math.Min(critRate, pvpCapBiting);
+            }
 
             if (weapon != null && weapon.HasImbuedEffect(ImbuedEffectType.CriticalStrike))
             {
                 var criticalStrikeBonus = GetCriticalStrikeMod(skill);
+
+                // Apply PvP cap to Critical Strike (imbue)
+                if (isPvP)
+                {
+                    var pvpCapCS = (float)PropertyManager.GetDouble("pvp_max_critical_strike").Item;
+                    if (pvpCapCS > 0)
+                        criticalStrikeBonus = Math.Min(criticalStrikeBonus, pvpCapCS);
+                }
 
                 critRate = Math.Max(critRate, criticalStrikeBonus);
             }
@@ -333,13 +356,33 @@ namespace ACE.Server.WorldObjects
             if (weapon == null)
                 return defaultMagicCritFrequency;
 
+            var isPvP = wielder is Player && target is Player;
             var critRate = (float)(weapon.GetProperty(PropertyFloat.CriticalFrequency) ?? defaultMagicCritFrequency);
+
+            // CONQUEST: Disable Biting Strike (CriticalFrequency property) in PvP - only imbues work
+            if (isPvP && PropertyManager.GetBool("pvp_disable_biting_strike"))
+            {
+                critRate = defaultMagicCritFrequency;
+            }
+            // Apply PvP cap to Biting Strike (weapon property) if not disabled
+            else if (isPvP && critRate > defaultMagicCritFrequency)
+            {
+                var pvpCapBiting = (float)PropertyManager.GetDouble("pvp_max_biting_strike").Item;
+                if (pvpCapBiting > 0)
+                    critRate = Math.Min(critRate, pvpCapBiting);
+            }
 
             if (weapon.HasImbuedEffect(ImbuedEffectType.CriticalStrike))
             {
-                var isPvP = wielder is Player && target is Player;
-
                 var criticalStrikeMod = GetCriticalStrikeMod(skill, isPvP);
+
+                // Apply PvP cap to Critical Strike (imbue)
+                if (isPvP)
+                {
+                    var pvpCapCS = (float)PropertyManager.GetDouble("pvp_max_critical_strike").Item;
+                    if (pvpCapCS > 0)
+                        criticalStrikeMod = Math.Min(criticalStrikeMod, pvpCapCS);
+                }
 
                 critRate = Math.Max(critRate, criticalStrikeMod);
             }
@@ -360,13 +403,35 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public static float GetWeaponCritDamageMod(WorldObject weapon, Creature wielder, CreatureSkill skill, Creature target)
         {
+            var isPvP = wielder is Player && target is Player;
             var critDamageMod = (float)(weapon?.GetProperty(PropertyFloat.CriticalMultiplier) ?? defaultCritDamageMultiplier);
+
+            // CONQUEST: Disable Crushing Blow (CriticalMultiplier property) in PvP - only Crippling Blow imbue works
+            if (isPvP && PropertyManager.GetBool("pvp_disable_crushing_blow"))
+            {
+                critDamageMod = defaultCritDamageMultiplier;
+            }
+            // Apply PvP cap to Crushing Blow (weapon property) if not disabled
+            else if (isPvP && critDamageMod > defaultCritDamageMultiplier)
+            {
+                var pvpCapCrushing = (float)PropertyManager.GetDouble("pvp_max_crushing_blow").Item;
+                if (pvpCapCrushing > 0)
+                    critDamageMod = Math.Min(critDamageMod, pvpCapCrushing);
+            }
 
             if (weapon != null && weapon.HasImbuedEffect(ImbuedEffectType.CripplingBlow))
             {
                 var cripplingBlowMod = GetCripplingBlowMod(skill);
 
-                critDamageMod = Math.Max(critDamageMod, cripplingBlowMod); 
+                // Apply PvP cap to Crippling Blow (imbue)
+                if (isPvP)
+                {
+                    var pvpCapCrippling = (float)PropertyManager.GetDouble("pvp_max_crippling_blow").Item;
+                    if (pvpCapCrippling > 0)
+                        cripplingBlowMod = Math.Min(cripplingBlowMod, pvpCapCrippling);
+                }
+
+                critDamageMod = Math.Max(critDamageMod, cripplingBlowMod);
             }
             return critDamageMod;
         }
@@ -492,10 +557,19 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Disable Nether Rending in PvP (there are no Nether protection spells)
             var isNetherPvP = damageType == DamageType.Nether && target is Player && wielder is Player;
+            var isPvP = wielder is Player && target is Player;
 
             if (rendDamageType != ImbuedEffectType.Undef && weapon.HasImbuedEffect(rendDamageType) && skill != null && !isNetherPvP)
             {
                 var rendingMod = GetRendingMod(skill, wielder);
+
+                // Apply PvP cap to Armor Rending (imbue)
+                if (isPvP)
+                {
+                    var pvpCapRend = (float)PropertyManager.GetDouble("pvp_max_armor_rend").Item;
+                    if (pvpCapRend > 0)
+                        rendingMod = Math.Min(rendingMod, pvpCapRend);
+                }
 
                 resistMod = Math.Max(resistMod, rendingMod);
             }

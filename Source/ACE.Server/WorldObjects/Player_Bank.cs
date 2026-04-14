@@ -924,12 +924,13 @@ namespace ACE.Server.WorldObjects
             
             while (remaining > 0)
             {
-                int stackSize = (int)Math.Min(remaining, (long)PYREAL_MAX_STACK);
-                
                 WorldObject smallCoins = WorldObjectFactory.CreateNewWorldObject(273);
                 if (smallCoins == null)
                     break; // Can't create more items
-                    
+
+                // Use the item's actual MaxStackSize property, fallback to constant if not set
+                int maxStack = smallCoins.MaxStackSize ?? PYREAL_MAX_STACK;
+                int stackSize = (int)Math.Min(remaining, maxStack);
                 smallCoins.SetStackSize(stackSize);
                 
                 // Create item without immediate networking
@@ -1000,14 +1001,16 @@ namespace ACE.Server.WorldObjects
                 long totalMMDsNeeded = Amount / 250000;
                 remainderPyreals = Amount % 250000;
 
-                // Create MMDs in stacks (max stack size from constant)
+                // Create MMDs in stacks (use item's actual MaxStackSize, not hardcoded constant)
                 long mmdsRemaining = totalMMDsNeeded;
                 while (mmdsRemaining > 0)
                 {
-                    int stackSize = (int)Math.Min(mmdsRemaining, MMD_TRADE_NOTE_MAX_STACK);
                     var mmd = WorldObjectFactory.CreateNewWorldObject(20630);
                     if (mmd != null)
                     {
+                        // Use the item's actual MaxStackSize property, fallback to 100 if not set
+                        int maxStack = mmd.MaxStackSize ?? 100;
+                        int stackSize = (int)Math.Min(mmdsRemaining, maxStack);
                         mmd.SetStackSize(stackSize);
                         if (this.TryCreateInInventoryWithNetworking(mmd))
                         {
@@ -1306,12 +1309,13 @@ namespace ACE.Server.WorldObjects
 
             while (remaining > 0)
             {
-                int stackSize = (int)Math.Min(remaining, (long)CONQUEST_COIN_MAX_STACK);
-
                 WorldObject wo = WorldObjectFactory.CreateNewWorldObject(13370001);
                 if (wo == null)
                     break; // Can't create more items
 
+                // Use the item's actual MaxStackSize property, fallback to constant if not set
+                int maxStack = wo.MaxStackSize ?? CONQUEST_COIN_MAX_STACK;
+                int stackSize = (int)Math.Min(remaining, maxStack);
                 wo.SetStackSize(stackSize);
 
                 // Create item without immediate networking
@@ -1407,12 +1411,13 @@ namespace ACE.Server.WorldObjects
 
             while (remaining > 0)
             {
-                int stackSize = (int)Math.Min(remaining, (long)SOUL_FRAGMENT_MAX_STACK);
-
                 WorldObject wo = WorldObjectFactory.CreateNewWorldObject(13370003);
                 if (wo == null)
                     break; // Can't create more items
 
+                // Use the item's actual MaxStackSize property, fallback to constant if not set
+                int maxStack = wo.MaxStackSize ?? SOUL_FRAGMENT_MAX_STACK;
+                int stackSize = (int)Math.Min(remaining, maxStack);
                 wo.SetStackSize(stackSize);
 
                 // Create item without immediate networking
@@ -1463,12 +1468,13 @@ namespace ACE.Server.WorldObjects
 
             while (remaining > 0)
             {
-                int stackSize = (int)Math.Min(remaining, (long)EVENT_TOKEN_MAX_STACK);
-
                 WorldObject wo = WorldObjectFactory.CreateNewWorldObject(13370002); // Dragon Coin (Event Currency)
                 if (wo == null)
                     break; // Can't create more items
 
+                // Use the item's actual MaxStackSize property, fallback to constant if not set
+                int maxStack = wo.MaxStackSize ?? EVENT_TOKEN_MAX_STACK;
+                int stackSize = (int)Math.Min(remaining, maxStack);
                 wo.SetStackSize(stackSize);
 
                 // Create item without immediate networking

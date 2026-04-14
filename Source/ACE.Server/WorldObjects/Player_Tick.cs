@@ -908,29 +908,43 @@ namespace ACE.Server.WorldObjects
                 {
                     bootReason = "You have been removed from this PK-only dungeon. You must be PK to remain here.";
                 }
-                // Check 2: 2-hour dungeon lockout after death
+                // Check 2: Death lockout (scaling duration)
                 else
                 {
+                    var packedCurrentLocation = ((long)currentLandblock << 16) | (long)currentVariation;
                     var lastDeathLocation = LastPKDungeonDeathLocation ?? 0;
                     var lastDeathTime = LastPKDungeonDeathTime ?? 0;
 
-                    if (lastDeathLocation > 0 && lastDeathTime > 0)
+                    if (lastDeathLocation == packedCurrentLocation && lastDeathTime > 0)
                     {
-                        // Unpack the landblock and variation from stored location
-                        var deathLandblock = (ushort)(lastDeathLocation >> 16);
-                        var deathVariation = (int)(lastDeathLocation & 0xFFFF);
+                        var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
+                        var deathCount = (int)(PKDungeonDeathCount ?? 1);
+                        var lockoutDuration = GetPKDungeonLockoutDuration(deathCount);
 
-                        // Check if they died in THIS dungeon
-                        if (deathLandblock == currentLandblock && deathVariation == currentVariation)
+                        if (timeSinceDeath < lockoutDuration)
                         {
-                            var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
-                            var lockoutDuration = 7200; // 2 hours in seconds
+                            var remainingSeconds = (int)(lockoutDuration - timeSinceDeath);
+                            var remainingMinutes = (int)Math.Ceiling(remainingSeconds / 60.0);
+                            bootReason = $"You died in this dungeon recently. You cannot return for {remainingMinutes} more minute{(remainingMinutes == 1 ? "" : "s")}.";
+                        }
+                    }
 
-                            if (timeSinceDeath < lockoutDuration)
+                    // Check 3: Logout lockout (fixed 20-minute duration)
+                    if (bootReason == null)
+                    {
+                        var logoutLockoutLocation = PKDungeonLogoutLockoutLocation ?? 0;
+                        var logoutLockoutTime = PKDungeonLogoutLockoutTime ?? 0;
+
+                        if (logoutLockoutLocation == packedCurrentLocation && logoutLockoutTime > 0)
+                        {
+                            var timeSinceLogout = Time.GetUnixTime() - logoutLockoutTime;
+                            var logoutLockoutDuration = 20 * 60; // 20 minutes
+
+                            if (timeSinceLogout < logoutLockoutDuration)
                             {
-                                var remainingSeconds = (int)(lockoutDuration - timeSinceDeath);
+                                var remainingSeconds = (int)(logoutLockoutDuration - timeSinceLogout);
                                 var remainingMinutes = (int)Math.Ceiling(remainingSeconds / 60.0);
-                                bootReason = $"You died in this dungeon recently. You cannot return for {remainingMinutes} more minute{(remainingMinutes == 1 ? "" : "s")}.";
+                                bootReason = $"You logged out in this dungeon multiple times recently. You cannot return for {remainingMinutes} more minute{(remainingMinutes == 1 ? "" : "s")}.";
                             }
                         }
                     }
@@ -959,47 +973,90 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// CONQUEST: Checks if a PK dungeon lockout has expired and notifies the player
         /// Also clears the lockout properties once expired
+        /// Handles both death lockouts and logout lockouts
         /// </summary>
         private void PKDungeonLockoutExpirationTick()
         {
+            // Check death lockout expiration
             var lastDeathLocation = LastPKDungeonDeathLocation ?? 0;
             var lastDeathTime = LastPKDungeonDeathTime ?? 0;
 
-            // No lockout active
-            if (lastDeathLocation == 0 || lastDeathTime == 0)
-                return;
-
-            var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
-            var lockoutDuration = 7200; // 2 hours in seconds
-
-            // Lockout has expired
-            if (timeSinceDeath >= lockoutDuration)
+            if (lastDeathLocation > 0 && lastDeathTime > 0)
             {
-                // Unpack the landblock and variation from stored location
-                var deathLandblock = (ushort)(lastDeathLocation >> 16);
-                var deathVariation = (int)(lastDeathLocation & 0xFFFF);
+                var timeSinceDeath = Time.GetUnixTime() - lastDeathTime;
+                var deathCount = (int)(PKDungeonDeathCount ?? 1);
+                var lockoutDuration = GetPKDungeonLockoutDuration(deathCount);
 
-                // Get the dungeon description for the notification
-                var dungeonName = ACE.Server.Entity.Landblock.GetPKDungeonDescription(deathLandblock, deathVariation);
-
-                // Notify the player
-                if (!string.IsNullOrWhiteSpace(dungeonName))
+                // Death lockout has expired
+                if (timeSinceDeath >= lockoutDuration)
                 {
-                    Session.Network.EnqueueSend(new GameMessageSystemChat(
-                        $"Your dungeon lockout for {dungeonName} has expired. You may now enter that dungeon again!",
-                        ChatMessageType.Broadcast));
-                }
-                else
-                {
-                    // Fallback if no description is set - use landblock ID
-                    Session.Network.EnqueueSend(new GameMessageSystemChat(
-                        $"Your dungeon lockout for landblock 0x{deathLandblock:X4} (variant {deathVariation}) has expired. You may now enter that dungeon again!",
-                        ChatMessageType.Broadcast));
-                }
+                    // Unpack the landblock and variation from stored location
+                    var deathLandblock = (ushort)(lastDeathLocation >> 16);
+                    var deathVariation = (int)(lastDeathLocation & 0xFFFF);
 
-                // Clear the lockout properties
-                LastPKDungeonDeathLocation = null;
-                LastPKDungeonDeathTime = null;
+                    // Get the dungeon description for the notification
+                    var dungeonName = ACE.Server.Entity.Landblock.GetPKDungeonDescription(deathLandblock, deathVariation);
+
+                    // Notify the player
+                    if (!string.IsNullOrWhiteSpace(dungeonName))
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"Your death lockout for {dungeonName} has expired. You may now enter that dungeon again!",
+                            ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"Your death lockout for landblock 0x{deathLandblock:X4} (variant {deathVariation}) has expired. You may now enter that dungeon again!",
+                            ChatMessageType.Broadcast));
+                    }
+
+                    // Clear the death lockout properties
+                    LastPKDungeonDeathLocation = null;
+                    LastPKDungeonDeathTime = null;
+                }
+            }
+
+            // Check logout lockout expiration
+            var logoutLockoutLocation = PKDungeonLogoutLockoutLocation ?? 0;
+            var logoutLockoutTime = PKDungeonLogoutLockoutTime ?? 0;
+
+            if (logoutLockoutLocation > 0 && logoutLockoutTime > 0)
+            {
+                var timeSinceLogout = Time.GetUnixTime() - logoutLockoutTime;
+                var logoutLockoutDuration = 20 * 60; // 20 minutes
+
+                // Logout lockout has expired
+                if (timeSinceLogout >= logoutLockoutDuration)
+                {
+                    // Unpack the landblock and variation from stored location
+                    var logoutLandblock = (ushort)(logoutLockoutLocation >> 16);
+                    var logoutVariation = (int)(logoutLockoutLocation & 0xFFFF);
+
+                    // Get the dungeon description for the notification
+                    var dungeonName = ACE.Server.Entity.Landblock.GetPKDungeonDescription(logoutLandblock, logoutVariation);
+
+                    // Notify the player
+                    if (!string.IsNullOrWhiteSpace(dungeonName))
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"Your logout lockout for {dungeonName} has expired. You may now enter that dungeon again!",
+                            ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"Your logout lockout for landblock 0x{logoutLandblock:X4} (variant {logoutVariation}) has expired. You may now enter that dungeon again!",
+                            ChatMessageType.Broadcast));
+                    }
+
+                    // Clear the logout lockout properties
+                    PKDungeonLogoutLockoutLocation = null;
+                    PKDungeonLogoutLockoutTime = null;
+                    // Also reset the logout tracking for a fresh start
+                    FirstPKDungeonLogoutTime = null;
+                    PKDungeonLogoutCount = null;
+                }
             }
         }
 
@@ -1112,7 +1169,14 @@ namespace ACE.Server.WorldObjects
             actionChain.AddAction(this, ActionType.PlayerTick_RemoveSpellsOnItemManaDepleted, () =>
             {
                 foreach (var spellId in item.Biota.GetKnownSpellsIds(item.BiotaDatabaseLock))
-                    RemoveItemSpell(item, (uint)spellId);
+                {
+                    // CONQUEST: Use same substitution as when spell was created
+                    var spellToRemove = (uint)spellId;
+                    if (spellToRemove == 4395)
+                        spellToRemove = 5183;
+
+                    RemoveItemSpell(item, spellToRemove);
+                }
             });
             actionChain.EnqueueChain();
 

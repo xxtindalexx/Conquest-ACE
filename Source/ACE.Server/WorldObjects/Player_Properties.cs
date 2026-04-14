@@ -1567,6 +1567,12 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastPKDungeonDeathTime); else SetProperty(PropertyInt64.LastPKDungeonDeathTime, value.Value); }
         }
 
+        public long? PKDungeonDeathCount
+        {
+            get => GetProperty(PropertyInt64.PKDungeonDeathCount);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.PKDungeonDeathCount); else SetProperty(PropertyInt64.PKDungeonDeathCount, value.Value); }
+        }
+
         public long? LastSoulFragmentCapNotifyTime
         {
             get => GetProperty(PropertyInt64.LastSoulFragmentCapNotifyTime);
@@ -1577,6 +1583,31 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyInt64.LastSoulRecoveryGemUseTime);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.LastSoulRecoveryGemUseTime); else SetProperty(PropertyInt64.LastSoulRecoveryGemUseTime, value.Value); }
+        }
+
+        // CONQUEST: PK Dungeon logout abuse tracking
+        public long? FirstPKDungeonLogoutTime
+        {
+            get => GetProperty(PropertyInt64.FirstPKDungeonLogoutTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.FirstPKDungeonLogoutTime); else SetProperty(PropertyInt64.FirstPKDungeonLogoutTime, value.Value); }
+        }
+
+        public long? PKDungeonLogoutCount
+        {
+            get => GetProperty(PropertyInt64.PKDungeonLogoutCount);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.PKDungeonLogoutCount); else SetProperty(PropertyInt64.PKDungeonLogoutCount, value.Value); }
+        }
+
+        public long? PKDungeonLogoutLockoutTime
+        {
+            get => GetProperty(PropertyInt64.PKDungeonLogoutLockoutTime);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.PKDungeonLogoutLockoutTime); else SetProperty(PropertyInt64.PKDungeonLogoutLockoutTime, value.Value); }
+        }
+
+        public long? PKDungeonLogoutLockoutLocation
+        {
+            get => GetProperty(PropertyInt64.PKDungeonLogoutLockoutLocation);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.PKDungeonLogoutLockoutLocation); else SetProperty(PropertyInt64.PKDungeonLogoutLockoutLocation, value.Value); }
         }
 
         public string CurrentRareEnchantmentIds

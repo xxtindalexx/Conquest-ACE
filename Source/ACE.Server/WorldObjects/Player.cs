@@ -574,6 +574,9 @@ namespace ACE.Server.WorldObjects
             IsBusy = true;
             IsLoggingOut = true;
 
+            // CONQUEST: Track logout in PK dungeon for lockout (counts as a death)
+            TrackPKDungeonLogout();
+
             PlayerManager.AddPlayerToFinalLogoffQueue(this);
 
             if (Fellowship != null)

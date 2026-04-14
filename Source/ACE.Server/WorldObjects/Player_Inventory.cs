@@ -365,7 +365,12 @@ namespace ACE.Server.WorldObjects
                 if (spell == item.SpellDID)
                     continue;
 
-                var success = CreateItemSpell(item, (uint)spell);
+                // CONQUEST: Substitute spell 4395 with 5183 to prevent overriding player's custom item spell augs
+                var spellToUse = (uint)spell;
+                if (spellToUse == 4395)
+                    spellToUse = 5183;
+
+                var success = CreateItemSpell(item, spellToUse);
 
                 if (success)
                     isAffecting = true;
@@ -1331,21 +1336,7 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
 
-            // FIRST: Check normal quest behavior (character-level check)
-            // This ensures the character hasn't already looted it and respects timers
-            if (!QuestManager.CanSolve(ipQuestName))
-            {
-                // Character already has this quest or timer hasn't expired
-                QuestManager.HandleSolveError(ipQuestName);
-                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
-                return false;
-            }
-
-            // Fetch the player's IP address
-            string playerIp = new System.Net.IPAddress(Session.Player.Account.LastLoginIP).ToString();
-            //Console.WriteLine($"[IPQuest] Player IP: {playerIp}, Character: {Session.Player.Name}");
-
-            // Fetch the quest object
+            // Fetch the quest object first to check if it's IP-restricted
             var quest = DatabaseManager.World.GetCachedQuest(ipQuestName);
             if (quest == null)
             {
@@ -1354,6 +1345,24 @@ namespace ACE.Server.WorldObjects
                 return false;
             }
             //Console.WriteLine($"[IPQuest] Quest found - ID: {quest.Id}, Name: {quest.Name}, IpLootLimit: {quest.IpLootLimit}, IsIPRestricted: {quest.IsIpRestricted}");
+
+            // For IP-restricted quests, skip the character-level check entirely
+            // The IP tracking system handles the limit and cooldown reset
+            // For non-IP-restricted quests, still do the character-level check
+            if (!quest.IsIpRestricted)
+            {
+                if (!QuestManager.CanSolve(ipQuestName))
+                {
+                    // Character already has this quest or timer hasn't expired
+                    QuestManager.HandleSolveError(ipQuestName);
+                    Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
+                    return false;
+                }
+            }
+
+            // Fetch the player's IP address
+            string playerIp = new System.Net.IPAddress(Session.Player.Account.LastLoginIP).ToString();
+            //Console.WriteLine($"[IPQuest] Player IP: {playerIp}, Character: {Session.Player.Name}");
 
             // SECOND: Check IP restrictions (IP-level check)
             //Console.WriteLine($"[IPQuest] Calling IncrementAndCheckIPQuestAttempts with questId={quest.Id}, playerIp={playerIp}, characterId={Session.Player.Character.Id}, maxAttempts={quest.IpLootLimit.GetValueOrDefault(1)}");

@@ -188,6 +188,9 @@ public partial class ShardDbContext : DbContext
             entity.Property(e => e.LastSolveTime)
                   .HasColumnName("last_solve_time");
 
+            entity.Property(e => e.FirstSolveTime)
+                  .HasColumnName("first_solve_time");
+
             // Foreign Key Relationship to Quest Table (in world database)
             //entity.HasOne(e => e.Quest)
                  // .WithMany(q => q.QuestIpTrackings)
