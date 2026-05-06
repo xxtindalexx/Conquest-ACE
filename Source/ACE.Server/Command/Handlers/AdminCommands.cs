@@ -8673,5 +8673,98 @@ namespace ACE.Server.Command.Handlers
 
             Managers.PlayerExportManager.ExportPlayersAsync(requestedBy);
         }
+
+        /// <summary>
+        /// CONQUEST: Chat filter management commands
+        /// </summary>
+        [CommandHandler("chatfilter", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Manage the automatic chat filter system",
+            "reload - Reload filter words from chatfilter.txt\nstatus - Show filter status and word count\nlist - List all filtered words\nadd <word> - Add a word to the filter\nremove <word> - Remove a word from the filter")]
+        public static void HandleChatFilter(Session session, params string[] parameters)
+        {
+            var subCommand = parameters[0].ToLower();
+
+            switch (subCommand)
+            {
+                case "reload":
+                    Managers.ChatFilterManager.Reload();
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Chat filter reloaded. {Managers.ChatFilterManager.GetFilterCount()} patterns loaded.");
+                    break;
+
+                case "status":
+                    var enabled = PropertyManager.GetBool("chat_filter_enabled");
+                    var gagDuration = PropertyManager.GetDouble("chat_filter_gag_duration_seconds");
+                    var notifyAdmins = PropertyManager.GetBool("chat_filter_gag_notify_admins");
+                    var filterCount = Managers.ChatFilterManager.GetFilterCount();
+
+                    var sb = new StringBuilder();
+                    sb.AppendLine("=== Chat Filter Status ===");
+                    sb.AppendLine($"Enabled: {enabled}");
+                    sb.AppendLine($"Filter Count: {filterCount} patterns");
+                    sb.AppendLine($"Gag Duration: {gagDuration / 60:F0} minutes");
+                    sb.AppendLine($"Notify Admins: {notifyAdmins}");
+                    CommandHandlerHelper.WriteOutputInfo(session, sb.ToString());
+                    break;
+
+                case "list":
+                    var words = Managers.ChatFilterManager.GetFilteredWords();
+                    if (words.Count == 0)
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, "No filtered words configured. Use /chatfilter add <word>");
+                    }
+                    else
+                    {
+                        var listSb = new StringBuilder();
+                        listSb.AppendLine($"=== Filtered Words ({words.Count}) ===");
+                        foreach (var word in words)
+                        {
+                            listSb.AppendLine($"  - {word}");
+                        }
+                        CommandHandlerHelper.WriteOutputInfo(session, listSb.ToString());
+                    }
+                    break;
+
+                case "add":
+                    if (parameters.Length < 2)
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, "Usage: /chatfilter add <word>");
+                        break;
+                    }
+                    // Join remaining parameters in case word has spaces (though unlikely)
+                    var wordToAdd = string.Join(" ", parameters.Skip(1));
+                    if (Managers.ChatFilterManager.AddWord(wordToAdd))
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Added '{wordToAdd}' to chat filter. Total: {Managers.ChatFilterManager.GetFilterCount()} patterns.");
+                        PlayerManager.BroadcastToAuditChannel(session?.Player, $"Added '{wordToAdd}' to chat filter.");
+                    }
+                    else
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to add '{wordToAdd}' - word may already exist or be invalid.");
+                    }
+                    break;
+
+                case "remove":
+                    if (parameters.Length < 2)
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, "Usage: /chatfilter remove <word>");
+                        break;
+                    }
+                    var wordToRemove = string.Join(" ", parameters.Skip(1));
+                    if (Managers.ChatFilterManager.RemoveWord(wordToRemove))
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Removed '{wordToRemove}' from chat filter. Total: {Managers.ChatFilterManager.GetFilterCount()} patterns.");
+                        PlayerManager.BroadcastToAuditChannel(session?.Player, $"Removed '{wordToRemove}' from chat filter.");
+                    }
+                    else
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, $"Failed to remove '{wordToRemove}' - word may not exist.");
+                    }
+                    break;
+
+                default:
+                    CommandHandlerHelper.WriteOutputInfo(session, "Unknown subcommand. Use: reload, status, list, add <word>, or remove <word>");
+                    break;
+            }
+        }
     }
 }

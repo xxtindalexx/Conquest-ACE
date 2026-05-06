@@ -125,13 +125,6 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            // CONQUEST: Cannot attack targets in different variations
-            if (!AreVariationsCompatible(Location.Variation, creatureTarget.Location.Variation))
-            {
-                OnAttackDone();
-                return;
-            }
-
             if (!CanDamage(creatureTarget))
             {
                 SendTransientError($"You cannot attack {creatureTarget.Name}");

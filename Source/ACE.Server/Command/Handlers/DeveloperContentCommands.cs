@@ -2973,7 +2973,16 @@ namespace ACE.Server.Command.Handlers.Processors
             var recipe = cookbooks[0].Recipe;
 
             if (RecipeSQLWriter == null)
+            {
                 RecipeSQLWriter = new RecipeSQLWriter();
+                RecipeSQLWriter.WeenieNames = DatabaseManager.World.GetAllWeenieNames();
+            }
+
+            if (CookBookSQLWriter == null)
+            {
+                CookBookSQLWriter = new CookBookSQLWriter();
+                CookBookSQLWriter.WeenieNames = DatabaseManager.World.GetAllWeenieNames();
+            }
 
             byte[] sqlData;
             using (MemoryStream mem = new MemoryStream())
@@ -2988,6 +2997,10 @@ namespace ACE.Server.Command.Handlers.Processors
                         sw.WriteLine();
                         RecipeSQLWriter.CreateSQLINSERTStatement(recipe, sw);
                         sw.WriteLine();
+
+                        CookBookSQLWriter.CreateSQLDELETEStatement(cookbooks, sw);
+                        sw.WriteLine();
+                        CookBookSQLWriter.CreateSQLINSERTStatement(cookbooks, sw);
                     }
                     catch (Exception e)
                     {

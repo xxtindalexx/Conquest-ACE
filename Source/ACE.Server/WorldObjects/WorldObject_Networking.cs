@@ -1448,59 +1448,11 @@ namespace ACE.Server.WorldObjects
         public void NotifyPlayers()
         {
             // send create object network message to visible players
-            var knownPlayers = PhysicsObj.ObjMaint.GetKnownPlayersValuesAsPlayer();
-            foreach (var player in knownPlayers)
+            foreach (var player in PhysicsObj.ObjMaint.GetKnownPlayersValuesAsPlayer())
                 player.AddTrackedObject(this);
 
-            // CONQUEST: Defensive fix - also check landblock directly for nearby players
-            // This handles cases where physics visibility might miss players at spawn time
             if (this is Creature creature && !(this is Player))
-            {
-                var playersNotified = new HashSet<uint>(knownPlayers.Select(p => p.Guid.Full));
-
-                if (CurrentLandblock != null)
-                {
-                    // Check current landblock and adjacents for players
-                    var landblocksToCheck = new List<Entity.Landblock> { CurrentLandblock };
-                    if (CurrentLandblock.Adjacents != null)
-                        landblocksToCheck.AddRange(CurrentLandblock.Adjacents.Where(a => a != null));
-
-                    foreach (var lb in landblocksToCheck)
-                    {
-                        // Only check landblocks with compatible variations
-                        if (!AreVariationsCompatible(Location.Variation, lb.VariationId))
-                            continue;
-
-                        foreach (var wo in lb.GetWorldObjectsForPhysicsHandling())
-                        {
-                            if (wo is Player nearbyPlayer && nearbyPlayer.IsAlive && !playersNotified.Contains(nearbyPlayer.Guid.Full))
-                            {
-                                // Check if player is within visual range
-                                var distSq = PhysicsObj.get_distance_sq_to_object(nearbyPlayer.PhysicsObj, true);
-                                if (distSq <= creature.VisualAwarenessRangeSq * 4) // Use generous range for initial notification
-                                {
-                                    // Add player to creature's KnownPlayers and VisibleTargets
-                                    if (PhysicsObj.ObjMaint != null && nearbyPlayer.PhysicsObj != null)
-                                    {
-                                        PhysicsObj.ObjMaint.AddKnownPlayer(nearbyPlayer.PhysicsObj);
-                                        PhysicsObj.ObjMaint.AddVisibleTarget(nearbyPlayer.PhysicsObj);
-
-                                        // Also add creature to player's visibility lists for targeting
-                                        nearbyPlayer.PhysicsObj.ObjMaint.AddKnownObject(PhysicsObj);
-                                        nearbyPlayer.PhysicsObj.ObjMaint.AddVisibleObject(PhysicsObj);
-                                    }
-
-                                    // Notify player of this creature
-                                    nearbyPlayer.AddTrackedObject(this);
-                                    playersNotified.Add(nearbyPlayer.Guid.Full);
-                                }
-                            }
-                        }
-                    }
-                }
-
                 creature.CheckTargets();
-            }
         }
     }
 }

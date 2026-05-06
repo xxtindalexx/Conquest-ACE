@@ -199,10 +199,10 @@ namespace ACE.Server.Managers
 
         private static void DoPassXP(AllegianceNode vassalNode, ulong amount, bool direct, bool luminance = false, int depth = 1)
         {
-            // CONQUEST: Simplified XP/Luminance passup system
-            // - Direct patron (level 1): receives 25% of earned XP/Lum
-            // - Each subsequent level (2-3): receives 25% of what was passed to previous level (75% reduction)
-            // - Levels 4+: receives 1% of what was passed to previous level
+            // CONQUEST: Revised XP/Luminance passup system
+            // - Direct patron (depth 1): receives 15% of earned XP/Lum
+            // - Next 3 levels (depths 2-4): each receives 15% of what was passed to previous level
+            // - Depths 5+: receives 1% of what was passed to previous level
 
             var patronNode = vassalNode.Patron;
             if (patronNode == null)
@@ -225,14 +225,14 @@ namespace ACE.Server.Managers
 
             // Calculate passup percentage based on depth
             double passupPercentage;
-            if (depth <= 3)
+            if (depth <= 4)
             {
-                // Levels 1-3: 25% passup
-                passupPercentage = 0.25;
+                // Depths 1-4: 15% passup (direct patron + next 3 levels)
+                passupPercentage = 0.15;
             }
             else
             {
-                // Levels 4+: 1% passup
+                // Depths 5+: 1% passup
                 passupPercentage = 0.01;
             }
 

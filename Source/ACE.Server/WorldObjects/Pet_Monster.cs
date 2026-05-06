@@ -64,10 +64,6 @@ namespace ACE.Server.WorldObjects
             if (monster.SameFaction(this))
                 monster.AddRetaliateTarget(this);
 
-            // CONQUEST: Ensure pet is added to monster's VisibleTargets for cross-landblock attacks
-            if (monster.PhysicsObj?.ObjMaint != null && PhysicsObj != null)
-                monster.PhysicsObj.ObjMaint.AddVisibleTargets(new[] { PhysicsObj });
-
             if (monster.MonsterState == State.Idle && (monster.Tolerance & PlayerCombatPet_RetaliateExclude) == 0)
             {
                 monster.AttackTarget = this;

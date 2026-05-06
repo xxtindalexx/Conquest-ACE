@@ -80,7 +80,17 @@ namespace ACE.Server.Managers
                 return;
             }
 
-           
+            // CONQUEST: Check for spell conflicts before starting the recipe animation
+            // This prevents wasting time on animation when we know it will fail
+            if (HasSpellConflict(recipe, target, out var conflictingSpellName))
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"The {target.NameWithMaterial} already has {conflictingSpellName}, which is the same or higher level than the spell you are trying to add.",
+                    ChatMessageType.Craft));
+                player.SendUseDoneEvent();
+                return;
+            }
+
             var percentSuccess = GetRecipeChance(player, source, target, recipe);
 
             if (percentSuccess == null)
@@ -831,6 +841,51 @@ namespace ACE.Server.Managers
             return true;
         }
 
+        /// <summary>
+        /// CONQUEST: Check if a recipe's AddSpell operations would conflict with higher-level spells already on the target
+        /// </summary>
+        /// <param name="recipe">The recipe being applied</param>
+        /// <param name="target">The target item</param>
+        /// <param name="conflictingSpellName">Output: name of the existing higher-level spell if conflict found</param>
+        /// <returns>True if there's a conflict (should block recipe), false if OK to proceed</returns>
+        public static bool HasSpellConflict(Recipe recipe, WorldObject target, out string conflictingSpellName)
+        {
+            conflictingSpellName = null;
+
+            // Check all recipe mods for AddSpell operations
+            foreach (var mod in recipe.RecipeMod)
+            {
+                foreach (var intMod in mod.RecipeModsInt)
+                {
+                    var op = (ModificationOperation)intMod.Enum;
+                    if (op != ModificationOperation.AddSpell)
+                        continue;
+
+                    // This is an AddSpell operation - check if target has a higher-level spell in same category
+                    var newSpell = new Entity.Spell(intMod.Stat);
+                    if (newSpell.NotFound)
+                        continue;
+
+                    var existingSpells = target.Biota.GetKnownSpellsIds(target.BiotaDatabaseLock);
+                    foreach (var existingSpellId in existingSpells)
+                    {
+                        var existingSpell = new Entity.Spell((uint)existingSpellId);
+                        if (existingSpell.NotFound)
+                            continue;
+
+                        // Same category and existing spell is same or higher power = conflict
+                        if (existingSpell.Category == newSpell.Category && existingSpell.Power >= newSpell.Power)
+                        {
+                            conflictingSpellName = existingSpell.Name;
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
         public static bool VerifyUse(Player player, WorldObject source, WorldObject target)
         {
             var usable = source.ItemUseable ?? Usable.Undef;
@@ -1352,11 +1407,46 @@ namespace ACE.Server.Managers
                     if (Debug) Console.WriteLine($"{result.Name}.SetProperty({prop}, {player.GetProperty(prop) ?? 0}) - {op}");
                     break;
                 case ModificationOperation.AddSpell:
-                    targetMod.Biota.GetOrAddKnownSpell(intMod.Stat, target.BiotaDatabaseLock, out var added);
-                    modified.Add(targetMod.Guid.Full);
-                    if (added)
-                        targetMod.ChangesDetected = true;
-                    if (Debug) Console.WriteLine($"{targetMod.Name}.AddSpell({intMod.Stat}) - {op}");
+                    // CONQUEST: Check for existing spells in the same category and remove lower-level ones
+                    // This prevents minor/major/epic spells from stacking (e.g., impen cantrips)
+                    var newSpell = new Entity.Spell(intMod.Stat);
+                    var shouldAddSpell = true;
+
+                    if (!newSpell.NotFound)
+                    {
+                        var existingSpells = targetMod.Biota.GetKnownSpellsIds(target.BiotaDatabaseLock);
+                        foreach (var existingSpellId in existingSpells)
+                        {
+                            var existingSpell = new Entity.Spell((uint)existingSpellId);
+                            if (!existingSpell.NotFound && existingSpell.Category == newSpell.Category)
+                            {
+                                // Same category - check power levels
+                                if (existingSpell.Power < newSpell.Power)
+                                {
+                                    // Remove lower-level spell to make room for the new higher-level one
+                                    targetMod.Biota.TryRemoveKnownSpell(existingSpellId, target.BiotaDatabaseLock);
+                                    targetMod.ChangesDetected = true;
+                                    if (Debug) Console.WriteLine($"{targetMod.Name}.RemoveSpell({existingSpellId}) - replaced by higher level spell {intMod.Stat}");
+                                }
+                                else
+                                {
+                                    // Existing spell is same or higher level - don't add the new one
+                                    shouldAddSpell = false;
+                                    if (Debug) Console.WriteLine($"{targetMod.Name}.SkipSpell({intMod.Stat}) - already has same/higher level spell {existingSpellId}");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (shouldAddSpell)
+                    {
+                        targetMod.Biota.GetOrAddKnownSpell(intMod.Stat, target.BiotaDatabaseLock, out var added);
+                        modified.Add(targetMod.Guid.Full);
+                        if (added)
+                            targetMod.ChangesDetected = true;
+                        if (Debug) Console.WriteLine($"{targetMod.Name}.AddSpell({intMod.Stat}) - {op}");
+                    }
                     break;
                 case ModificationOperation.SetBitsOn:
                     var bits = targetMod.GetProperty(prop) ?? 0;

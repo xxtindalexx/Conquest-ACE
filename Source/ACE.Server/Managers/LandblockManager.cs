@@ -443,38 +443,6 @@ namespace ACE.Server.Managers
                 return;
             }
 
-            // CONQUEST: Check for cross-thread operation during multi-threaded ticking
-            if (CurrentlyTickingLandblockGroupsMultiThreaded && oldBlock != null && newBlock != null)
-            {
-                var currentThreadGroup = CurrentMultiThreadedTickingLandblockGroup.Value;
-
-                // If the new landblock is on a different thread group, we need to handle this safely
-                if (currentThreadGroup != null && newBlock.CurrentLandblockGroup != currentThreadGroup)
-                {
-                    // For creatures (monsters), defer the relocation to avoid cross-thread issues
-                    // The monster will retry the move on the next tick when hopefully the landblocks are grouped properly
-                    if (worldObject is Creature creature && !(creature is Player))
-                    {
-                        // Revert the location change - keep the creature on the old landblock for now
-                        worldObject.Location.LandblockId = oldBlock.Id;
-
-                        // Also stop the creature's movement to prevent repeated cross-thread attempts
-                        // It will re-acquire target and restart movement on next tick
-                        creature.PhysicsObj?.cancel_moveto();
-                        creature.IsMoving = false;
-                        return;
-                    }
-
-                    // For spell projectiles, destroy them to prevent cross-thread crashes
-                    if (worldObject is SpellProjectile)
-                    {
-                        worldObject.PhysicsObj.set_active(false);
-                        worldObject.Destroy();
-                        return;
-                    }
-                }
-            }
-
             // Remove from the old landblock -- force
             oldBlock?.RemoveWorldObjectForPhysics(worldObject.Guid, adjacencyMove);
             // Add to the new landblock
@@ -571,13 +539,9 @@ namespace ACE.Server.Managers
 
             var adjacents = new List<Landblock>();
 
-            // CONQUEST: Use the landblock's variation if not explicitly specified
-            // This fixes cross-landblock targeting for variation 2 outdoor areas
-            var variation = variationId ?? landblock.VariationId ?? 0;
-
             foreach (var adjacentID in adjacentIDs)
             {
-                var adjacent = GetLandblock(new VariantCacheId() { Landblock = adjacentID.Landblock, Variant = variation });
+                var adjacent = GetLandblock(new VariantCacheId() { Landblock = adjacentID.Landblock, Variant = variationId ?? 0 });
                 if (adjacent != null)
                     adjacents.Add(adjacent);
             }
@@ -678,10 +642,8 @@ namespace ACE.Server.Managers
         {
             landblock.Adjacents = GetAdjacents(landblock);
 
-            // CONQUEST: Always sync physics adjacents, not just when pSync is true
-            // This fixes cross-landblock visibility where creatures on adjacent landblocks
-            // weren't visible until the player crossed over
-            landblock.PhysicsLandblock.SetAdjacents(landblock.Adjacents);
+            if (pSync)
+                landblock.PhysicsLandblock.SetAdjacents(landblock.Adjacents);
 
             if (traverse)
             {

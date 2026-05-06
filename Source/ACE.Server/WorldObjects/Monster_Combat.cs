@@ -169,7 +169,8 @@ namespace ACE.Server.WorldObjects
             if (DebugMove)
                 Console.WriteLine($"[{Timers.RunningTime}] - {Name} ({Guid}) - DoAttackStance - stanceTime: {stanceTime}, isAnimating: {IsAnimating}");
 
-            PhysicsObj.StartTimer();
+            // CONQUEST: Null check for PhysicsObj
+            PhysicsObj?.StartTimer();
         }
 
         public float GetMaxRange()
@@ -229,6 +230,10 @@ namespace ACE.Server.WorldObjects
             if (Timers.RunningTime < NextMoveTime)
                 return false;
 
+            // CONQUEST: Null check for PhysicsObj to prevent crashes
+            if (PhysicsObj == null)
+                return false;
+
             PhysicsObj.update_object();
             UpdatePosition_SyncLocation();
 
@@ -241,6 +246,10 @@ namespace ACE.Server.WorldObjects
         /// <returns></returns>
         public bool AttackReady()
         {
+            // CONQUEST: Null check for PhysicsObj to prevent crashes
+            if (PhysicsObj == null)
+                return false;
+
             var nextAttackTime = CurrentAttack == CombatType.Magic ? NextMagicAttackTime : NextAttackTime;
 
             if (Timers.RunningTime < nextAttackTime || !IsAttackRange())

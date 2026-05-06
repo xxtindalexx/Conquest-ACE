@@ -48,13 +48,6 @@ namespace ACE.Server.WorldObjects
 
             if (targetCreature != null && targetCreature.IsAlive)
             {
-                // CONQUEST: Cannot damage targets in different variations
-                if (sourceCreature != null && !WorldObject.AreVariationsCompatible(sourceCreature.Location.Variation, targetCreature.Location.Variation))
-                {
-                    OnCollideEnvironment(worldObject);
-                    return;
-                }
-
                 DamageEvent damageEvent = null;
 
                 if (sourcePlayer != null)
@@ -74,14 +67,6 @@ namespace ACE.Server.WorldObjects
                     catch (Exception ex)
                     {
                         log.Error($"Error setting projectile tracking: {ex.Message}", ex);
-                    }
-
-                    // CONQUEST: Enter PvP mode BEFORE damage calculation so enchantments are refreshed with zeroed augs
-                    var targetPlayer = targetCreature as Player;
-                    if (targetPlayer != null && PropertyManager.GetBool("pvp_disable_custom_augs"))
-                    {
-                        sourcePlayer.EnterPvPMode();
-                        targetPlayer.EnterPvPMode();
                     }
 
                     // player damage monster or player

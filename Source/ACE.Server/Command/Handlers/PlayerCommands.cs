@@ -910,7 +910,8 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"  Note denominations: I=100, V=500, X=1k, L=5k, C=10k, D=50k, M=100k, MM=200k, MMD=250k", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank transfer pyreals 100 CharName - Transfer 100 pyreals to CharName", ChatMessageType.System));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"/bank balance (or /b b) - View your bank balance", ChatMessageType.System));
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l), ConquestCoins (c), SoulFragments (s), Eventtokens (e), Notes (n), LegendaryKeys (k)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Currency types: Pyreals (p), Luminance (l)*, ConquestCoins (c), SoulFragments (s), Eventtokens (e), Notes (n), LegendaryKeys (k)", ChatMessageType.System));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  *Luminance cannot be withdrawn - it is spent directly from bank for enlightenment/purchases", ChatMessageType.System));
                 return;
             }
 
@@ -1057,23 +1058,8 @@ namespace ACE.Server.Command.Handlers
                         }
                         session.Player.WithdrawPyreals(amount);
                         break;
-                    case 2: // Withdraw luminance
-                        if (session.Player.BankedLuminance != null && amount > session.Player.BankedLuminance)
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Insufficient banked luminance.", ChatMessageType.System));
-                            break;
-                        }
-                        if (amount <= 0)
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to withdraw.", ChatMessageType.System));
-                            break;
-                        }
-                        if (amount + session.Player.AvailableLuminance > session.Player.MaximumLuminance)
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot withdraw - would exceed maximum luminance.", ChatMessageType.System));
-                            break;
-                        }
-                        session.Player.WithdrawLuminance(amount);
+                    case 2: // Luminance - withdrawal disabled, spent directly from bank
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Luminance cannot be withdrawn. It is spent directly from your bank for enlightenment and other purchases.", ChatMessageType.System));
                         break;
                     case 3: // Withdraw event tokens
                         if (session.Player.EventTokens != null && amount > session.Player.EventTokens)

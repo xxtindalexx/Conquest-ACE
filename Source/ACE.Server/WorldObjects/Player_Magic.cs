@@ -148,13 +148,6 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            // CONQUEST: Cannot cast spells on targets in different variations
-            if (!AreVariationsCompatible(Location.Variation, target.Location.Variation))
-            {
-                SendUseDoneEvent(WeenieError.TargetNotAcquired);
-                return;
-            }
-
             MagicState.OnCastStart();
             MagicState.SetWindupParams(targetGuid, spellId, casterItem);
 

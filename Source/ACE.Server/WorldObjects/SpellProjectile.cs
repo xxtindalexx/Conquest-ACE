@@ -302,8 +302,8 @@ namespace ACE.Server.WorldObjects
                 return;
 
             // CONQUEST: Cannot damage targets in different variations
-            if (sourceCreature != null && !AreVariationsCompatible(sourceCreature.Location.Variation, creatureTarget.Location.Variation))
-                return;
+            //if (sourceCreature != null && !AreVariationsCompatible(sourceCreature.Location.Variation, creatureTarget.Location.Variation))
+                //return;
 
             // if player target, ensure matching PK status
             var targetPlayer = creatureTarget as Player;
@@ -930,6 +930,14 @@ namespace ACE.Server.WorldObjects
 
                 damage *= damageRatingMod * damageResistRatingMod;
 
+                // CONQUEST: Apply PvP magic damage cap to prevent 1-shot kills from crits
+                if (pkBattle)
+                {
+                    var maxMagicDamage = (float)PropertyManager.GetDouble("pvp_max_magic_damage");
+                    if (maxMagicDamage > 0 && damage > maxMagicDamage)
+                        damage = maxMagicDamage;
+                }
+
                 percent = damage / target.Health.MaxValue;
 
                 // Apply enrage damage reduction for the defender
@@ -1272,8 +1280,8 @@ namespace ACE.Server.WorldObjects
                     continue;
 
                 // CONQUEST: Cannot chain to targets in different variations
-                if (!AreVariationsCompatible(primaryTarget.Location.Variation, creature.Location.Variation))
-                    continue;
+                //if (!AreVariationsCompatible(primaryTarget.Location.Variation, creature.Location.Variation))
+                    //continue;
 
                 // Check distance from primary target
                 var objPos = creature.Location.ToGlobal(false);

@@ -588,6 +588,31 @@ namespace ACE.Server.Entity
                 Damage *= (1.0f - damageReduction); // Apply reduction (e.g., 0.2 = 20% reduction)
             }
 
+            // CONQUEST: Apply PvP damage caps to prevent 1-shot kills from crits
+            if (pkBattle && Weapon != null)
+            {
+                float maxDamage = 0;
+                var weaponType = Weapon.W_WeaponType;
+
+                if (CombatType == CombatType.Melee)
+                {
+                    if (weaponType == WeaponType.TwoHanded)
+                        maxDamage = (float)PropertyManager.GetDouble("pvp_max_2h_damage");
+                    else
+                        maxDamage = (float)PropertyManager.GetDouble("pvp_max_melee_damage");
+                }
+                else if (CombatType == CombatType.Missile)
+                {
+                    if (weaponType == WeaponType.Bow)
+                        maxDamage = (float)PropertyManager.GetDouble("pvp_max_bow_damage");
+                    else if (weaponType == WeaponType.Crossbow)
+                        maxDamage = (float)PropertyManager.GetDouble("pvp_max_xbow_damage");
+                }
+
+                if (maxDamage > 0 && Damage > maxDamage)
+                    Damage = maxDamage;
+            }
+
             DamageMitigated = DamageBeforeMitigation - Damage;
 
             return Damage;

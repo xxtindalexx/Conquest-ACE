@@ -221,6 +221,10 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void Tick(double currentUnixTime)
         {
+            // CONQUEST: Early exit if PhysicsObj is null
+            if (PhysicsObj == null)
+                return;
+
             NextMonsterTickTime = currentUnixTime + monsterTickInterval;
 
             if (IsMoving)

@@ -307,7 +307,7 @@ namespace ACE.Server.WorldObjects
             // Apply PvP cap to Biting Strike (weapon property) if not disabled
             else if (isPvP && critRate > defaultPhysicalCritFrequency)
             {
-                var pvpCapBiting = (float)PropertyManager.GetDouble("pvp_max_biting_strike").Item;
+                var pvpCapBiting = (float)PropertyManager.GetDouble("pvp_max_biting_strike");
                 if (pvpCapBiting > 0)
                     critRate = Math.Min(critRate, pvpCapBiting);
             }
@@ -319,7 +319,7 @@ namespace ACE.Server.WorldObjects
                 // Apply PvP cap to Critical Strike (imbue)
                 if (isPvP)
                 {
-                    var pvpCapCS = (float)PropertyManager.GetDouble("pvp_max_critical_strike").Item;
+                    var pvpCapCS = (float)PropertyManager.GetDouble("pvp_max_critical_strike");
                     if (pvpCapCS > 0)
                         criticalStrikeBonus = Math.Min(criticalStrikeBonus, pvpCapCS);
                 }
@@ -367,7 +367,7 @@ namespace ACE.Server.WorldObjects
             // Apply PvP cap to Biting Strike (weapon property) if not disabled
             else if (isPvP && critRate > defaultMagicCritFrequency)
             {
-                var pvpCapBiting = (float)PropertyManager.GetDouble("pvp_max_biting_strike").Item;
+                var pvpCapBiting = (float)PropertyManager.GetDouble("pvp_max_biting_strike");
                 if (pvpCapBiting > 0)
                     critRate = Math.Min(critRate, pvpCapBiting);
             }
@@ -379,7 +379,7 @@ namespace ACE.Server.WorldObjects
                 // Apply PvP cap to Critical Strike (imbue)
                 if (isPvP)
                 {
-                    var pvpCapCS = (float)PropertyManager.GetDouble("pvp_max_critical_strike").Item;
+                    var pvpCapCS = (float)PropertyManager.GetDouble("pvp_max_critical_strike");
                     if (pvpCapCS > 0)
                         criticalStrikeMod = Math.Min(criticalStrikeMod, pvpCapCS);
                 }
@@ -414,7 +414,7 @@ namespace ACE.Server.WorldObjects
             // Apply PvP cap to Crushing Blow (weapon property) if not disabled
             else if (isPvP && critDamageMod > defaultCritDamageMultiplier)
             {
-                var pvpCapCrushing = (float)PropertyManager.GetDouble("pvp_max_crushing_blow").Item;
+                var pvpCapCrushing = (float)PropertyManager.GetDouble("pvp_max_crushing_blow");
                 if (pvpCapCrushing > 0)
                     critDamageMod = Math.Min(critDamageMod, pvpCapCrushing);
             }
@@ -426,7 +426,7 @@ namespace ACE.Server.WorldObjects
                 // Apply PvP cap to Crippling Blow (imbue)
                 if (isPvP)
                 {
-                    var pvpCapCrippling = (float)PropertyManager.GetDouble("pvp_max_crippling_blow").Item;
+                    var pvpCapCrippling = (float)PropertyManager.GetDouble("pvp_max_crippling_blow");
                     if (pvpCapCrippling > 0)
                         cripplingBlowMod = Math.Min(cripplingBlowMod, pvpCapCrippling);
                 }
@@ -566,7 +566,7 @@ namespace ACE.Server.WorldObjects
                 // Apply PvP cap to Armor Rending (imbue)
                 if (isPvP)
                 {
-                    var pvpCapRend = (float)PropertyManager.GetDouble("pvp_max_armor_rend").Item;
+                    var pvpCapRend = (float)PropertyManager.GetDouble("pvp_max_armor_rend");
                     if (pvpCapRend > 0)
                         rendingMod = Math.Min(rendingMod, pvpCapRend);
                 }

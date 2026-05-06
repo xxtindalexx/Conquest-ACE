@@ -137,14 +137,6 @@ namespace ACE.Server.WorldObjects
 
             GagsTick();
 
-            // CONQUEST: Process fellowship vote kick/leader timeout and waiting queue (only by fellowship leader to avoid duplicate processing)
-            if (Fellowship != null && Fellowship.FellowshipLeaderGuid == Guid.Full)
-            {
-                Fellowship.ProcessVoteKickTimeout();
-                Fellowship.ProcessVoteLeaderTimeout();
-                Fellowship.ProcessWaitingQueue(); // Check if departure windows expired and queue should process
-            }
-
             PhysicsObj.ObjMaint.DestroyObjects();
 
             // Check if we're due for our periodic SavePlayer

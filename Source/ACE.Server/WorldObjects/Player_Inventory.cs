@@ -1715,13 +1715,13 @@ namespace ACE.Server.WorldObjects
         {
             //Console.WriteLine($"{Name}.HandleActionGetAndWieldItem({itemGuid:X8}, {wieldedLocation})");
 
-            // todo fix this, it seems IsAnimating is always true for a player
-            // todo we need to know when a player is busy to avoid additional actions during that time
-            /*if (IsAnimating)
+            // CONQUEST: Prevent equipping items while busy (e.g., during enlightenment process)
+            if (IsBusy)
             {
-                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, WeenieError.YoureTooBusy));
+                Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "You are too busy to equip that!"));
+                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
                 return;
-            }*/
+            }
 
             var item = FindObject(new ObjectGuid(itemGuid), SearchLocations.LocationsICanMove, out var fromContainer, out var rootOwner, out var wasEquipped);
 

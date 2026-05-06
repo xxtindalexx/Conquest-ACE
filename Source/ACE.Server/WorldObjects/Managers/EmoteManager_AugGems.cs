@@ -2,6 +2,7 @@ using System;
 using ACE.Entity.Enum;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
+using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
 
 namespace ACE.Server.WorldObjects.Managers
@@ -70,6 +71,26 @@ namespace ACE.Server.WorldObjects.Managers
         {
             if (player == null || emote == null)
                 return;
+
+            // CONQUEST: Prevent using augmentation gems while in PvP situations
+            // Augs are stripped in these modes, so using gems would waste luminance
+            if (player.InPvPMode)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot use augmentation gems while in PvP combat.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (player.InPKDungeonMode)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot use augmentation gems while in a PvP dungeon.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (ArenaManager.IsActiveArenaPlayer(player.Character.Id))
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot use augmentation gems while in an arena match.", ChatMessageType.Broadcast));
+                return;
+            }
 
             var augType = emote.Message; // e.g., "Creature", "Creature5", "Item", "Item5", etc.
 

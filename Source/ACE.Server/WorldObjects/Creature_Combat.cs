@@ -1169,10 +1169,6 @@ namespace ACE.Server.WorldObjects
 
             // add to retaliate targets?
 
-            // CONQUEST: Ensure alerter is added to monster's VisibleTargets for cross-landblock awareness
-            if (monster.PhysicsObj?.ObjMaint != null && PhysicsObj != null)
-                monster.PhysicsObj.ObjMaint.AddVisibleTargets(new[] { PhysicsObj });
-
             //Console.WriteLine($"[{Timers.RunningTime}] - {monster.Name} ({monster.Guid}) - waking up");
             monster.AttackTarget = this;
             monster.WakeUp();

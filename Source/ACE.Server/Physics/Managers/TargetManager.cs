@@ -80,8 +80,6 @@ namespace ACE.Server.Physics.Combat
 
         public void CheckAndUpdateVoyeur(TargettedVoyeurInfo voyeur)
         {
-            if (voyeur == null) return;
-
             var newPos = GetInterpolatedPosition(voyeur.Quantum);
             if (newPos != null)
             {
@@ -117,10 +115,7 @@ namespace ACE.Server.Physics.Combat
             if (PhysicsObj == null || VoyeurTable == null) return;
 
             foreach (var voyeur in VoyeurTable.Values.ToList())
-            {
-                if (voyeur == null) continue;
                 SendVoyeurUpdate(voyeur, PhysicsObj.Position, status);
-            }
         }
 
         public void ReceiveUpdate(TargetInfo update)

@@ -64,11 +64,17 @@ namespace ACE.Server.WorldObjects
 
         public Vector3 GetCurrentDir_Physics()
         {
+            // CONQUEST: Null check for PhysicsObj
+            if (PhysicsObj?.Position == null)
+                return Vector3.UnitY;
             return Vector3.Normalize(Vector3.Transform(Vector3.UnitY, PhysicsObj.Position.Frame.Orientation));
         }
 
         public float GetAngle_Physics2(WorldObject target)
         {
+            // CONQUEST: Null check for PhysicsObj
+            if (PhysicsObj?.Position == null || target?.PhysicsObj?.Position == null)
+                return 0f;
             return PhysicsObj.Position.heading_diff(target.PhysicsObj.Position);
         }
 
@@ -346,6 +352,9 @@ namespace ACE.Server.WorldObjects
 
             if (!setLoc) return;
 
+            // CONQUEST: Null check for PhysicsObj
+            if (PhysicsObj == null) return;
+
             // start executing MoveTo iterator on server
             if (!PhysicsObj.IsMovingOrAnimating)
                 PhysicsObj.UpdateTime = Physics.Common.PhysicsTimer.CurrentTime;
@@ -419,6 +428,10 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void FakeTeleport(Position _newPosition)
         {
+            // CONQUEST: Null check for PhysicsObj
+            if (PhysicsObj == null)
+                return;
+
             var newPosition = new Position(_newPosition);
 
             newPosition.PositionZ += 0.005f * (ObjScale ?? 1.0f);

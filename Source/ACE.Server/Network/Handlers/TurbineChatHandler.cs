@@ -288,6 +288,14 @@ namespace ACE.Server.Network.Handlers
                         return;
                     }
 
+                    // CONQUEST: Check for filtered content and auto-gag if necessary
+                    if (ChatFilterManager.ProcessMessage(session.Player, message, adjustedchatType))
+                    {
+                        // Message was filtered and player was gagged - don't send the message
+                        session.Network.EnqueueSend(new GameMessageTurbineChat(ChatNetworkBlobType.NETBLOB_RESPONSE_BINARY, ChatNetworkBlobDispatchType.ASYNCMETHOD_SENDTOROOMBYNAME, contextId, null, null, 0, adjustedchatType));
+                        return;
+                    }
+
                     foreach (var recipient in PlayerManager.GetAllOnline())
                     {
                         // handle filters

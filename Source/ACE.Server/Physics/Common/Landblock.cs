@@ -661,31 +661,12 @@ namespace ACE.Server.Physics.Common
 
         public List<PhysicsObj> GetServerObjects(bool includeAdjacents)
         {
-            // CONQUEST: Thread-safe copy to prevent crashes during multi-threaded ticking
-            List<PhysicsObj> results;
-            try
-            {
-                results = ServerObjects.ToList();
-            }
-            catch
-            {
-                // Collection was modified during copy, return empty list for this tick
-                return new List<PhysicsObj>();
-            }
+            var results = new List<PhysicsObj>(ServerObjects);
 
             if (includeAdjacents)
             {
                 foreach (var adjacent in adjacents)
-                {
-                    try
-                    {
-                        results.AddRange(adjacent.ServerObjects.ToList());
-                    }
-                    catch
-                    {
-                        // Collection was modified, skip this adjacent for this tick
-                    }
-                }
+                    results.AddRange(adjacent.ServerObjects);
             }
 
             return results;

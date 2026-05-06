@@ -2192,12 +2192,6 @@ namespace ACE.Server.Physics
                 // players and combat pets
                 var visibleTargets = ObjMaint.GetVisibleObjects(CurCell, ObjectMaint.VisibleObjectType.AttackTargets, this.Position.Variation);
                 _ = ObjMaint.AddVisibleTargets(visibleTargets);
-
-                // CONQUEST: Also add players to KnownPlayers so they get notified when monster spawns
-                // Without this, NotifyPlayers() and enter_cell_server() won't reach any players
-                var knownPlayers = ObjectMaint.InitialClamp ? ObjMaint.GetVisibleObjectsDist(CurCell, ObjectMaint.VisibleObjectType.Players, this.Position.Variation)
-                    : ObjMaint.GetVisibleObjects(CurCell, ObjectMaint.VisibleObjectType.Players, this.Position.Variation);
-                ObjMaint.AddKnownPlayers(knownPlayers);
             }
             else
             {
@@ -2230,8 +2224,7 @@ namespace ACE.Server.Physics
             }
 
             var isVisible = CurCell.IsVisible(obj.CurCell);
-            // CONQUEST: Only allow visibility for compatible variations (same or one is null)
-            if (isVisible && !ACE.Server.Physics.Common.ObjectMaint.AreVariationsCompatible(this.Position.Variation, obj.Position.Variation))
+            if (isVisible && obj.Position.Variation != this.Position.Variation)  //todo I hate this?
             {
                 isVisible = false;
             }

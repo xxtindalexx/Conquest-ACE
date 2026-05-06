@@ -1767,7 +1767,14 @@ namespace ACE.Server.WorldObjects
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"Character '{CharacterDestination}' not found.", ChatMessageType.System));
                 return false;
             }
-            
+
+            // Prevent self-transfers
+            if (tarplayer.Name.Equals(this.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot transfer pyreals to yourself.", ChatMessageType.System));
+                return false;
+            }
+
             log.Info($"[BANK_DEBUG] Player: {Name} | Target player found | Name: {tarplayer.Name} | Type: {(tarplayer is OfflinePlayer ? "Offline" : "Online")}");
             
             long oldBalance = BankedPyreals ?? 0;
@@ -1893,64 +1900,68 @@ namespace ACE.Server.WorldObjects
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"Character '{CharacterDestination}' not found.", ChatMessageType.System));
                 return false;
             }
-            else
+
+            // Prevent self-transfers
+            if (tarplayer.Name.Equals(this.Name, StringComparison.OrdinalIgnoreCase))
             {
-                if (tarplayer is OfflinePlayer)
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot transfer legendary keys to yourself.", ChatMessageType.System));
+                return false;
+            }
+
+            if (tarplayer is OfflinePlayer)
+            {
+                var offlinePlayer = tarplayer as OfflinePlayer;
+
+                lock (balanceLock)
                 {
-                    var offlinePlayer = tarplayer as OfflinePlayer;
-                    
-                    lock (balanceLock)
-                    {
-                        // Deduct from sender
-                        this.BankedLegendaryKeys -= Amount;
-                    }
-                    
-                    // Add to offline receiver
-                    if (offlinePlayer.BankedLegendaryKeys == null)
-                    {
-                        offlinePlayer.BankedLegendaryKeys = Amount;
-                    }
-                    else
-                    {
-                        offlinePlayer.BankedLegendaryKeys += Amount;
-                    }
-                    offlinePlayer.SaveBiotaToDatabase();
-                    
-                    // Send confirmation to sender
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Legendary Keys to {offlinePlayer.Name} (offline)", ChatMessageType.System));
+                    // Deduct from sender
+                    this.BankedLegendaryKeys -= Amount;
+                }
+
+                // Add to offline receiver
+                if (offlinePlayer.BankedLegendaryKeys == null)
+                {
+                    offlinePlayer.BankedLegendaryKeys = Amount;
                 }
                 else
                 {
-                    var onlinePlayer = (Player)tarplayer;
-                    
-                    // Deadlock-safe double-lock using consistent ordering
-                    object lockA = this.balanceLock;
-                    object lockB = onlinePlayer.balanceLock;
-                    bool sourceFirst = string.CompareOrdinal(this.Name, onlinePlayer.Name) <= 0;
-                    var firstLock = sourceFirst ? lockA : lockB;
-                    var secondLock = sourceFirst ? lockB : lockA;
-                    
-                    lock (firstLock)
-                    {
-                        lock (secondLock)
-                        {
-                            // Perform atomic transfer
-                            this.BankedLegendaryKeys -= Amount;
-                            onlinePlayer.BankedLegendaryKeys = (onlinePlayer.BankedLegendaryKeys ?? 0) + Amount;
-                        }
-                    }
-                    
-                    // Send notification outside of locks
-                    onlinePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"Received {Amount:N0} Legendary Keys from {this.Name}", ChatMessageType.System));
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Legendary Keys to {onlinePlayer.Name}", ChatMessageType.System));
+                    offlinePlayer.BankedLegendaryKeys += Amount;
                 }
-                //Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(this, PropertyInt64.BankedLegendaryKeys, this.BankedLegendaryKeys ?? 0));
-                
-                // Log the transfer
-                TransferLogger.LogBankTransfer(this, CharacterDestination, "Legendary Keys", Amount, TransferLogger.TransferTypeBankTransfer);
-                
-                return true;
+                offlinePlayer.SaveBiotaToDatabase();
+
+                // Send confirmation to sender
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Legendary Keys to {offlinePlayer.Name} (offline)", ChatMessageType.System));
             }
+            else
+            {
+                var onlinePlayer = (Player)tarplayer;
+
+                // Deadlock-safe double-lock using consistent ordering
+                object lockA = this.balanceLock;
+                object lockB = onlinePlayer.balanceLock;
+                bool sourceFirst = string.CompareOrdinal(this.Name, onlinePlayer.Name) <= 0;
+                var firstLock = sourceFirst ? lockA : lockB;
+                var secondLock = sourceFirst ? lockB : lockA;
+
+                lock (firstLock)
+                {
+                    lock (secondLock)
+                    {
+                        // Perform atomic transfer
+                        this.BankedLegendaryKeys -= Amount;
+                        onlinePlayer.BankedLegendaryKeys = (onlinePlayer.BankedLegendaryKeys ?? 0) + Amount;
+                    }
+                }
+
+                // Send notification outside of locks
+                onlinePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"Received {Amount:N0} Legendary Keys from {this.Name}", ChatMessageType.System));
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Legendary Keys to {onlinePlayer.Name}", ChatMessageType.System));
+            }
+
+            // Log the transfer
+            TransferLogger.LogBankTransfer(this, CharacterDestination, "Legendary Keys", Amount, TransferLogger.TransferTypeBankTransfer);
+
+            return true;
         }
 
         // CONQUEST: TransferMythicalKeys removed - Mythical Keys not used in Conquest
@@ -2349,74 +2360,79 @@ namespace ACE.Server.WorldObjects
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"Character '{CharacterDestination}' not found.", ChatMessageType.System));
                 return false;
             }
-            else
+
+            // Prevent self-transfers
+            if (tarplayer.Name.Equals(this.Name, StringComparison.OrdinalIgnoreCase))
             {
-                if (tarplayer is OfflinePlayer)
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot transfer conquest coins to yourself.", ChatMessageType.System));
+                return false;
+            }
+
+            if (tarplayer is OfflinePlayer)
+            {
+                var offlinePlayer = tarplayer as OfflinePlayer;
+
+                lock (balanceLock)
                 {
-                    var offlinePlayer = tarplayer as OfflinePlayer;
-                    
-                    lock (balanceLock)
-                    {
-                        // Deduct from sender
-                        this.ConquestCoins -= Amount;
-                    }
-                    
-                    // Add to offline receiver
-                    if (offlinePlayer.ConquestCoins == null)
-                    {
-                        offlinePlayer.ConquestCoins = Amount;
-                    }
-                    else
-                    {
-                        offlinePlayer.ConquestCoins += Amount;
-                    }
-                    offlinePlayer.SaveBiotaToDatabase();
-                    
-                    // Send confirmation to sender
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Conquest Coins to {offlinePlayer.Name} (offline)", ChatMessageType.System));
+                    // Deduct from sender
+                    this.ConquestCoins -= Amount;
+                }
+
+                // Add to offline receiver
+                if (offlinePlayer.ConquestCoins == null)
+                {
+                    offlinePlayer.ConquestCoins = Amount;
                 }
                 else
                 {
-                    var onlinePlayer = (Player)tarplayer;
-                    
-                    // Deadlock-safe double-lock using consistent ordering
-                    object lockA = this.balanceLock;
-                    object lockB = onlinePlayer.balanceLock;
-                    bool sourceFirst = string.CompareOrdinal(this.Name, onlinePlayer.Name) <= 0;
-                    var firstLock = sourceFirst ? lockA : lockB;
-                    var secondLock = sourceFirst ? lockB : lockA;
-                    
-                    lock (firstLock)
+                    offlinePlayer.ConquestCoins += Amount;
+                }
+                offlinePlayer.SaveBiotaToDatabase();
+
+                // Send confirmation to sender
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Conquest Coins to {offlinePlayer.Name} (offline)", ChatMessageType.System));
+            }
+            else
+            {
+                var onlinePlayer = (Player)tarplayer;
+
+                // Deadlock-safe double-lock using consistent ordering
+                object lockA = this.balanceLock;
+                object lockB = onlinePlayer.balanceLock;
+                bool sourceFirst = string.CompareOrdinal(this.Name, onlinePlayer.Name) <= 0;
+                var firstLock = sourceFirst ? lockA : lockB;
+                var secondLock = sourceFirst ? lockB : lockA;
+
+                lock (firstLock)
+                {
+                    lock (secondLock)
                     {
-                        lock (secondLock)
-                        {
-                            // Perform atomic transfer
-                            this.ConquestCoins -= Amount;
-                            onlinePlayer.ConquestCoins = (onlinePlayer.ConquestCoins ?? 0) + Amount;
-                        }
-                    }
-                    
-                    // Send notification outside of locks
-                    onlinePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"Received {Amount:N0} Conquest Coins from {this.Name}", ChatMessageType.System));
-                    Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Conquest Coins to {onlinePlayer.Name}", ChatMessageType.System));
-                    // Persist to database for significant transfers (performance optimization)
-                    if (Amount > 10)
-                    {
-                        onlinePlayer.SavePlayerToDatabase();
+                        // Perform atomic transfer
+                        this.ConquestCoins -= Amount;
+                        onlinePlayer.ConquestCoins = (onlinePlayer.ConquestCoins ?? 0) + Amount;
                     }
                 }
-                //Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyInt64(this, PropertyInt64.ConquestCoins, this.ConquestCoins ?? 0));
+
+                // Send notification outside of locks
+                onlinePlayer.Session.Network.EnqueueSend(new GameMessageSystemChat($"Received {Amount:N0} Conquest Coins from {this.Name}", ChatMessageType.System));
+                Session.Network.EnqueueSend(new GameMessageSystemChat($"Transferred {Amount:N0} Conquest Coins to {onlinePlayer.Name}", ChatMessageType.System));
                 // Persist to database for significant transfers (performance optimization)
                 if (Amount > 10)
                 {
-                    this.SavePlayerToDatabase();
+                    onlinePlayer.SavePlayerToDatabase();
                 }
-                
-                // Log the transfer
-                TransferLogger.LogBankTransfer(this, CharacterDestination, "Conquest Coins", Amount, TransferLogger.TransferTypeBankTransfer);
-                
-                return true;
             }
+
+            // Persist to database for significant transfers (performance optimization)
+            if (Amount > 10)
+            {
+                this.SavePlayerToDatabase();
+            }
+
+            // Log the transfer
+            TransferLogger.LogBankTransfer(this, CharacterDestination, "Conquest Coins", Amount, TransferLogger.TransferTypeBankTransfer);
+
+            return true;
         } */
         /* CONQUEST: Disabled - Soul Fragments are non-tradable
         public bool TransferSoulFragments(long Amount, string CharacterDestination)
@@ -2440,16 +2456,22 @@ namespace ACE.Server.WorldObjects
                 Session.Network.EnqueueSend(new GameMessageSystemChat($"Character '{CharacterDestination}' not found.", ChatMessageType.System));
                 return false;
             }
-            else
+
+            // Prevent self-transfers
+            if (tarplayer.Name.Equals(this.Name, StringComparison.OrdinalIgnoreCase))
             {
-                if (tarplayer is OfflinePlayer)
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot transfer soul fragments to yourself.", ChatMessageType.System));
+                return false;
+            }
+
+            if (tarplayer is OfflinePlayer)
+            {
+                var offlinePlayer = tarplayer as OfflinePlayer;
+
+                lock (balanceLock)
                 {
-                    var offlinePlayer = tarplayer as OfflinePlayer;
-                    
-                    lock (balanceLock)
-                    {
-                        // Deduct from sender
-                        this.SoulFragments -= Amount;
+                    // Deduct from sender
+                    this.SoulFragments -= Amount;
                     }
                     
                     // Add to offline receiver

@@ -18,6 +18,10 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void Monster_Tick(double currentUnixTime)
         {
+            // CONQUEST: Early exit if PhysicsObj is null (creature failed to spawn properly)
+            if (PhysicsObj == null)
+                return;
+
             if (IsChessPiece && this is GamePiece gamePiece)
             {
                 // faster than vtable?
