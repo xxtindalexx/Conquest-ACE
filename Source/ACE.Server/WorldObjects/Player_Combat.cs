@@ -1453,8 +1453,8 @@ namespace ACE.Server.WorldObjects
             var manaPercent = Mana.Current / (float)Mana.MaxValue;
 
             // Store current aug counts to database-backed properties (crash safe)
-            // CONQUEST: Only store if not already stored (treat 0 as "not stored" since null might persist as 0)
-            if (StoredPvPCreatureAugs == null || StoredPvPCreatureAugs == 0)
+            // CONQUEST: Only store if not already stored (null means not stored)
+            if (StoredPvPCreatureAugs == null)
             {
                 StoredPvPCreatureAugs = LuminanceAugmentCreatureCount ?? 0;
                 StoredPvPItemAugs = LuminanceAugmentItemCount ?? 0;
@@ -1540,8 +1540,8 @@ namespace ACE.Server.WorldObjects
             var manaPercent = Mana.Current / (float)Mana.MaxValue;
 
             // Store current aug counts to database-backed properties (crash safe)
-            // CONQUEST: Treat 0 as "not stored" since clearing to null might persist as 0 in database
-            if (StoredPvPCreatureAugs == null || StoredPvPCreatureAugs == 0)
+            // CONQUEST: Only store if not already stored (null means not stored)
+            if (StoredPvPCreatureAugs == null)
             {
                 //log.Info($"[PK DUNGEON DEBUG] {Name} - Storing current aug values. Creature: {LuminanceAugmentCreatureCount}, Item: {LuminanceAugmentItemCount}, Life: {LuminanceAugmentLifeCount}");
                 StoredPvPCreatureAugs = LuminanceAugmentCreatureCount ?? 0;
@@ -1740,9 +1740,80 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// CONQUEST: Returns the appropriate buff spell level based on player's character level
-        /// Used for PvP mode rebuffing to ensure level-appropriate buffs
+        /// CONQUEST: Recovers augmentations if the player crashed or logged out while in PvP mode
+        /// Called on first login to restore any stored PvP aug values
         /// </summary>
+        public void RecoverPvPAugsAfterCrash()
+        {
+            // Check if there are stored PvP augs (indicates player was in PvP mode when they logged out/crashed)
+            if (StoredPvPCreatureAugs == null)
+                return; // No stored augs, nothing to recover
+
+            // Check if current augs are lower than stored (indicates they weren't properly restored)
+            bool needsRecovery =
+                (LuminanceAugmentCreatureCount ?? 0) < (StoredPvPCreatureAugs ?? 0) ||
+                (LuminanceAugmentItemCount ?? 0) < (StoredPvPItemAugs ?? 0) ||
+                (LuminanceAugmentLifeCount ?? 0) < (StoredPvPLifeAugs ?? 0) ||
+                (LuminanceAugmentVoidCount ?? 0) < (StoredPvPVoidAugs ?? 0) ||
+                (LuminanceAugmentWarCount ?? 0) < (StoredPvPWarAugs ?? 0) ||
+                (LuminanceAugmentSpellDurationCount ?? 0) < (StoredPvPDurationAugs ?? 0) ||
+                (LuminanceAugmentSpecializeCount ?? 0) < (StoredPvPSpecializeAugs ?? 0) ||
+                (LuminanceAugmentSummonCount ?? 0) < (StoredPvPSummonAugs ?? 0) ||
+                (LuminanceAugmentMeleeCount ?? 0) < (StoredPvPMeleeAugs ?? 0) ||
+                (LuminanceAugmentMissileCount ?? 0) < (StoredPvPMissileAugs ?? 0);
+
+            if (!needsRecovery)
+            {
+                // Current augs are >= stored, just clear the stored values
+                ClearStoredPvPAugs();
+                return;
+            }
+
+            // Restore augmentations from stored values
+            LuminanceAugmentCreatureCount = StoredPvPCreatureAugs ?? 0;
+            LuminanceAugmentItemCount = StoredPvPItemAugs ?? 0;
+            LuminanceAugmentLifeCount = StoredPvPLifeAugs ?? 0;
+            LuminanceAugmentVoidCount = StoredPvPVoidAugs ?? 0;
+            LuminanceAugmentWarCount = StoredPvPWarAugs ?? 0;
+            LuminanceAugmentSpellDurationCount = StoredPvPDurationAugs ?? 0;
+            LuminanceAugmentSpecializeCount = StoredPvPSpecializeAugs ?? 0;
+            LuminanceAugmentSummonCount = StoredPvPSummonAugs ?? 0;
+            LuminanceAugmentMeleeCount = StoredPvPMeleeAugs ?? 0;
+            LuminanceAugmentMissileCount = StoredPvPMissileAugs ?? 0;
+
+            // Clear the stored values
+            ClearStoredPvPAugs();
+
+            // Ensure PvP modes are cleared
+            InPvPMode = false;
+            InPKDungeonMode = false;
+
+            // Save to database
+            SaveBiotaToDatabase();
+
+            // Notify the player
+            Session?.Network.EnqueueSend(new GameMessageSystemChat(
+                "Your augmentations have been restored after an unexpected disconnection during PvP.",
+                ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// CONQUEST: Clears all stored PvP aug values
+        /// </summary>
+        private void ClearStoredPvPAugs()
+        {
+            StoredPvPCreatureAugs = null;
+            StoredPvPItemAugs = null;
+            StoredPvPLifeAugs = null;
+            StoredPvPVoidAugs = null;
+            StoredPvPWarAugs = null;
+            StoredPvPDurationAugs = null;
+            StoredPvPSpecializeAugs = null;
+            StoredPvPSummonAugs = null;
+            StoredPvPMeleeAugs = null;
+            StoredPvPMissileAugs = null;
+        }
+
         /// <summary>
         /// CONQUEST: Returns the appropriate buff spell level based on player's magic skills
         /// Uses the highest of Creature/Life/Item Enchantment skills to determine buff level

@@ -518,16 +518,13 @@ namespace ACE.Server.Managers
                     target.ArmorModVsElectric += 0.4f;
                     break;
                 case 0x38000038:    // Peridot
-                    //AddImbuedEffect(target, ImbuedEffectType.MeleeDefense);
-                    target.ImbuedEffect = ImbuedEffectType.MeleeDefense;
+                    target.ImbuedEffect |= ImbuedEffectType.MeleeDefense;
                     break;
                 case 0x38000039:    // YellowTopaz
-                    //AddImbuedEffect(target, ImbuedEffectType.MissileDefense);
-                    target.ImbuedEffect = ImbuedEffectType.MissileDefense;
+                    target.ImbuedEffect |= ImbuedEffectType.MissileDefense;
                     break;
                 case 0x38000037:    // Zircon
-                    //AddImbuedEffect(target, ImbuedEffectType.MagicDefense);
-                    target.ImbuedEffect = ImbuedEffectType.MagicDefense;
+                    target.ImbuedEffect |= ImbuedEffectType.MagicDefense;
                     break;
 
                 // item tinkering
@@ -604,16 +601,13 @@ namespace ACE.Server.Managers
                 // magic item tinkering
 
                 case 0x38000025: // Sunstone
-                    //AddImbuedEffect(target, ImbuedEffectType.ArmorRending);
-                    target.ImbuedEffect = ImbuedEffectType.ArmorRending;
+                    target.ImbuedEffect |= ImbuedEffectType.ArmorRending;
                     break;
                 case 0x38000024: // FireOpal
-                    //AddImbuedEffect(target, ImbuedEffectType.CripplingBlow);
-                    target.ImbuedEffect = ImbuedEffectType.CripplingBlow;
+                    target.ImbuedEffect |= ImbuedEffectType.CripplingBlow;
                     break;
                 case 0x38000023:    // BlackOpal
-                    //AddImbuedEffect(target, ImbuedEffectType.CriticalStrike);
-                    target.ImbuedEffect = ImbuedEffectType.CriticalStrike;
+                    target.ImbuedEffect |= ImbuedEffectType.CriticalStrike;
                     break;
                 case 0x3800002E:    // Opal
                     //target.ManaConversionMod += 0.01f;
@@ -650,7 +644,7 @@ namespace ACE.Server.Managers
                     // Agate
                     //AddSpell(player, target, SpellId.CANTRIPFOCUS1);
 
-                    target.ImbuedEffect = ImbuedEffectType.Spellbook;
+                    target.ImbuedEffect |= ImbuedEffectType.Spellbook;
                     break;
 
                 // weapon tinkering
@@ -674,34 +668,27 @@ namespace ACE.Server.Managers
                     target.WeaponOffense += 0.01f;
                     break;
 
-                // only 1 imbue can be applied per piece of armor?
+                // Rending imbues - use |= to preserve existing imbues
                 case 0x3800003A:    // Emerald
-                    //AddImbuedEffect(target, ImbuedEffectType.AcidRending);
-                    target.ImbuedEffect = ImbuedEffectType.AcidRending;
+                    target.ImbuedEffect |= ImbuedEffectType.AcidRending;
                     break;
                 case 0x3800003B:    // WhiteSapphire
-                    //AddImbuedEffect(target, ImbuedEffectType.BludgeonRending);
-                    target.ImbuedEffect = ImbuedEffectType.BludgeonRending;
+                    target.ImbuedEffect |= ImbuedEffectType.BludgeonRending;
                     break;
                 case 0x3800003C:    // Aquamarine
-                    //AddImbuedEffect(target, ImbuedEffectType.ColdRending);
-                    target.ImbuedEffect = ImbuedEffectType.ColdRending;
+                    target.ImbuedEffect |= ImbuedEffectType.ColdRending;
                     break;
                 case 0x3800003D:    // Jet
-                    //AddImbuedEffect(target, ImbuedEffectType.ElectricRending);
-                    target.ImbuedEffect = ImbuedEffectType.ElectricRending;
+                    target.ImbuedEffect |= ImbuedEffectType.ElectricRending;
                     break;
                 case 0x3800003E:    // RedGarnet
-                    //AddImbuedEffect(target, ImbuedEffectType.FireRending);
-                    target.ImbuedEffect = ImbuedEffectType.FireRending;
+                    target.ImbuedEffect |= ImbuedEffectType.FireRending;
                     break;
                 case 0x3800003F:    // BlackGarnet
-                    //AddImbuedEffect(target, ImbuedEffectType.PierceRending);
-                    target.ImbuedEffect = ImbuedEffectType.PierceRending;
+                    target.ImbuedEffect |= ImbuedEffectType.PierceRending;
                     break;
                 case 0x38000040:    // ImperialTopaz
-                    //AddImbuedEffect(target, ImbuedEffectType.SlashRending);
-                    target.ImbuedEffect = ImbuedEffectType.SlashRending;
+                    target.ImbuedEffect |= ImbuedEffectType.SlashRending;
                     break;
 
                 // addons

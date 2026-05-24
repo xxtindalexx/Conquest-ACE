@@ -14,7 +14,7 @@ namespace ACE.Entity.Models
         public DestinationType DestinationType { get; set; }
         public uint WeenieClassId { get; set; }
         public int StackSize { get; set; }
-        public sbyte Palette { get; set; }
+        public int Palette { get; set; }
         public float Shade { get; set; }
         public bool TryToBond { get; set; }
 

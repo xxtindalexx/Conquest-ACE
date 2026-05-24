@@ -16,6 +16,9 @@ namespace ACE.Server.Network.GameAction.Actions
             {
                 session.Player.FirstEnterWorldDone = true;
                 session.Player.SendPropertyUpdatesAndOverrides();
+
+                // CONQUEST: Recover augmentations if player crashed while in PvP mode
+                session.Player.RecoverPvPAugsAfterCrash();
             }
         }
     }

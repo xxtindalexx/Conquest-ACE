@@ -158,7 +158,15 @@ namespace ACE.Adapter.Lifestoned
                 if (input.CreateList != null)
                 {
                     foreach (var value in input.CreateList)
-                        result.WeeniePropertiesCreateList.Add(new WeeniePropertiesCreateList { WeenieClassId = value.WeenieClassId ?? 0, Palette = (sbyte?)value.Palette ?? 0, Shade = (float?)value.Shade ?? 0, DestinationType = (sbyte?)value.Destination ?? 0, StackSize = value.StackSize ?? 0, TryToBond = (value.TryToBond != 0) });
+                        result.WeeniePropertiesCreateList.Add(new WeeniePropertiesCreateList
+                        {
+                            WeenieClassId = value.WeenieClassId ?? 0,
+                            Palette = (int)(value.Palette ?? 0),
+                            Shade = (float?)value.Shade ?? 0,
+                            DestinationType = (sbyte?)value.Destination ?? 0,
+                            StackSize = value.StackSize ?? 0,
+                            TryToBond = (value.TryToBond != 0)
+                        });
                 }
 
                 if (input.DidStats != null)

@@ -979,6 +979,15 @@ namespace ACE.Server.Entity
 
         /// <summary>
         /// Calculates the combined PvP imbue modifier for a weapon
+        ///
+        /// Config structure for each imbue:
+        /// - pvp_dmg_mod_{imbue} = global base damage modifier (all hits)
+        /// - pvp_dmg_mod_{weapon}_{imbue} = weapon-specific base damage modifier (all hits)
+        /// - pvp_dmg_mod_{weapon}_{imbue}_crit = weapon-specific crit damage modifier (crits only)
+        ///
+        /// Weapon prefixes: fw, lw, hw, 2h, bow, xbow, tw
+        /// Imbue codes: ar, cb, cs, hollow, phantom, slash_rend, pierce_rend, bludgeon_rend,
+        ///              fire_rend, cold_rend, acid_rend, electric_rend, nether_rend
         /// </summary>
         private float GetPvPImbueMod(WorldObject weapon, string weaponPrefix, bool isCritical)
         {
@@ -989,6 +998,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_ar");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_ar");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_ar_crit");
             }
 
             // Crippling Blow
@@ -1005,6 +1016,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_cs");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_cs");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_cs_crit");
             }
 
             // Hollow weapons (IgnoreMagicArmor + IgnoreMagicResist)
@@ -1012,6 +1025,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_hollow");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_hollow");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_hollow_crit");
             }
 
             // Phantom weapons (IgnoreAllArmor)
@@ -1019,6 +1034,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_phantom");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_phantom");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_phantom_crit");
             }
 
             // Elemental Rending - Slash
@@ -1026,6 +1043,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_slash_rend");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_slash_rend");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_slash_rend_crit");
             }
 
             // Elemental Rending - Pierce
@@ -1033,6 +1052,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_pierce_rend");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_pierce_rend");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_pierce_rend_crit");
             }
 
             // Elemental Rending - Bludgeon
@@ -1040,6 +1061,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_bludgeon_rend");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_bludgeon_rend");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_bludgeon_rend_crit");
             }
 
             // Elemental Rending - Fire
@@ -1047,6 +1070,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_fire_rend");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_fire_rend");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_fire_rend_crit");
             }
 
             // Elemental Rending - Cold
@@ -1054,6 +1079,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_cold_rend");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_cold_rend");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_cold_rend_crit");
             }
 
             // Elemental Rending - Acid
@@ -1061,6 +1088,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_acid_rend");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_acid_rend");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_acid_rend_crit");
             }
 
             // Elemental Rending - Electric
@@ -1068,6 +1097,8 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_electric_rend");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_electric_rend");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_electric_rend_crit");
             }
 
             // Elemental Rending - Nether
@@ -1075,10 +1106,9 @@ namespace ACE.Server.Entity
             {
                 imbueMod *= (float)PropertyManager.GetDouble("pvp_dmg_mod_nether_rend");
                 imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_nether_rend");
+                if (isCritical)
+                    imbueMod *= (float)PropertyManager.GetDouble($"pvp_dmg_mod_{weaponPrefix}_nether_rend_crit");
             }
-
-            // Note: Biting Strike and Crushing Blow are not standard ImbuedEffectTypes
-            // They would need separate detection if implemented in the game
 
             return imbueMod;
         }

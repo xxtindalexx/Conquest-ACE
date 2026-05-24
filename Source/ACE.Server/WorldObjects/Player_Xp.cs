@@ -127,31 +127,39 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            // CONQUEST: Apply personal bonuses to fellowship share
+            // CONQUEST: Apply personal bonuses to fellowship share ONLY
             // When receiving a fellowship share, apply the recipient's personal bonuses
-            // (enchantment, quest count, PK dungeon) but NOT server modifiers (already applied)
-            var enchantment = GetXPAndLuminanceModifier(xpType);
-            var questBonus = GetQuestCountXPBonus();
-            var pkDungeonBonus = GetPKDungeonBonus();
+            // For SOLO players (Fellowship == null), bonuses were already applied in EarnXP()
+            // This prevents double-application of bonuses for solo players
+            var bonusedAmount = amount;
 
-            var bonusedAmount = (long)Math.Round(amount * enchantment * questBonus * pkDungeonBonus);
-
-            // CONQUEST: Show XP breakdown for fellowship shares if player has enabled xpdebugging
-            if (ShowXpBreakdown && (xpType == XpType.Kill || xpType == XpType.Quest || xpType == XpType.Fellowship))
+            if (Fellowship != null)
             {
-                var bonusXP = bonusedAmount - amount;
-                var questBonusPercent = (questBonus - 1.0) * 100;
-                var pkBonusPercent = (pkDungeonBonus - 1.0) * 100;
-                var enlightenmentBonusPercent = Enlightenment * 1.0;
-                var equipmentBonusPercent = EnchantmentManager.GetXPBonus() * 100;
-                var augBonusXp = AugmentationBonusXp;
-                var augBonusPercent = (xpType == XpType.Kill) ? (augBonusXp * 5.0) : 0.0;
+                // This is a fellowship share - apply recipient's personal bonuses
+                // (enchantment, quest count, PK dungeon) but NOT server modifiers (already applied)
+                var enchantment = GetXPAndLuminanceModifier(xpType);
+                var questBonus = GetQuestCountXPBonus();
+                var pkDungeonBonus = GetPKDungeonBonus();
 
-                var xpSource = xpType == XpType.Fellowship ? "Fellowship" : (xpType == XpType.Quest ? "Quest" : "Kill");
-                Session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"XP Breakdown ({xpSource}): {amount:N0} share → {bonusedAmount:N0} total (+{bonusXP:N0} bonus)\n" +
-                    $"Modifiers: Quest {questBonusPercent:F2}% | PK {pkBonusPercent:F0}% | ENL {enlightenmentBonusPercent:F0}% | Aug {augBonusPercent:F0}% | Equip {equipmentBonusPercent:F0}%",
-                    ChatMessageType.Broadcast));
+                bonusedAmount = (long)Math.Round(amount * enchantment * questBonus * pkDungeonBonus);
+
+                // CONQUEST: Show XP breakdown for fellowship shares if player has enabled xpdebugging
+                if (ShowXpBreakdown && (xpType == XpType.Kill || xpType == XpType.Quest || xpType == XpType.Fellowship))
+                {
+                    var bonusXP = bonusedAmount - amount;
+                    var questBonusPercent = (questBonus - 1.0) * 100;
+                    var pkBonusPercent = (pkDungeonBonus - 1.0) * 100;
+                    var enlightenmentBonusPercent = Enlightenment * 1.0;
+                    var equipmentBonusPercent = EnchantmentManager.GetXPBonus() * 100;
+                    var augBonusXp = AugmentationBonusXp;
+                    var augBonusPercent = (xpType == XpType.Kill) ? (augBonusXp * 5.0) : 0.0;
+
+                    var xpSource = xpType == XpType.Fellowship ? "Fellowship" : (xpType == XpType.Quest ? "Quest" : "Kill");
+                    Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"XP Breakdown ({xpSource}): {amount:N0} share → {bonusedAmount:N0} total (+{bonusXP:N0} bonus)\n" +
+                        $"Modifiers: Quest {questBonusPercent:F2}% | PK {pkBonusPercent:F0}% | ENL {enlightenmentBonusPercent:F0}% | Aug {augBonusPercent:F0}% | Equip {equipmentBonusPercent:F0}%",
+                        ChatMessageType.Broadcast));
+                }
             }
 
             // Make sure UpdateXpAndLevel is done on this players thread

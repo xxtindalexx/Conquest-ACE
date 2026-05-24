@@ -135,7 +135,7 @@ namespace ACE.Server.Managers
             const int PROP_SOUL_FRAGMENTS = 9029;
             const int PROP_EVENT_TOKENS = 9030;
 
-            // PropertyBool type ID for IsMule (PropertyBool.IsMule = 131)
+            // PropertyBool type ID for IsMule
             const int PROP_IS_MULE = 131;
 
             return $@"

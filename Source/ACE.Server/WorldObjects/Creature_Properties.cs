@@ -416,63 +416,65 @@ namespace ACE.Server.WorldObjects
         }
 
         // CONQUEST: Stored PvP Augmentation Values (for crash safety)
+        // NOTE: These getters return null when the property doesn't exist, not 0
+        // This allows us to distinguish between "not stored" and "stored as 0"
         public long? StoredPvPCreatureAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPCreatureAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPCreatureAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPCreatureAugs); else SetProperty(PropertyInt64.StoredPvPCreatureAugs, value.Value); }
         }
 
         public long? StoredPvPItemAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPItemAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPItemAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPItemAugs); else SetProperty(PropertyInt64.StoredPvPItemAugs, value.Value); }
         }
 
         public long? StoredPvPLifeAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPLifeAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPLifeAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPLifeAugs); else SetProperty(PropertyInt64.StoredPvPLifeAugs, value.Value); }
         }
 
         public long? StoredPvPVoidAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPVoidAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPVoidAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPVoidAugs); else SetProperty(PropertyInt64.StoredPvPVoidAugs, value.Value); }
         }
 
         public long? StoredPvPWarAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPWarAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPWarAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPWarAugs); else SetProperty(PropertyInt64.StoredPvPWarAugs, value.Value); }
         }
 
         public long? StoredPvPDurationAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPDurationAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPDurationAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPDurationAugs); else SetProperty(PropertyInt64.StoredPvPDurationAugs, value.Value); }
         }
 
         public long? StoredPvPSpecializeAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPSpecializeAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPSpecializeAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPSpecializeAugs); else SetProperty(PropertyInt64.StoredPvPSpecializeAugs, value.Value); }
         }
 
         public long? StoredPvPSummonAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPSummonAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPSummonAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPSummonAugs); else SetProperty(PropertyInt64.StoredPvPSummonAugs, value.Value); }
         }
 
         public long? StoredPvPMeleeAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPMeleeAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPMeleeAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPMeleeAugs); else SetProperty(PropertyInt64.StoredPvPMeleeAugs, value.Value); }
         }
 
         public long? StoredPvPMissileAugs
         {
-            get => GetProperty(PropertyInt64.StoredPvPMissileAugs) ?? 0;
+            get => GetProperty(PropertyInt64.StoredPvPMissileAugs);
             set { if (!value.HasValue) RemoveProperty(PropertyInt64.StoredPvPMissileAugs); else SetProperty(PropertyInt64.StoredPvPMissileAugs, value.Value); }
         }
 

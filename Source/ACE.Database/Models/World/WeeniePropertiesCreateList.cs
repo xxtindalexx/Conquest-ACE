@@ -36,7 +36,7 @@ public partial class WeeniePropertiesCreateList
     /// <summary>
     /// Palette Color of Object
     /// </summary>
-    public sbyte Palette { get; set; }
+    public int Palette { get; set; }
 
     /// <summary>
     /// Shade of Object&apos;s Palette

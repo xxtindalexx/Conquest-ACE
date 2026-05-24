@@ -93,11 +93,13 @@ namespace ACE.Server.Entity
             }
 
             var powerLevel = spell.Power;
-            var auggedPowerLevel = powerLevel + augmentLevel;
+            // CONQUEST: Multiply augmentation by 1000 to guarantee augmented spells beat non-augmented ones
+            // regardless of base PowerLevel differences between spell versions (e.g., Self vs Aura)
+            var auggedPowerLevel = powerLevel + (augmentLevel * 1000);
 
-            foreach (var entry in entries.OrderByDescending(i => i.PowerLevel + (i.AugmentationLevelWhenCast ?? 0)))
+            foreach (var entry in entries.OrderByDescending(i => i.PowerLevel + ((i.AugmentationLevelWhenCast ?? 0) * 1000)))
             {
-                var entryAuggedPowerLevel = entry.PowerLevel + (entry.AugmentationLevelWhenCast ?? 0);
+                var entryAuggedPowerLevel = entry.PowerLevel + ((entry.AugmentationLevelWhenCast ?? 0) * 1000);
 
                 if (auggedPowerLevel > entryAuggedPowerLevel)
                 {

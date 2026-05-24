@@ -434,7 +434,10 @@ namespace ACE.Server.Command.Handlers
                 if (lumAugSkillCredits.TryGetValue(player.Guid.Full, out var lumSkillCredits))
                     questCredits += lumSkillCredits;
 
-                var totalCredits = startCredits + levelCredits + questCredits;
+                // CONQUEST: Skill credits purchased from enlightenment vendor (max 5)
+                var enlightenmentCredits = player.GetProperty(PropertyInt.EnlightenmentSkillCreditsPurchased) ?? 0;
+
+                var totalCredits = startCredits + levelCredits + questCredits + enlightenmentCredits;
 
                 //Console.WriteLine($"{player.Name} (0x{player.Guid}) Heritage: {heritage}, Level: {player.Level}, Base Credits: {startCredits}, Additional Level Credits: {levelCredits}, Quest Credits: {questCredits}, Total Skill Credits: {totalCredits}");
 

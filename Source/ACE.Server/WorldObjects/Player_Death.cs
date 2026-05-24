@@ -28,6 +28,19 @@ namespace ACE.Server.WorldObjects
         public Dictionary<ObjectGuid, DateTime> LootPermission;
 
         /// <summary>
+        /// CONQUEST: Landblocks where players do not receive vitae or PK respite timer on death
+        /// </summary>
+        public static HashSet<ushort> NoVitaeOrRespite_Landblocks = new HashSet<ushort>()
+        {
+            0x0066,     // Conquest Arena
+        };
+
+        /// <summary>
+        /// CONQUEST: Check if current landblock excludes vitae and PK respite
+        /// </summary>
+        public bool IsOnNoVitaeOrRespiteLandblock => CurrentLandblock != null && NoVitaeOrRespite_Landblocks.Contains(CurrentLandblock.Id.Landblock);
+
+        /// <summary>
         /// Called when a player dies, in conjunction with Die()
         /// </summary>
         /// <param name="lastDamager">The last damager that landed the death blow</param>
@@ -247,7 +260,8 @@ namespace ACE.Server.WorldObjects
 
             // update vitae
             // players who died in a PKLite fight do not accrue vitae
-            if (!IsPKLiteDeath(topDamager))
+            // CONQUEST: Players on excluded landblocks do not accrue vitae
+            if (!IsPKLiteDeath(topDamager) && !IsOnNoVitaeOrRespiteLandblock)
                 InflictVitaePenalty();
 
             if (IsPKDeath(topDamager) || AugmentationSpellsRemainPastDeath == 0)
@@ -284,7 +298,8 @@ namespace ACE.Server.WorldObjects
 
                 ThreadSafeTeleportOnDeath(); // enter portal space
 
-                if (IsPKDeath(topDamager) || IsPKLiteDeath(topDamager))
+                // CONQUEST: Players on excluded landblocks do not get PK respite timer
+                if ((IsPKDeath(topDamager) || IsPKLiteDeath(topDamager)) && !IsOnNoVitaeOrRespiteLandblock)
                     SetMinimumTimeSincePK(isArenaDeath);
 
                 IsBusy = false;

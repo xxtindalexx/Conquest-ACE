@@ -79,9 +79,10 @@ namespace ACE.Server.Network.Structure
 
             // CONQUEST: Include AugmentationLevelWhenCast in PowerLevel sent to client
             // This ensures the client's enchantment comparison correctly favors augmented spells
+            // Multiply by 1000 to guarantee augmented spells beat non-augmented ones regardless of base PowerLevel
             if (entry.AugmentationLevelWhenCast.HasValue && entry.AugmentationLevelWhenCast.Value > 0)
             {
-                PowerLevel += (uint)entry.AugmentationLevelWhenCast.Value;
+                PowerLevel += (uint)(entry.AugmentationLevelWhenCast.Value * 1000);
             }
 
             Target = target;
