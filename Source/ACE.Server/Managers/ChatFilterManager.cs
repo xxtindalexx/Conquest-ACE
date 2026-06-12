@@ -175,8 +175,8 @@ namespace ACE.Server.Managers
         /// <returns>True if the message was blocked, false if it should be allowed</returns>
         public static bool ProcessMessage(Player player, string message, ChatType chatType)
         {
-            // Only filter global channels
-            if (chatType != ChatType.Trade && chatType != ChatType.General && chatType != ChatType.LFG && chatType != ChatType.Roleplay && chatType != ChatType.Society)
+            // Only filter trade and general chat
+            if (chatType != ChatType.Trade && chatType != ChatType.General)
                 return false;
 
             // Check if filtering is enabled
@@ -232,7 +232,7 @@ namespace ACE.Server.Managers
                 }
 
                 // Send to Discord audit channel
-                var discordMessage = $"🔇 [Auto-Gag] | **{player.Name}** was gagged for {durationMinutes} minutes for using `{matchedWord}` in {chatType} chat.";
+                var discordMessage = $"🔇 **Auto-Gag** | **{player.Name}** was gagged for {durationMinutes} minutes for using `{matchedWord}` in {chatType} chat.";
                 DiscordChatManager.SendDiscordMessage("ChatFilter", discordMessage, ConfigManager.Config.Chat.TrackingAuditChannelId);
             }
         }

@@ -96,7 +96,18 @@ namespace ACE.Server.WorldObjects
                     ChatMessageType.Broadcast));
             }
 
-            GrantXP(m_amount, xpType, shareType);
+            // CONQUEST: Do not call GrantXP for non-shareable XP types (e.g. Admin, Emote) to avoid Fellowship sharing logic and bonus application
+            // Make sure UpdateXpAndLevel is done on this players thread
+            EnqueueAction(new ActionEventDelegate(ActionType.PlayerXp_UpdateXpAndLevel, () => UpdateXpAndLevel(m_amount, xpType)));
+
+            // for passing XP up the allegiance chain,
+            // this function is only called at the very beginning, to start the process.
+            if (shareType.HasFlag(ShareType.Allegiance))
+                UpdateXpAllegiance(amount);
+
+            // only certain types of XP are granted to items
+            if (xpType == XpType.Kill || xpType == XpType.Quest)
+                GrantItemXP(amount);
         }
 
         /// <summary>

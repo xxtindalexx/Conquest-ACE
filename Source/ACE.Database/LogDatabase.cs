@@ -283,6 +283,69 @@ namespace ACE.Database
             return null;
         }
 
+        /// <summary>
+        /// CONQUEST: Resets arena stats for a character
+        /// </summary>
+        /// <param name="characterId">The character ID to reset stats for</param>
+        /// <param name="eventType">Optional event type (1v1, 2v2, etc.) - if null, resets all event types</param>
+        /// <returns>Number of records deleted</returns>
+        public int ResetArenaStats(uint characterId, string eventType = null)
+        {
+            try
+            {
+                using (var context = new LogDbContext())
+                {
+                    var statsToDelete = string.IsNullOrEmpty(eventType)
+                        ? context.ArenaCharacterStats.Where(x => x.CharacterId == characterId).ToList()
+                        : context.ArenaCharacterStats.Where(x => x.CharacterId == characterId && x.EventType.Equals(eventType)).ToList();
+
+                    if (statsToDelete.Count == 0)
+                        return 0;
+
+                    context.ArenaCharacterStats.RemoveRange(statsToDelete);
+                    context.SaveChanges();
+                    return statsToDelete.Count;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error in ResetArenaStats. characterId={characterId}, eventType={eventType}, ex:{ex}");
+            }
+
+            return -1;
+        }
+
+        /// <summary>
+        /// CONQUEST: Resets arena stats for ALL characters
+        /// </summary>
+        /// <param name="eventType">Optional event type (1v1, 2v2, etc.) - if null, resets all event types</param>
+        /// <returns>Number of records deleted</returns>
+        public int ResetAllArenaStats(string eventType = null)
+        {
+            try
+            {
+                using (var context = new LogDbContext())
+                {
+                    var statsToDelete = string.IsNullOrEmpty(eventType)
+                        ? context.ArenaCharacterStats.ToList()
+                        : context.ArenaCharacterStats.Where(x => x.EventType.Equals(eventType)).ToList();
+
+                    if (statsToDelete.Count == 0)
+                        return 0;
+
+                    context.ArenaCharacterStats.RemoveRange(statsToDelete);
+                    context.SaveChanges();
+                    return statsToDelete.Count;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error in ResetAllArenaStats. eventType={eventType}, ex:{ex}");
+            }
+
+            return -1;
+        }
+
         public string GetArenaStatsByCharacterId(uint characterId, string characterName)
         {
             var returnMsg = new StringBuilder();

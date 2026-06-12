@@ -301,9 +301,9 @@ namespace ACE.Server.WorldObjects
             if (sourceCreature != null && !sourceCreature.CanDamage(creatureTarget))
                 return;
 
-            // CONQUEST: Cannot damage targets in different variations
+            //// CONQUEST: Cannot damage targets in different variations
             //if (sourceCreature != null && !AreVariationsCompatible(sourceCreature.Location.Variation, creatureTarget.Location.Variation))
-                //return;
+            //    return;
 
             // if player target, ensure matching PK status
             var targetPlayer = creatureTarget as Player;
@@ -643,7 +643,7 @@ namespace ACE.Server.WorldObjects
                         var warAugCount = sourceCreature.LuminanceAugmentWarCount ?? 0;
                         if (warAugCount > 0)
                         {
-                            var warAugMultiplier = 1.0f + (warAugCount * 0.005f);
+                            var warAugMultiplier = 1.0f + (warAugCount * (float)PropertyManager.GetDouble("war_aug_dmg_per_level"));
                             finalDamage *= warAugMultiplier;
                         }
                     }
@@ -657,7 +657,7 @@ namespace ACE.Server.WorldObjects
                         var voidAugCount = sourceCreature.LuminanceAugmentVoidCount ?? 0;
                         if (voidAugCount > 0)
                         {
-                            var voidAugMultiplier = 1.0f + (voidAugCount * 0.005f);
+                            var voidAugMultiplier = 1.0f + (voidAugCount * (float)PropertyManager.GetDouble("void_aug_dmg_per_level"));
                             finalDamage *= voidAugMultiplier;
                         }
                     }
@@ -1280,8 +1280,8 @@ namespace ACE.Server.WorldObjects
                     continue;
 
                 // CONQUEST: Cannot chain to targets in different variations
-                //if (!AreVariationsCompatible(primaryTarget.Location.Variation, creature.Location.Variation))
-                    //continue;
+                if (!AreVariationsCompatible(primaryTarget.Location.Variation, creature.Location.Variation))
+                    continue;
 
                 // Check distance from primary target
                 var objPos = creature.Location.ToGlobal(false);

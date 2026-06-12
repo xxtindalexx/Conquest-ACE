@@ -158,10 +158,8 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: PK Dungeon Bonus - +10% Lum in PK-only dungeons
             var pkDungeonBonus = GetPKDungeonBonus();
 
-            // CONQUEST: Enlightenment bonus (+1% per level)
-            var enlightenmentBonus = 1.0 + (Enlightenment * 0.01);
 
-            var m_amount = (long)Math.Round(amount * enchantment * modifier * questBonus * pkDungeonBonus * enlightenmentBonus);
+            var m_amount = (long)Math.Round(amount * enchantment * modifier * questBonus * pkDungeonBonus);
 
             // CONQUEST: Show Luminance breakdown if player has enabled it via /xpdebugging command
             if (ShowXpBreakdown && (xpType == XpType.Kill || xpType == XpType.Quest))
