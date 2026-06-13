@@ -216,6 +216,9 @@ namespace ACE.Entity.Enum.Properties
         /// </summary>
         ShowXpBreakdown = 9041,
 
+        // CONQUEST: Thrown weapon using melee damage pipeline
+        IsMeleeThrownWeapon = 9050, 
+
         // CONQUEST: Champion Mutation System
         ChampionEnabled = 9200,    // Generator property - enables champion spawns
         IsChampion = 9201,         // Creature property - this is a champion

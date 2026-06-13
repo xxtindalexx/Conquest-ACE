@@ -48,7 +48,7 @@ namespace ACE.Server.Entity
                 return;
             }
 
-            var allowCraftInCombat = PropertyManager.GetBool("allow_combat_mode_crafting").Item;
+            var allowCraftInCombat = PropertyManager.GetBool("allow_combat_mode_crafting");
 
             if (!allowCraftInCombat && player.CombatMode != CombatMode.NonCombat)
             {
@@ -85,12 +85,12 @@ namespace ACE.Server.Entity
             var currentStance = player.CurrentMotionState.Stance; // expected to be MotionStance.NonCombat
             var clapTime = Physics.Animation.MotionTable.GetAnimationLength(player.MotionTableId, currentStance, motionCommand);
 
-            actionChain.AddAction(player, () => player.SendMotionAsCommands(motionCommand, currentStance));
+            actionChain.AddAction(player, ActionType.PlayerMotion_SendMotionAsCommands, () => player.SendMotionAsCommands(motionCommand, currentStance));
             actionChain.AddDelaySeconds(clapTime);
 
             nextUseTime += clapTime;
 
-            actionChain.AddAction(player, () =>
+            actionChain.AddAction(player, ActionType.RecipeManager_FinishRecipe, () =>
             {
                 // re-verify
                 var useError = VerifyUseRequirements(player, source, target);
@@ -110,7 +110,7 @@ namespace ACE.Server.Entity
 
             //player.EnqueueMotion(actionChain, MotionCommand.Ready);
 
-            actionChain.AddAction(player, () => player.IsBusy = false);
+            actionChain.AddAction(player, ActionType.PlayerUse_SetNonBusy, () => player.IsBusy = false);
 
             actionChain.EnqueueChain();
 

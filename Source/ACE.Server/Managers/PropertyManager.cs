@@ -739,6 +739,8 @@ namespace ACE.Server.Managers
                 ("life_aug_prot_tuning_constant", new Property<double>(0.0034597, "the tuning constant r used in the  (1.0 - (1.0 - r)^a) life aug scaling formula - controls the size of step for each augmentation, relative to remaining cap (0.0034597 means every 200 augs halves the remaining bonus)")),
                 ("life_aug_prot_max_bonus", new Property<double>(0.32, "the maximum bonus that the life aug scaling can approach at infinite augs - T8 protection spells provide 68% base, so a bonus above 32% makes it possible to achieve full protection")),
                 ("life_aug_prot_linear_rate", new Property<double>(0.003, "CONQUEST: the linear rate (0.003 = 0.3%) applied per aug for the first N augs before diminishing returns kick in")),
+                ("war_aug_dmg_per_level", new Property<double>(0.005, "CONQUEST: Damage multiplier per War Magic augmentation level. 0.005 = 0.5% per aug (default).")),
+                ("void_aug_dmg_per_level", new Property<double>(0.005, "CONQUEST: Damage multiplier per Void Magic augmentation level. 0.005 = 0.5% per aug (default).")),
 
                 // CONQUEST: Mystery Egg Drop System
                 ("mystery_egg_base_drop_rate", new Property<double>(0.002, "Base chance (0.002 = 0.2%) for a mystery egg to drop from mobs level 50-99. Higher level mobs have multipliers applied.")),

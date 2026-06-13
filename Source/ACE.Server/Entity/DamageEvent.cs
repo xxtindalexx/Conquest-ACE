@@ -177,6 +177,19 @@ namespace ACE.Server.Entity
 
             DamageSource = damageSource;
 
+
+            // CONQUEST: Keep melee damage pipeline for thrown light weapons
+
+            if (damageSource.GetProperty(PropertyBool.IsMeleeThrownWeapon) == true)
+
+            {
+
+                CombatType = CombatType.Melee;
+
+                Weapon = damageSource.ProjectileLauncher ?? damageSource.ProjectileAmmo;
+
+            }
+
             Weapon = damageSource.ProjectileSource == null ? attacker.GetEquippedMeleeWeapon() : (damageSource.ProjectileLauncher ?? damageSource.ProjectileAmmo);
 
             AttackType = attacker.AttackType;
