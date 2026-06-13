@@ -48,11 +48,11 @@ namespace ACE.Server.WorldObjects
 
             if (targetCreature != null && targetCreature.IsAlive)
             {
-                //// CONQUEST: Cannot damage targets in different variations
+                // CONQUEST: Cannot damage targets in different variations
                 //if (sourceCreature != null && !WorldObject.AreVariationsCompatible(sourceCreature.Location.Variation, targetCreature.Location.Variation))
                 //{
-                //    OnCollideEnvironment(worldObject);
-                //    return;
+                    //OnCollideEnvironment(worldObject);
+                    //return;
                 //}
 
                 DamageEvent damageEvent = null;
