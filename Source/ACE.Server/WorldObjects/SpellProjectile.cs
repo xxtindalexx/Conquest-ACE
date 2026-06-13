@@ -1279,9 +1279,9 @@ namespace ACE.Server.WorldObjects
                 if (caster.CheckPKStatusVsTarget(creature, Spell) != null)
                     continue;
 
-                // CONQUEST: Cannot chain to targets in different variations
-                if (!AreVariationsCompatible(primaryTarget.Location.Variation, creature.Location.Variation))
-                    continue;
+                //// CONQUEST: Cannot chain to targets in different variations
+                //if (!AreVariationsCompatible(primaryTarget.Location.Variation, creature.Location.Variation))
+                //    continue;
 
                 // Check distance from primary target
                 var objPos = creature.Location.ToGlobal(false);
