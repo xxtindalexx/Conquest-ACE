@@ -7171,6 +7171,85 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
+        [CommandHandler("arenaresetstats", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Resets arena stats for a player or all players",
+            "\nUsage:\n" +
+            "  /arenaresetstats <playername>           - Reset all arena stats for a player\n" +
+            "  /arenaresetstats <playername> <type>    - Reset specific event type (1v1, 2v2, 3v3, ffa)\n" +
+            "  /arenaresetstats all                    - Reset ALL players' arena stats (use with caution!)\n" +
+            "  /arenaresetstats all <type>             - Reset specific event type for ALL players")]
+        public static void HandleArenaResetStats(Session session, params string[] parameters)
+        {
+            if (parameters.Length == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session,
+                    "Arena Stats Reset Command\n" +
+                    "Usage:\n" +
+                    "  /arenaresetstats <playername>           - Reset all arena stats for a player\n" +
+                    "  /arenaresetstats <playername> <type>    - Reset specific event type (1v1, 2v2, 3v3, ffa)\n" +
+                    "  /arenaresetstats all                    - Reset ALL players' arena stats (use with caution!)\n" +
+                    "  /arenaresetstats all <type>             - Reset specific event type for ALL players");
+                return;
+            }
+
+            var validEventTypes = new[] { "1v1", "2v2", "3v3", "ffa" };
+            string targetName = parameters[0].ToLower();
+            string eventType = parameters.Length > 1 ? parameters[1].ToLower() : null;
+
+            // Validate event type if provided
+            if (!string.IsNullOrEmpty(eventType) && !validEventTypes.Contains(eventType))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Invalid event type '{eventType}'. Valid types are: {string.Join(", ", validEventTypes)}");
+                return;
+            }
+
+            // Handle "all" - reset all players
+            if (targetName == "all")
+            {
+                var deletedCount = DatabaseManager.Log.ResetAllArenaStats(eventType);
+
+                if (deletedCount == -1)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, "Error resetting arena stats. Check server logs for details.");
+                    return;
+                }
+
+                if (deletedCount == 0)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"No arena stats found to reset{(string.IsNullOrEmpty(eventType) ? "" : $" for event type {eventType}")}.");
+                    return;
+                }
+
+                CommandHandlerHelper.WriteOutputInfo(session, $"Successfully reset {deletedCount} arena stat record(s) for ALL players{(string.IsNullOrEmpty(eventType) ? "" : $" (event type: {eventType})")}.");
+                return;
+            }
+
+            // Handle specific player
+            var targetPlayer = PlayerManager.FindByName(targetName);
+            if (targetPlayer == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Player '{parameters[0]}' not found.");
+                return;
+            }
+
+            var characterId = targetPlayer.Guid.Full;
+            var deletedPlayerCount = DatabaseManager.Log.ResetArenaStats(characterId, eventType);
+
+            if (deletedPlayerCount == -1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Error resetting arena stats. Check server logs for details.");
+                return;
+            }
+
+            if (deletedPlayerCount == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"No arena stats found for player '{targetPlayer.Name}'{(string.IsNullOrEmpty(eventType) ? "" : $" with event type {eventType}")}.");
+                return;
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Successfully reset {deletedPlayerCount} arena stat record(s) for player '{targetPlayer.Name}'{(string.IsNullOrEmpty(eventType) ? "" : $" (event type: {eventType})")}.");
+        }
+
         // CONQUEST: Multibox Exemption System Commands
 
         // exemptmultibox <accountname> <reason>

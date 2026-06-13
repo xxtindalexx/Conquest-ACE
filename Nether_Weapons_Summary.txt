@@ -1,0 +1,173 @@
+================================================================================
+CONQUEST - NETHER WEAPONS IMPLEMENTATION SUMMARY
+================================================================================
+Date: 2025-12-17
+Status: Placeholder IDs added to loot tables, WeenieClassName enums need creation
+Total Nether Weapons: 74 melee/missile weapons + 3 existing casters
+
+================================================================================
+HEAVY WEAPONS (24 total) - conquest_nether*
+================================================================================
+conquest_netherbattleaxe          (Axe)
+conquest_netherlugianhammer       (Axe)
+conquest_nethersilifi             (Axe)
+conquest_netherwaraxe             (Axe)
+conquest_netherdirk               (Dagger)
+conquest_netherjambiya            (Dagger - Multi-strike)
+conquest_netherstiletto           (Dagger - Multi-strike)
+conquest_netherflangedmace        (Mace)
+conquest_nethermace               (Mace)
+conquest_nethermazule             (Mace)
+conquest_nethermorningstar        (Mace)
+conquest_netherpartizan           (Spear)
+conquest_netherspineglaive        (Spear)
+conquest_nethertrident            (Spear)
+conquest_nethernabut              (Staff)
+conquest_netherstick              (Staff)
+conquest_netherflamberge          (Sword)
+conquest_netherken                (Sword)
+conquest_netherlongsword          (Sword)
+conquest_netherschlager           (Sword - Multi-strike)
+conquest_nethertachi              (Sword)
+conquest_nethertakuba             (Sword)
+conquest_nethercestus             (Unarmed)
+conquest_nethernekode             (Unarmed)
+
+================================================================================
+LIGHT WEAPONS (19 total) - conquest_nether*
+================================================================================
+conquest_netherdolabra            (Axe)
+conquest_netherhandaxe            (Axe)
+conquest_netherono                (Axe)
+conquest_netherwarhammer          (Axe)
+conquest_netherlightdagger        (Dagger - Multi-strike)
+conquest_netherkhanjar            (Dagger)
+conquest_netherlightclub          (Mace)
+conquest_netherkasrullah          (Mace)
+conquest_netherspikedclub         (Mace)
+conquest_netherlightspear         (Spear)
+conquest_netheryari               (Spear)
+conquest_netherquarterstaff       (Staff)
+conquest_netherbroadsword         (Sword)
+conquest_netherdericostblade      (Sword)
+conquest_netherkaskara            (Sword)
+conquest_nethershamshir           (Sword)
+conquest_netherspada              (Sword)
+conquest_netherepee               (Sword - Multi-strike)
+conquest_netherkatar              (Unarmed)
+conquest_netherknuckles           (Unarmed)
+
+================================================================================
+FINESSE WEAPONS (22 total) - conquest_nether*
+================================================================================
+conquest_netherhatchet            (Axe)
+conquest_nethershouono            (Axe)
+conquest_nethertungi              (Axe)
+conquest_netherknife              (Dagger - Multi-strike)
+conquest_netherlancet             (Dagger)
+conquest_netherponiard            (Dagger)
+conquest_netherboardwithnail      (Mace)
+conquest_netherdabus              (Mace)
+conquest_netherjitte              (Mace)
+conquest_nethertofun              (Mace)
+conquest_netherbudiaq             (Spear)
+conquest_netherswordstaff         (Spear)
+conquest_netherbastone            (Staff)
+conquest_netherjo                 (Staff)
+conquest_nethersabra              (Sword)
+conquest_netherscimitar           (Sword)
+conquest_nethershortsword         (Sword)
+conquest_nethersimi               (Sword)
+conquest_netherrapier             (Sword - Multi-strike)
+conquest_netheryaoji              (Unarmed)
+conquest_netherclaw               (Unarmed)
+conquest_netherhandwraps          (Unarmed)
+
+================================================================================
+MISSILE WEAPONS (9 total) - conquest_nether*
+================================================================================
+CROSSBOWS (3):
+conquest_netherheavycrossbow      (Crossbow)
+conquest_netherlightcrossbow      (Crossbow)
+conquest_netherarbalest           (Crossbow)
+
+ATLATLS (2):
+conquest_netheratlatl             (Atlatl)
+conquest_netherroyalatlatl        (Atlatl)
+
+TWO-HANDED (4):
+conquest_nethergreataxe           (Two-Handed Axe)
+conquest_nethergreatstar          (Two-Handed Mace)
+conquest_netherspadone            (Two-Handed Spear)
+conquest_nethergreatsword         (Two-Handed Sword)
+
+BOWS (Not yet processed - split across heritage files):
+- Need to add Nether variants to BowWcids_Aluvian.cs
+- Need to add Nether variants to BowWcids_Gharundim.cs
+- Need to add Nether variants to BowWcids_Sho.cs
+
+================================================================================
+EXISTING NETHER CASTER WEAPONS (Already in loot tables)
+================================================================================
+ace43381_nethersceptre            (Tiers 3-8, CasterWcids.cs)
+ace43382_netherbaton              (Tiers 3-8, CasterWcids.cs)
+ace43383_netherstaff              (Tiers 7-8, CasterWcids.cs)
+
+================================================================================
+IMPLEMENTATION STATUS
+================================================================================
+[DONE] Tinkering cap increased to 20x (RecipeManager.cs)
+[DONE] Heavy weapon loot tables updated with Nether variants
+[DONE] Light weapon loot tables updated with Nether variants
+[DONE] Finesse weapon loot tables updated with Nether variants
+[DONE] Missile weapon loot tables updated (Crossbow, Atlatl, Two-Handed)
+[TODO] Bow weapon loot tables (3 heritage files)
+[TODO] Create 74+ WeenieClassName enum entries
+[TODO] Create actual weenie definitions in content database
+
+================================================================================
+NEXT STEPS
+================================================================================
+1. Add WeenieClassName enum entries to WeenieClassName.cs
+   - Use range starting at conquest_nether* or use specific WCID numbers
+   - Suggest range: 999900000 - 999900099 for Conquest Nether weapons
+
+2. Create weenie definitions for all 74+ Nether weapons:
+   - Base stats from corresponding elemental weapon
+   - Damage type: Nether
+   - Weapon tints/colors: Purple/dark theme
+   - Loot tier scaling
+
+3. Test loot generation in all tiers
+4. Balance drop rates if needed (currently 13% per elemental type)
+
+================================================================================
+LOOT TABLE PROBABILITY CHANGES
+================================================================================
+All weapon tables updated from:
+  Base weapon:        40% -> 35%
+  Elemental variants: 15% -> 13% each (Acid, Electric, Fire, Frost)
+  Nether variant:     NEW -> 13%
+Total: 100% (35% + 5x13% = 100%)
+
+================================================================================
+FILES MODIFIED
+================================================================================
+C:\Users\xxtin\Documents\ACEMain\Source\ACE.Server\Managers\RecipeManager.cs
+C:\Users\xxtin\Documents\ACEMain\Source\ACE.Server\Factories\Tables\Wcids\Weapons\HeavyWeaponWcids.cs
+C:\Users\xxtin\Documents\ACEMain\Source\ACE.Server\Factories\Tables\Wcids\Weapons\LightWeaponWcids.cs
+C:\Users\xxtin\Documents\ACEMain\Source\ACE.Server\Factories\Tables\Wcids\Weapons\FinesseWeaponWcids.cs
+C:\Users\xxtin\Documents\ACEMain\Source\ACE.Server\Factories\Tables\Wcids\Weapons\CrossbowWcids.cs
+C:\Users\xxtin\Documents\ACEMain\Source\ACE.Server\Factories\Tables\Wcids\Weapons\AtlatlWcids.cs
+C:\Users\xxtin\Documents\ACEMain\Source\ACE.Server\Factories\Tables\Wcids\Weapons\TwoHandedWeaponWcids.cs
+C:\Users\xxtin\Documents\ACEMain\Conquest_Proposal_Review.txt
+
+================================================================================
+NOTES
+================================================================================
+- All placeholders use naming convention: conquest_nether<weapontype>
+- Nether casters (Sceptre, Baton, Staff) already exist with WCID 43381-43383
+- Weapons marked as "Multi-strike" are special variants
+- Each Nether weapon needs to be created as actual weenie content
+- Suggested WCID range: 999900000-999900099 (Conquest custom range)
+- Alternative: Use ACE custom range starting at 9990xxxx

@@ -23,8 +23,6 @@ bld/
 [Bb]in/
 [Oo]bj/
 [Ll]og/
-# Exception: Don't ignore the source code Models/Log folder
-!Source/ACE.Database/Models/Log/
 
 # Visual Studio / Visual Studio Code
 .vs/
@@ -304,3 +302,9 @@ Database/tools/password.txt
 docker.env
 docker-compose.yml
 docker-compose.arm64
+Conquest_Proposal_Review.txt
+CONQUEST_TESTING_GUIDE.txt
+Database_Requirements.txt
+Discord_Integration_Analysis.txt
+DISCORD_SETUP_GUIDE.md
+DISCORD_TWO_WAY_CHAT_IMPLEMENTATION.md
