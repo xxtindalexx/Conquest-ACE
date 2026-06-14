@@ -1145,6 +1145,13 @@ namespace ACE.Server.Command.Handlers
                             break;
                         }
 
+                        if (noteAmount > (long.MaxValue / noteValue))
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat($"You are attempting to withdraw an amount of pyreals in notes that exceeds the allowed amount. Try again.", ChatMessageType.System));
+                            break;
+                        }
+
+
                         const int TradeNoteMaxStack = 250;
                         long totalPyrealCost = noteAmount * noteValue;
                         if (session.Player.BankedPyreals == null || session.Player.BankedPyreals < totalPyrealCost)
