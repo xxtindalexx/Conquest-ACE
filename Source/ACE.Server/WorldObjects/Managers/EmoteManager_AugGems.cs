@@ -19,7 +19,8 @@ namespace ACE.Server.WorldObjects.Managers
         // Tier 1 (0-14):   1.0x  multiplier → 2.5M base
         // Tier 2 (15-29):  2.4x  multiplier → 6M base
         // Tier 3 (30-59):  4.8x  multiplier → 12M base
-        // Tier 4 (60+):    12.0x multiplier → 30M base (ensures smooth transition from T3)
+        // Tier 4 (60-64):  12.0x multiplier → 30M base
+        // Tier 5 (65+):    30.0x multiplier → 75M base (high-end progression slowdown)
 
         /// <summary>
         /// CONQUEST: Calculates the cost for a single augmentation based on tiered pricing
@@ -33,9 +34,16 @@ namespace ACE.Server.WorldObjects.Managers
             double tierBase;
             long positionInTier;
 
-            if (augIndex >= 60)
+            if (augIndex >= 65)
             {
-                // Tier 4: 60+ (30M base with default 2.5M emote.Amount)
+                // Tier 5: 65+ (75M base with default 2.5M emote.Amount)
+                // High-end progression slowdown to prevent top players from pulling away too fast
+                tierBase = baseCost * 30.0;
+                positionInTier = augIndex - 65;
+            }
+            else if (augIndex >= 60)
+            {
+                // Tier 4: 60-64 (30M base with default 2.5M emote.Amount)
                 tierBase = baseCost * 12.0;
                 positionInTier = augIndex - 60;
             }
