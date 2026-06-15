@@ -342,6 +342,44 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
+        // CONQUEST: Luminance Lottery
+        [CommandHandler("lum", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
+            "Luminance lottery commands.",
+            "/lum lottery [count] — Buy [count] tickets (1–max, default 1). Each ticket costs 1M lum.\n" +
+            "/lum status         — Show current pot, participants, and time until the next draw.")]
+        public static void HandleLum(Session session, params string[] parameters)
+        {
+            if (session?.Player == null)
+                return;
+
+            var sub = parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "status";
+
+            switch (sub)
+            {
+                case "lottery":
+                {
+                    int count = 1;
+                    if (parameters.Length > 1 && !int.TryParse(parameters[1], out count))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat(
+                            "[LOTTERY] Usage: /lum lottery [count]  (e.g. /lum lottery 3)", ChatMessageType.Broadcast));
+                        return;
+                    }
+                    ACE.Server.Managers.LotteryManager.EnterLottery(session.Player, count);
+                    break;
+                }
+
+                case "status":
+                    ACE.Server.Managers.LotteryManager.SendStatusToPlayer(session.Player);
+                    break;
+
+                default:
+                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                        "[LUM] Unknown sub-command. Try: /lum lottery [count]  or  /lum status", ChatMessageType.Broadcast));
+                    break;
+            }
+        }
+
         // upop - admin command to show unique IP connections
         [CommandHandler("upop", AccessLevel.Sentinel, CommandHandlerFlag.None, 0,
             "Show unique IP connections vs total population",
@@ -1251,7 +1289,8 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to transfer.", ChatMessageType.System));
                             break;
                         }
-                        if (!session.Player.TransferLuminance(amount, transferTargetName))
+                        //CONQUEST: Players must be Lum flagged to send luminance.
+                        if (!session.Player.TransferLuminance(amount, transferTargetName) || !session.Player.MaximumLuminance.HasValue)
                         {
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Luminance to {transferTargetName}", ChatMessageType.System));
                         }
@@ -2668,7 +2707,7 @@ namespace ACE.Server.Command.Handlers
                 }
 
                 session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"{index}. {quest.Quest}{charInfo}",
+                    $"{quest.Quest}",
                     ChatMessageType.Broadcast));
                 index++;
             }
@@ -2767,6 +2806,51 @@ namespace ACE.Server.Command.Handlers
                     "Error retrieving luminance history. Please try again later.",
                     ChatMessageType.Broadcast));
             }
+        }
+
+        private static readonly TimeSpan WhoCooldown = TimeSpan.FromSeconds(3);
+        private static readonly ConcurrentDictionary<uint, DateTime> WhoLastUsed = new ConcurrentDictionary<uint, DateTime>();
+
+        [CommandHandler("who", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 1,
+            "Displays basic information about a character.",
+            "<charname>\nReturns Level, Enlightenment, Augmentations, Patron, and Monarch for the named character.")]
+        public static void HandleWho(Session session, params string[] parameters)
+        {
+            var characterId = session.Player.Guid.Full;
+            var currentTime = DateTime.UtcNow;
+
+            if (WhoLastUsed.TryGetValue(characterId, out var lastUsed) && currentTime - lastUsed < WhoCooldown)
+            {
+                var remaining = WhoCooldown - (currentTime - lastUsed);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Please wait {remaining.TotalSeconds:F1}s before using /who again.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            WhoLastUsed[characterId] = currentTime;
+
+            var charName = string.Join(" ", parameters);
+            var target = PlayerManager.FindByName(charName);
+
+            if (target == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"No character named \"{charName}\" was found.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var level = target.Level ?? 0;
+            var enlightenment = target.GetProperty(PropertyInt.Enlightenment) ?? 0;
+            var augs = GetPlayerAugmentationCount(target);
+            var patronName = target.PatronId.HasValue ? PlayerManager.FindByGuid(target.PatronId.Value)?.Name ?? "Unknown" : "None";
+            var monarchName = target.MonarchId.HasValue ? PlayerManager.FindByGuid(target.MonarchId.Value)?.Name ?? "Unknown" : "None";
+
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"[{target.Name}]  Level: {level}  ENL: {enlightenment}  Augs: {augs}  Patron: {patronName}  Monarch: {monarchName}",
+                ChatMessageType.Broadcast));
+        }
+
+        private static int GetPlayerAugmentationCount(IPlayer player)
+        {
+            return AugmentationDevice.AugProps.Values.Sum(prop => player.GetProperty(prop) ?? 0);
         }
 
         [CommandHandler("lhr", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows luminance you have received in the last 7 days")]

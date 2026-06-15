@@ -593,6 +593,7 @@ namespace ACE.Server.Managers
                 ("pvp_disable_ignore_all_armor", new Property<bool>(true, "PvP: Disable IgnoreAllArmor imbue (Phantom weapons) in PvP")),
                 ("dispel_rares_pvp", new Property<bool>(false, "CONQUEST: if TRUE, rare gem spell buffs are automatically dispelled when PvP combat begins, and rare gems cannot be used while PK timer is active.")),
                 ("enable_vpn_detection", new Property<bool>(true, "CONQUEST: if TRUE, enables VPN/proxy detection using proxycheck.io API. Requires proxycheck_api_key to be set. Logs detected VPNs and their ISP information.")),
+                ("lottery_enabled", new Property<bool>(true, "CONQUEST: if TRUE, the weekly luminance lottery is open for entries and draws will run automatically.")),
                 ("pkl_server", new Property<bool>(false, "set this to TRUE for pink servers")),
                 ("quest_info_enabled", new Property<bool>(false, "toggles the /myquests player command")),
                 ("rares_real_time", new Property<bool>(true, "allow for second chance roll based on an rng seeded timestamp for a rare on rare eligible kills that do not generate a rare, rares_max_seconds_between defines maximum seconds before second chance kicks in")),
@@ -676,7 +677,13 @@ namespace ACE.Server.Managers
 
                 // CONQUEST: Mystery Egg Drop System
                 ("mystery_egg_min_mob_level", new Property<long>(50, "Minimum mob level required to drop mystery eggs. Mobs below this level will never drop eggs.")),
-                ("mystery_egg_wcid", new Property<long>(801502, "The weenie class ID (WCID) of the mystery egg item to create when dropped."))
+                ("mystery_egg_wcid", new Property<long>(801502, "The weenie class ID (WCID) of the mystery egg item to create when dropped.")),
+
+                // CONQUEST: Luminance Lottery
+                ("lottery_ticket_cost_lum", new Property<long>(1000000, "CONQUEST: Luminance cost per lottery ticket. Default 1,000,000.")),
+                ("lottery_max_tickets", new Property<long>(5, "CONQUEST: Maximum number of lottery tickets a single player may purchase per week.")),
+                ("lottery_draw_day_of_week", new Property<long>(0, "CONQUEST: Day of week the draw runs (0=Sunday … 6=Saturday). Default 0 (Sunday).")),
+                ("lottery_draw_hour_est", new Property<long>(18, "CONQUEST: Hour (EST, 24h) at which the weekly lottery draw fires. Default 18 (6 PM EST)."))
                 );
 
         public static readonly ReadOnlyDictionary<string, Property<double>> DefaultDoubleProperties =
@@ -723,6 +730,8 @@ namespace ACE.Server.Managers
                 ("vitae_penalty_max", new Property<double>(0.40, "the maximum vitae penalty a player can have")),
                 ("void_pvp_modifier", new Property<double>(0.5, "Scales the amount of damage players take from Void Magic. Defaults to 0.5, as per retail. For earlier content where DRR isn't as readily available, this can be adjusted for balance.")),
                 ("pvp_void_dot_damage_scale", new Property<double>(0.0, "CONQUEST: Scales Void/Nether DoT damage in PvP. 1.0 = full damage, 0.5 = half, 0 = disabled. The debuff (damage reduction) still applies. Default 0 (disabled).")),
+                ("lottery_pot_share", new Property<double>(0.5, "CONQUEST: Fraction of total lottery lum collected that becomes prize money. The remainder is a permanent lum sink. Default 0.5 (50%).")),
+                ("lottery_first_place_share", new Property<double>(0.5, "CONQUEST: Fraction of the lottery prize pool awarded to 1st place. 2nd and 3rd split the remainder equally. Default 0.5.")),
                 ("pvp_max_2h_damage", new Property<double>(0, "CONQUEST: Maximum two-handed melee damage a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
                 ("pvp_max_melee_damage", new Property<double>(0, "CONQUEST: Maximum melee damage (non-2H) a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
                 ("pvp_max_bow_damage", new Property<double>(0, "CONQUEST: Maximum bow damage a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),

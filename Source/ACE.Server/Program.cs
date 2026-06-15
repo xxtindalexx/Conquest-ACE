@@ -353,6 +353,9 @@ namespace ACE.Server
             log.Info("Initializing EconomyStatsManager...");
             EconomyStatsManager.Initialize();
 
+            log.Info("Initializing LotteryManager...");
+            LotteryManager.Initialize();
+
             log.Info("Initializing ChatFilterManager...");
             ChatFilterManager.Initialize();
 

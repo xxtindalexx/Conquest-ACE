@@ -1738,6 +1738,13 @@ namespace ACE.Server.Command.Handlers
                         message = $"Login name: {character.Account.AccountName}      Character: {character.Name}\n";
                     else
                         message = $"Login name: account not found, character is orphaned.      Character: {character.Name}\n";
+
+                    var level = character.Level ?? 0;
+                    var enlightenment = character.GetProperty(PropertyInt.Enlightenment) ?? 0;
+                    var augs = GetFingerAugmentationCount(character);
+                    var patronName = character.PatronId.HasValue ? PlayerManager.FindByGuid(character.PatronId.Value)?.Name ?? "Unknown" : "None";
+                    var monarchName = character.MonarchId.HasValue ? PlayerManager.FindByGuid(character.MonarchId.Value)?.Name ?? "Unknown" : "None";
+                    message += $"Level: {level}  ENL: {enlightenment}  Augs: {augs}  Patron: {patronName}  Monarch: {monarchName}\n";
                 }
                 else
                     message = $"There was no active character named \"{charName}\" found in the database.\n";
@@ -1790,7 +1797,20 @@ namespace ACE.Server.Command.Handlers
                     message += $"{characters.Count} Character(s) owned by: {account.AccountName}\n";
                     message += "-------------------\n";
                     foreach (var character in characters.Where(x => !x.IsDeleted && x.DeleteTime == 0))
-                        message += $"\"{(character.IsPlussed ? "+" : "")}{character.Name}\", ID 0x{character.Id.ToString("X8")}\n";
+                    {
+                        message += $"\"{(character.IsPlussed ? "+" : "")}{character.Name}\", ID 0x{character.Id.ToString("X8")}";
+                        var charPlayer = PlayerManager.FindByGuid(character.Id);
+                        if (charPlayer != null)
+                        {
+                            var level = charPlayer.Level ?? 0;
+                            var enl = charPlayer.GetProperty(PropertyInt.Enlightenment) ?? 0;
+                            var augs = GetFingerAugmentationCount(charPlayer);
+                            var patronName = charPlayer.PatronId.HasValue ? PlayerManager.FindByGuid(charPlayer.PatronId.Value)?.Name ?? "Unknown" : "None";
+                            var monarchName = charPlayer.MonarchId.HasValue ? PlayerManager.FindByGuid(charPlayer.MonarchId.Value)?.Name ?? "Unknown" : "None";
+                            message += $"  [Lvl {level}  ENL {enl}  Augs {augs}  Patron: {patronName}  Monarch: {monarchName}]";
+                        }
+                        message += "\n";
+                    }
                     var pendingDeletedCharacters = characters.Where(x => !x.IsDeleted && x.DeleteTime > 0).ToList();
                     if (pendingDeletedCharacters.Count > 0)
                     {
@@ -1813,6 +1833,11 @@ namespace ACE.Server.Command.Handlers
             }
 
             CommandHandlerHelper.WriteOutputInfo(session, message, ChatMessageType.WorldBroadcast);
+        }
+
+        private static int GetFingerAugmentationCount(IPlayer player)
+        {
+            return AugmentationDevice.AugProps.Values.Sum(prop => player.GetProperty(prop) ?? 0);
         }
 
         // freeze
@@ -8842,6 +8867,36 @@ namespace ACE.Server.Command.Handlers
 
                 default:
                     CommandHandlerHelper.WriteOutputInfo(session, "Unknown subcommand. Use: reload, status, list, add <word>, or remove <word>");
+                    break;
+            }
+        }
+
+        // CONQUEST: Luminance Lottery admin commands
+        [CommandHandler("lottery", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Administer the weekly luminance lottery.",
+            "/lottery run    — Force the weekly draw to run immediately.\n" +
+            "/lottery status — Show current participants, ticket counts, and prize pool.")]
+        public static void HandleLotteryAdmin(Session session, params string[] parameters)
+        {
+            var sub = parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "status";
+
+            switch (sub)
+            {
+                case "run":
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Forcing weekly draw...");
+                    Managers.LotteryManager.ForceRunDraw(session);
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Draw complete. Check server log for details.");
+                    break;
+
+                case "status":
+                    if (session?.Player != null)
+                        Managers.LotteryManager.SendStatusToPlayer(session.Player);
+                    else
+                        CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] /lottery status requires an in-world session.");
+                    break;
+
+                default:
+                    CommandHandlerHelper.WriteOutputInfo(session, "Usage: /lottery run  |  /lottery status");
                     break;
             }
         }
