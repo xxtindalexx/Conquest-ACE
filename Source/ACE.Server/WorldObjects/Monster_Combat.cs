@@ -776,9 +776,27 @@ namespace ACE.Server.WorldObjects
                 (null, 13370037, "An iron cage falls from the sky, dodge it or be trapped!")
             };
 
-            // Select a random object set
+            // If the weenie specifies an explicit hotspot WCID, use it instead of a random pick.
+            var hotspotDamageWCID = GetProperty(PropertyInt.EnrageHotspotDamageWCID);
+            var hotspotVisualWCID = GetProperty(PropertyInt.EnrageHotspotVisualWCID);
+
+            int? damageObjectId;
+            int visualObjectId;
+            string message;
+
             var random = new Random();
-            var (damageObjectId, visualObjectId, message) = spawnOptions[random.Next(0, spawnOptions.Count)];
+            if (hotspotDamageWCID.HasValue || hotspotVisualWCID.HasValue)
+            {
+                damageObjectId = hotspotDamageWCID;
+                // Fall back to a random visual from the default pool when none is explicitly configured.
+                visualObjectId = hotspotVisualWCID ?? spawnOptions[random.Next(0, spawnOptions.Count)].VisualObjectId;
+                message = "Beware the incoming attack!";
+            }
+            else
+            {
+                // Select a random object set
+                (damageObjectId, visualObjectId, message) = spawnOptions[random.Next(0, spawnOptions.Count)];
+            }
 
             WorldObject damageObj = null;
 
@@ -791,6 +809,11 @@ namespace ACE.Server.WorldObjects
                     damageObj = WorldObjectFactory.CreateNewWorldObject(damageWeenie);
                     if (damageObj != null)
                     {
+                        // Apply per-spawner damage override if set on this creature's weenie.
+                        var damageOverride = GetProperty(PropertyInt.EnrageHotspotDamageOverride);
+                        if (damageOverride.HasValue)
+                            damageObj.SetProperty(PropertyInt.Damage, damageOverride.Value);
+
                         damageObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
                         damageObj.Location.LandblockId = new LandblockId(damageObj.Location.GetCell());
                         // Thread-safe EnterWorld
@@ -806,24 +829,30 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
-            // **Create Visual Effect Object**
-            var visualWeenie = DatabaseManager.World.GetCachedWeenie((uint)visualObjectId);
-            if (visualWeenie == null) return;
-
-            var visualObj = WorldObjectFactory.CreateNewWorldObject(visualWeenie);
-            if (visualObj == null) return;
-
-            visualObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
-            visualObj.Location.LandblockId = new LandblockId(visualObj.Location.GetCell());
-            // Thread-safe EnterWorld
-            var visualObjToSpawn = visualObj;
-            WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
+            // **Create Visual Effect Object** (skipped when no visual WCID is configured)
+            WorldObject visualObj = null;
+            if (visualObjectId > 0)
             {
-                if (!visualObjToSpawn.EnterWorld())
+                var visualWeenie = DatabaseManager.World.GetCachedWeenie((uint)visualObjectId);
+                if (visualWeenie != null)
                 {
-                    log.Warn($"Failed to spawn enrage hotspot visual {visualObjToSpawn.Name} at {visualObjToSpawn.Location}");
+                    visualObj = WorldObjectFactory.CreateNewWorldObject(visualWeenie);
+                    if (visualObj != null)
+                    {
+                        visualObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
+                        visualObj.Location.LandblockId = new LandblockId(visualObj.Location.GetCell());
+                        // Thread-safe EnterWorld
+                        var visualObjToSpawn = visualObj;
+                        WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
+                        {
+                            if (!visualObjToSpawn.EnterWorld())
+                            {
+                                log.Warn($"Failed to spawn enrage hotspot visual {visualObjToSpawn.Name} at {visualObjToSpawn.Location}");
+                            }
+                        }));
+                    }
                 }
-            }));
+            }
 
             // Broadcast warning
             BroadcastMessage($"The enraged mob targets {targetPlayer.Name}! {message}", 250.0f);
@@ -842,9 +871,12 @@ namespace ACE.Server.WorldObjects
                     damageObj, new ActionEventDelegate(ActionType.MonsterCombat_DeleteObjectAfterDelay, () => damageObj.DeleteObject())
                 ));
             }
-            actionChain.AddAction(new ActionChain.ChainElement(
-                visualObj, new ActionEventDelegate(ActionType.MonsterCombat_DeleteObjectAfterDelay, () => visualObj.DeleteObject())
-            ));
+            if (visualObj != null)
+            {
+                actionChain.AddAction(new ActionChain.ChainElement(
+                    visualObj, new ActionEventDelegate(ActionType.MonsterCombat_DeleteObjectAfterDelay, () => visualObj.DeleteObject())
+                ));
+            }
             actionChain.EnqueueChain();
         }
 
