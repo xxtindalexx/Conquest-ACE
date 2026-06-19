@@ -608,6 +608,17 @@ namespace ACE.Server.WorldObjects.Managers
                     }
                 }
             }
+
+            // notify the caster when their nether DoT expires on a target
+            if (entry.StatModKey == (int)PropertyInt.NetherOverTime)
+            {
+                var casterPlayer = PlayerManager.GetOnlinePlayer(entry.CasterObjectId);
+                if (casterPlayer != null)
+                {
+                    var netherSpell = new Spell(spellID);
+                    casterPlayer.SendMessage($"The magical energies of {netherSpell.Name} surrounding {WorldObject.Name} fade to nothing.", ChatMessageType.Magic);
+                }
+            }
         }
 
         /// <summary>
@@ -1488,7 +1499,7 @@ namespace ACE.Server.WorldObjects.Managers
         {
             var topLayerEnchantments = WorldObject.Biota.PropertiesEnchantmentRegistry.GetEnchantmentsTopLayer(WorldObject.BiotaDatabaseLock, SpellSet.SetSpells);
 
-            HeartBeat_DamageOverTime(topLayerEnchantments);
+            HeartBeat_DamageOverTime(topLayerEnchantments, heartbeatInterval);
 
             var expired = WorldObject.Biota.PropertiesEnchantmentRegistry.HeartBeatEnchantmentsAndReturnExpired(heartbeatInterval, WorldObject.BiotaDatabaseLock);
 
@@ -1500,7 +1511,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// Applies damage from DoTs every ~5 seconds
         /// </summary>
         /// <param name="enchantments">A list of active enchantments at the top layers</param>
-        public void HeartBeat_DamageOverTime(List<PropertiesEnchantmentRegistry> enchantments)
+        public void HeartBeat_DamageOverTime(List<PropertiesEnchantmentRegistry> enchantments, double heartbeatInterval = 0)
         {
             var dots = new List<PropertiesEnchantmentRegistry>();
             var netherDots = new List<PropertiesEnchantmentRegistry>();
@@ -1529,7 +1540,7 @@ namespace ACE.Server.WorldObjects.Managers
                 ApplyDamageTick(dots, DamageType.Undef);
 
             if (netherDots.Count > 0)
-                ApplyDamageTick(netherDots, DamageType.Nether);
+                ApplyDamageTick(netherDots, DamageType.Nether, false, heartbeatInterval);
 
             if (aetheriaDots.Count > 0)
                 ApplyDamageTick(aetheriaDots, DamageType.Undef, true);
@@ -1581,13 +1592,14 @@ namespace ACE.Server.WorldObjects.Managers
         /// Applies 1 tick of damage from a DoT spell
         /// </summary>
         /// <param name="enchantments">The damage over time (DoT) spells</param>
-        public void ApplyDamageTick(List<PropertiesEnchantmentRegistry> enchantments, DamageType damageType, bool aetheria = false)
+        public void ApplyDamageTick(List<PropertiesEnchantmentRegistry> enchantments, DamageType damageType, bool aetheria = false, double heartbeatInterval = 0)
         {
             var creature = WorldObject as Creature;
             if (creature == null || creature.IsDead) return;
 
             bool isDead = false;
             var damagers = new Dictionary<WorldObject, float>();
+            var fadingDamagers = new Dictionary<WorldObject, string>();
 
             var targetPlayer = WorldObject as Player;
 
@@ -1672,6 +1684,14 @@ namespace ACE.Server.WorldObjects.Managers
                 else
                     damagers.Add(damager, tickAmount);
 
+                // track whether this enchantment is on its final tick so the caster can be notified
+                if (heartbeatInterval > 0 && enchantment.Duration >= 0 && !fadingDamagers.ContainsKey(damager))
+                {
+                    var remaining = enchantment.Duration + enchantment.StartTime;
+                    if (remaining <= heartbeatInterval * 1.5)
+                        fadingDamagers[damager] = new Spell(enchantment.SpellId).Name;
+                }
+
                 creature.DamageHistory.Add(damager, damageType, (uint)Math.Round(tickAmount));
 
                 tickAmountTotal += tickAmount;
@@ -1694,7 +1714,8 @@ namespace ACE.Server.WorldObjects.Managers
                 var damageSourcePlayer = damager as Player;
                 if (damageSourcePlayer != null)
                 {
-                    creature.TakeDamageOverTime_NotifySource(damageSourcePlayer, damageType, amount, aetheria);
+                    fadingDamagers.TryGetValue(damager, out var fadingSpellName);
+                    creature.TakeDamageOverTime_NotifySource(damageSourcePlayer, damageType, amount, aetheria, fadingSpellName);
 
                     // CONQUEST: Track arena damage dealt/received from DoTs
                     var defenderPlayer = creature as Player;

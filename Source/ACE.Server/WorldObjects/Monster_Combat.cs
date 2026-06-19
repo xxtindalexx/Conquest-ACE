@@ -347,7 +347,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Notifies the damage over time (DoT) source player of the tick damage amount
         /// </summary>
-        public void TakeDamageOverTime_NotifySource(Player source, DamageType damageType, float amount, bool aetheria = false)
+        public void TakeDamageOverTime_NotifySource(Player source, DamageType damageType, float amount, bool aetheria = false, string fadingSpellName = null)
         {
             if (!PropertyManager.GetBool("show_dot_messages"))
                 return;
@@ -367,6 +367,8 @@ namespace ACE.Server.WorldObjects
             if (damageType == DamageType.Nether)
             {
                 msg = $"You {verb} {Name} for {iAmount} points of periodic nether damage!";
+                if (fadingSpellName != null)
+                    msg += $" You feel the magical energies of {fadingSpellName} surrounding {Name} begin to fade.";
                 type = ChatMessageType.Magic;
             }
             else if (aetheria)
