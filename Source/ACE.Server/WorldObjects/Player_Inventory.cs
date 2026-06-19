@@ -3325,7 +3325,26 @@ namespace ACE.Server.WorldObjects
                                     // We only block if ANOTHER request pushed it OVER the limit
                                     if (ipTracking != null && ipTracking.SolvesCount > quest.IpLootLimit.GetValueOrDefault(1))
                                     {
-                                        Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot loot this item. Your IP-wide limit has been reached.", ChatMessageType.Broadcast));
+                                        var refreshSuffix = string.Empty;
+                                        if (quest.MinDelta > 0)
+                                        {
+                                            var baseTime = quest.ResetFromFirst ? ipTracking.FirstSolveTime : ipTracking.LastSolveTime;
+                                            if (baseTime.HasValue)
+                                            {
+                                                var refreshAt = baseTime.Value.AddSeconds(quest.MinDelta);
+                                                var remaining = refreshAt - DateTime.UtcNow;
+                                                if (remaining > TimeSpan.Zero)
+                                                {
+                                                    var parts = new System.Text.StringBuilder();
+                                                    if ((int)remaining.TotalDays > 0) parts.Append($"{(int)remaining.TotalDays}d ");
+                                                    if (remaining.Hours > 0) parts.Append($"{remaining.Hours}h ");
+                                                    if (remaining.Minutes > 0 || ((int)remaining.TotalDays == 0 && remaining.Hours == 0))
+                                                        parts.Append($"{remaining.Minutes}m");
+                                                    refreshSuffix = $" The limit refreshes in {parts.ToString().Trim()}.";
+                                                }
+                                            }
+                                        }
+                                        Session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot loot this item. Your IP-wide limit has been reached.{refreshSuffix}", ChatMessageType.Broadcast));
                                         Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, mergeFromGuid));
                                         EnqueuePickupDone(pickupMotion);
                                         return;
