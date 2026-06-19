@@ -173,24 +173,17 @@ namespace ACE.Server.Entity
             Attacker = attacker;
             Defender = defender;
 
-            CombatType = damageSource.ProjectileSource == null ? CombatType.Melee : CombatType.Missile;
-
             DamageSource = damageSource;
 
+            CombatType = damageSource.ProjectileSource == null ? CombatType.Melee : CombatType.Missile;
+            Weapon = damageSource.ProjectileSource == null
+                ? attacker.GetEquippedMeleeWeapon()
+                : (damageSource.ProjectileLauncher ?? damageSource.ProjectileAmmo);
 
-            // CONQUEST: Keep melee damage pipeline for thrown light weapons
-
-            if (damageSource.GetProperty(PropertyBool.IsMeleeThrownWeapon) == true)
-
-            {
-
+            // CONQUEST: thrown light weapons use the melee damage pipeline
+            var isMeleeThrown = damageSource.GetProperty(PropertyBool.IsMeleeThrownWeapon) == true;
+            if (isMeleeThrown)
                 CombatType = CombatType.Melee;
-
-                Weapon = damageSource.ProjectileLauncher ?? damageSource.ProjectileAmmo;
-
-            }
-
-            Weapon = damageSource.ProjectileSource == null ? attacker.GetEquippedMeleeWeapon() : (damageSource.ProjectileLauncher ?? damageSource.ProjectileAmmo);
 
             AttackType = attacker.AttackType;
             AttackHeight = attacker.AttackHeight ?? AttackHeight.Medium;
@@ -265,7 +258,9 @@ namespace ACE.Server.Entity
             if (GeneralFailure) return 0.0f;
 
             // CONQUEST: Melee/Missile augmentation flat damage bonus
-            var isMissile = Weapon != null && Weapon.IsMissileWeapon;
+            // Classify the aug pool strictly by the attack's (overridden) CombatType, never by
+            // which augs the player owns - a melee/LW player may carry missile augs and vice versa.
+            var isMissile = CombatType == CombatType.Missile;
             long damageBonus = 0;
             if (isMissile && attacker.LuminanceAugmentMissileCount > 0)
             {

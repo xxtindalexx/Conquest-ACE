@@ -249,8 +249,12 @@ namespace ACE.Server.WorldObjects
             var creature = target as Creature;
             if (creature == null) return 0;
 
-            var attackType = GetCombatType();
-            var defenseSkill = attackType == CombatType.Missile ? Skill.MissileDefense : Skill.MeleeDefense;
+            // CONQUEST: thrown light weapons are calc'd vs the target's melee defense
+            var weapon = GetEquippedWeapon();
+            var isMeleeThrown = weapon?.GetProperty(PropertyBool.IsMeleeThrownWeapon) == true;
+
+            var useMelee = isMeleeThrown || GetCombatType() != CombatType.Missile;
+            var defenseSkill = useMelee ? Skill.MeleeDefense : Skill.MissileDefense;
             var defenseMod = defenseSkill == Skill.MeleeDefense ? GetWeaponMeleeDefenseModifier(creature) : 1.0f;
             var effectiveDefense = (uint)Math.Round(creature.GetCreatureSkill(defenseSkill).Current * defenseMod);
 
