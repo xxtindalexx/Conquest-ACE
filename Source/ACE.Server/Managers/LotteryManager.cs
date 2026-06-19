@@ -119,15 +119,15 @@ namespace ACE.Server.Managers
         /// </summary>
         public static void EnterLottery(Player player, int requestedTickets)
         {
-            if (!PropertyManager.GetBool("lottery_enabled").Item)
+            if (!PropertyManager.GetBool("lottery_enabled"))
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat(
                     "[LOTTERY] The lottery is currently disabled.", ChatMessageType.Broadcast));
                 return;
             }
 
-            var maxTickets = (int)PropertyManager.GetLong("lottery_max_tickets").Item;
-            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum").Item;
+            var maxTickets = (int)PropertyManager.GetLong("lottery_max_tickets");
+            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
 
             if (requestedTickets < 1 || requestedTickets > maxTickets)
             {
@@ -221,17 +221,17 @@ namespace ACE.Server.Managers
 
         public static void SendStatusToPlayer(Player player)
         {
-            if (!PropertyManager.GetBool("lottery_enabled").Item)
+            if (!PropertyManager.GetBool("lottery_enabled"))
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat(
                     "[LOTTERY] The lottery is currently disabled.", ChatMessageType.Broadcast));
                 return;
             }
 
-            var maxTickets = (int)PropertyManager.GetLong("lottery_max_tickets").Item;
-            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum").Item;
-            var potShare = PropertyManager.GetDouble("lottery_pot_share").Item;
-            var firstShare = PropertyManager.GetDouble("lottery_first_place_share").Item;
+            var maxTickets = (int)PropertyManager.GetLong("lottery_max_tickets");
+            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
+            var potShare = PropertyManager.GetDouble("lottery_pot_share");
+            var firstShare = PropertyManager.GetDouble("lottery_first_place_share");
 
             var currentWeekNum = GetCurrentWeekNumber();
             var storedWeek = (int)(player.GetProperty(PropertyInt64.LotteryWeekNumber) ?? 0);
@@ -275,8 +275,8 @@ namespace ACE.Server.Managers
                 var estNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone);
 
                 // Only run on the configured day (0 = Sunday) at the configured hour (within the same minute)
-                var drawDayOfWeek = (DayOfWeek)(int)Math.Max(0, Math.Min(6, PropertyManager.GetLong("lottery_draw_day_of_week").Item));
-                var drawHour = (int)Math.Max(0, Math.Min(23, PropertyManager.GetLong("lottery_draw_hour_est").Item));
+                var drawDayOfWeek = (DayOfWeek)(int)Math.Max(0, Math.Min(6, PropertyManager.GetLong("lottery_draw_day_of_week")));
+                var drawHour = (int)Math.Max(0, Math.Min(23, PropertyManager.GetLong("lottery_draw_hour_est")));
 
                 if (estNow.DayOfWeek != drawDayOfWeek || estNow.Hour != drawHour)
                     return;
@@ -303,7 +303,7 @@ namespace ACE.Server.Managers
         {
             log.Info("[LOTTERY] Running weekly draw...");
 
-            if (!PropertyManager.GetBool("lottery_enabled").Item)
+            if (!PropertyManager.GetBool("lottery_enabled"))
             {
                 log.Info("[LOTTERY] Lottery is disabled; skipping draw.");
                 return;
@@ -320,9 +320,9 @@ namespace ACE.Server.Managers
                 return;
             }
 
-            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum").Item;
-            var potShare = PropertyManager.GetDouble("lottery_pot_share").Item;
-            var firstShare = PropertyManager.GetDouble("lottery_first_place_share").Item;
+            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
+            var potShare = PropertyManager.GetDouble("lottery_pot_share");
+            var firstShare = PropertyManager.GetDouble("lottery_first_place_share");
 
             long totalTickets = _entries.Values.Sum(e => e.Tickets);
             long totalCollected = totalTickets * ticketCost;
@@ -438,7 +438,7 @@ namespace ACE.Server.Managers
                 var participants = (
                     from t in context.BiotaPropertiesInt64
                     join w in context.BiotaPropertiesInt64 on t.ObjectId equals w.ObjectId
-                    join c in context.Character on (int)t.ObjectId equals c.Id
+                    join c in context.Character on t.ObjectId equals c.Id
                     where t.Type == ticketType && t.Value > 0
                        && w.Type == weekType && w.Value == currentWeek
                     select new { CharId = t.ObjectId, Name = c.Name, Tickets = (int)t.Value, AccountId = (uint)c.AccountId }
@@ -523,8 +523,8 @@ namespace ACE.Server.Managers
         /// </summary>
         public static DateTime NextDrawTime()
         {
-            var drawDayOfWeek = (DayOfWeek)(int)Math.Max(0, Math.Min(6, PropertyManager.GetLong("lottery_draw_day_of_week").Item));
-            var drawHour = (int)Math.Max(0, Math.Min(23, PropertyManager.GetLong("lottery_draw_hour_est").Item));
+            var drawDayOfWeek = (DayOfWeek)(int)Math.Max(0, Math.Min(6, PropertyManager.GetLong("lottery_draw_day_of_week")));
+            var drawHour = (int)Math.Max(0, Math.Min(23, PropertyManager.GetLong("lottery_draw_hour_est")));
 
             var estNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone);
             int daysUntil = ((int)drawDayOfWeek - (int)estNow.DayOfWeek + 7) % 7;
@@ -540,8 +540,8 @@ namespace ACE.Server.Managers
         /// </summary>
         public static long GetCurrentPrizePool()
         {
-            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum").Item;
-            var potShare = PropertyManager.GetDouble("lottery_pot_share").Item;
+            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
+            var potShare = PropertyManager.GetDouble("lottery_pot_share");
             long totalTickets = _entries.Values.Sum(e => e.Tickets);
             return (long)(totalTickets * ticketCost * potShare);
         }
@@ -574,7 +574,7 @@ namespace ACE.Server.Managers
         {
             try
             {
-                var ipBytes = session?.Account?.LastLoginIP;
+                var ipBytes = session?.Player?.Account?.LastLoginIP;
                 if (ipBytes == null || ipBytes.Length == 0)
                     return null;
                 return new IPAddress(ipBytes).ToString();
