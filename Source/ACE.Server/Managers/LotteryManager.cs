@@ -564,6 +564,12 @@ namespace ACE.Server.Managers
                 $"[LOTTERY] Weekly draw forced early by {adminName}.");
 
             TryRunWeeklyDraw();
+
+            // Disable the lottery after a forced early draw so it doesn't reopen until explicitly re-enabled.
+            PropertyManager.ModifyBool("lottery_enabled", false);
+            log.Info("[LOTTERY] Lottery auto-disabled after forced early draw.");
+            PlayerManager.BroadcastToAuditChannel(adminSession?.Player,
+                "[LOTTERY] Lottery has been automatically disabled after the forced draw.");
         }
 
         // ──────────────────────────────────────────────────────────────────

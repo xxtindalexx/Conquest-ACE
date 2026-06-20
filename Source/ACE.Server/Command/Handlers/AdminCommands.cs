@@ -8874,18 +8874,34 @@ namespace ACE.Server.Command.Handlers
         // CONQUEST: Luminance Lottery admin commands
         [CommandHandler("lottery", AccessLevel.Admin, CommandHandlerFlag.None, 0,
             "Administer the weekly luminance lottery.",
-            "/lottery run    — Force the weekly draw to run immediately.\n" +
-            "/lottery status — Show current participants, ticket counts, and prize pool.")]
+            "/lottery enable  — Open the lottery for player entries.\n" +
+            "/lottery disable — Close the lottery (no new entries or draws).\n" +
+            "/lottery run     — Force the weekly draw immediately, then auto-disable.\n" +
+            "/lottery status  — Show current participants, ticket counts, and prize pool.")]
         public static void HandleLotteryAdmin(Session session, params string[] parameters)
         {
             var sub = parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "status";
 
             switch (sub)
             {
+                case "enable":
+                    PropertyManager.ModifyBool("lottery_enabled", true);
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Lottery is now ENABLED. Players may enter with /lum lottery.");
+                    PlayerManager.BroadcastToAuditChannel(session?.Player,
+                        $"[LOTTERY] Lottery enabled by {session?.Player?.Name ?? "CONSOLE"}.");
+                    break;
+
+                case "disable":
+                    PropertyManager.ModifyBool("lottery_enabled", false);
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Lottery is now DISABLED. No new entries will be accepted.");
+                    PlayerManager.BroadcastToAuditChannel(session?.Player,
+                        $"[LOTTERY] Lottery disabled by {session?.Player?.Name ?? "CONSOLE"}.");
+                    break;
+
                 case "run":
                     CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Forcing weekly draw...");
                     Managers.LotteryManager.ForceRunDraw(session);
-                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Draw complete. Check server log for details.");
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Draw complete. Lottery auto-disabled. Use /lottery enable to reopen.");
                     break;
 
                 case "status":
@@ -8896,7 +8912,7 @@ namespace ACE.Server.Command.Handlers
                     break;
 
                 default:
-                    CommandHandlerHelper.WriteOutputInfo(session, "Usage: /lottery run  |  /lottery status");
+                    CommandHandlerHelper.WriteOutputInfo(session, "Usage: /lottery enable | /lottery disable | /lottery run | /lottery status");
                     break;
             }
         }
