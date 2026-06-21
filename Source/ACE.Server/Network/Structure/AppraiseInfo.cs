@@ -750,11 +750,12 @@ namespace ACE.Server.Network.Structure
             }
 
             // Armor Cleaving
-            var armorCleaving = weapon.GetProperty(PropertyFloat.IgnoreArmor);
-            if (armorCleaving != null && armorCleaving > 0)
+            if (weapon.IgnoreArmor != null)
             {
-                var ignorePercent = armorCleaving.Value * 100;
-                descriptions.Add($"- Armor Cleaving: Ignores {ignorePercent:F0}% Armor");
+                var cleavingMod = weapon.GetArmorCleavingMod();
+                var ignorePercent = (1.0f - cleavingMod) * 100;
+                if (ignorePercent >= 1.0f)
+                    descriptions.Add($"- Armor Cleaving: Ignores {ignorePercent:F0}% Armor");
             }
 
             // Split Arrows
