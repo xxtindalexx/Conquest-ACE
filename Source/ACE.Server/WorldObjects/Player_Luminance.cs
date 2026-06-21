@@ -204,9 +204,8 @@ namespace ACE.Server.WorldObjects
             var enchantment = GetXPAndLuminanceModifier(xpType);
             var questBonus = GetQuestCountXPBonus();
             var pkDungeonBonus = GetPKDungeonBonus();
-            var enlightenmentBonus = 1.0 + (Enlightenment * 0.01);
 
-            var bonusedAmount = (long)Math.Round(amount * enchantment * questBonus * pkDungeonBonus * enlightenmentBonus);
+            var bonusedAmount = (long)Math.Round(amount * enchantment * questBonus * pkDungeonBonus);
 
             // CONQUEST: Show Luminance breakdown for fellowship shares if player has enabled xpdebugging
             if (ShowXpBreakdown && (xpType == XpType.Kill || xpType == XpType.Quest || xpType == XpType.Fellowship))
