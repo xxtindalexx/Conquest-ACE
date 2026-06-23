@@ -309,7 +309,7 @@ namespace ACE.Server.WorldObjects
             {
                 var pvpCapBiting = (float)PropertyManager.GetDouble("pvp_max_biting_strike");
                 if (pvpCapBiting > 0)
-                    critRate = Math.Min(critRate, pvpCapBiting);
+                    critRate = pvpCapBiting;
             }
 
             if (weapon != null && weapon.HasImbuedEffect(ImbuedEffectType.CriticalStrike))
