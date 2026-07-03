@@ -311,6 +311,32 @@ namespace ACE.Server.Command.Handlers
             CommandHandlerHelper.WriteOutputInfo(session, $"Current world population: {PlayerManager.GetOnlineCount():N0}", ChatMessageType.Broadcast);
         }
 
+        // CONQUEST: roll a random number, announced to nearby players
+        [CommandHandler("roll", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 1,
+            "Roll a random number between 1 and a chosen value",
+            "/roll <1-999999>")]
+        public static void HandleRoll(Session session, params string[] parameters)
+        {
+            if (parameters == null || parameters.Length == 0 || !int.TryParse(parameters[0], out var max) || max < 1 || max > 999999)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /roll <1-999999>", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (DateTime.UtcNow - session.Player.PrevRoll < TimeSpan.FromSeconds(5))
+            {
+                session.Player.SendTransientError("You can only roll once every 5 seconds.");
+                return;
+            }
+            session.Player.PrevRoll = DateTime.UtcNow;
+
+            var result = ThreadSafeRandom.Next(1, max);
+
+            session.Player.EnqueueBroadcast(
+                new GameMessageSystemChat($"{session.Player.Name} rolls {result} (1-{max}).", ChatMessageType.Broadcast),
+                WorldObject.LocalBroadcastRange);
+        }
+
         // CONQUEST: Luminance Per Hour tracking
         [CommandHandler("lph", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
             "Track luminance earned per hour",
