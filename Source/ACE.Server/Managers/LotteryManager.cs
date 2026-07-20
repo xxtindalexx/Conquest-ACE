@@ -309,9 +309,11 @@ namespace ACE.Server.Managers
                 return;
             }
 
-            // Reload from DB in case some entries were made by offline-then-online players
-            // that the in-memory dict might have missed after a restart mid-week.
-            LoadCurrentWeekEntries();
+            // Merge any DB entries that were persisted before a mid-week restart but aren't
+            // in the in-memory dict (e.g. players who entered, server restarted, then drew).
+            // We do NOT clear _entries first — that would drop any entries whose biota save
+            // is still pending (within the 300s auto-save window).
+            MergeEntriesFromDb();
 
             if (_entries.IsEmpty)
             {
@@ -417,6 +419,48 @@ namespace ACE.Server.Managers
         // ──────────────────────────────────────────────────────────────────
         // DB helpers
         // ──────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Merges DB entries for the current week into the in-memory dict without clearing it.
+        /// Used at draw time so that entries whose biota save is still pending are not lost.
+        /// </summary>
+        private static void MergeEntriesFromDb()
+        {
+            var currentWeek = GetCurrentWeekNumber();
+            var ticketType = (ushort)PropertyInt64.LotteryTickets;
+            var weekType = (ushort)PropertyInt64.LotteryWeekNumber;
+
+            try
+            {
+                using var context = new ShardDbContext();
+
+                var dbParticipants = (
+                    from t in context.BiotaPropertiesInt64
+                    join w in context.BiotaPropertiesInt64 on t.ObjectId equals w.ObjectId
+                    join c in context.Character on (int)t.ObjectId equals c.Id
+                    where t.Type == ticketType && t.Value > 0
+                       && w.Type == weekType && w.Value == currentWeek
+                    select new { CharId = t.ObjectId, Name = c.Name, Tickets = (int)t.Value, AccountId = (uint)c.AccountId }
+                ).ToList();
+
+                foreach (var p in dbParticipants)
+                {
+                    // Only add if not already tracked in-memory (in-memory is the authoritative source)
+                    _entries.TryAdd(p.CharId, new LotteryEntry { Name = p.Name, Tickets = p.Tickets });
+
+                    var ip = GetAccountIp(p.AccountId);
+                    if (ip != null)
+                        _ipToCharId.TryAdd(ip, p.CharId);
+                }
+
+                if (dbParticipants.Count > 0)
+                    log.Info($"[LOTTERY] Merged {dbParticipants.Count} DB participant(s) into draw pool. Total in-memory: {_entries.Count}.");
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[LOTTERY] Error merging DB entries before draw: {ex.Message}", ex);
+            }
+        }
 
         /// <summary>
         /// Loads all biota entries with LotteryTickets > 0 and LotteryWeekNumber == current week
