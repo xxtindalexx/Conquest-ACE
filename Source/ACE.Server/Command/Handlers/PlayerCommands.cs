@@ -371,39 +371,39 @@ namespace ACE.Server.Command.Handlers
         // CONQUEST: Luminance Lottery
         [CommandHandler("lum", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
             "Luminance lottery commands.",
-            "/lum lottery [count] — Buy [count] tickets (1–max, default 1). Each ticket costs 1M lum.\n" +
-            "/lum status         — Show current pot, participants, and time until the next draw.")]
+            "/lum lottery [count]  — Buy [count] tickets (1–max, default 1). Each ticket costs 1M lum.\n" +
+            "/lum lottery status   — Show current pot, participants, and time until the next draw.")]
         public static void HandleLum(Session session, params string[] parameters)
         {
             if (session?.Player == null)
                 return;
 
-            var sub = parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "status";
+            var sub = parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "";
 
-            switch (sub)
+            if (sub != "lottery")
             {
-                case "lottery":
-                {
-                    int count = 1;
-                    if (parameters.Length > 1 && !int.TryParse(parameters[1], out count))
-                    {
-                        session.Network.EnqueueSend(new GameMessageSystemChat(
-                            "[LOTTERY] Usage: /lum lottery [count]  (e.g. /lum lottery 3)", ChatMessageType.Broadcast));
-                        return;
-                    }
-                    ACE.Server.Managers.LotteryManager.EnterLottery(session.Player, count);
-                    break;
-                }
-
-                case "status":
-                    ACE.Server.Managers.LotteryManager.SendStatusToPlayer(session.Player);
-                    break;
-
-                default:
-                    session.Network.EnqueueSend(new GameMessageSystemChat(
-                        "[LUM] Unknown sub-command. Try: /lum lottery [count]  or  /lum status", ChatMessageType.Broadcast));
-                    break;
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "[LUM] Usage: /lum lottery [count]  |  /lum lottery status", ChatMessageType.Broadcast));
+                return;
             }
+
+            var arg = parameters.Length > 1 ? parameters[1].ToLowerInvariant() : "";
+
+            if (arg == "status")
+            {
+                ACE.Server.Managers.LotteryManager.SendStatusToPlayer(session.Player);
+                return;
+            }
+
+            int count = 1;
+            if (arg.Length > 0 && !int.TryParse(arg, out count))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "[LOTTERY] Usage: /lum lottery [count]  (e.g. /lum lottery 3)  |  /lum lottery status", ChatMessageType.Broadcast));
+                return;
+            }
+
+            ACE.Server.Managers.LotteryManager.EnterLottery(session.Player, count);
         }
 
         // upop - admin command to show unique IP connections
