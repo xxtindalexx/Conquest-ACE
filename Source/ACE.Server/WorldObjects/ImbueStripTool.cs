@@ -8,6 +8,9 @@ using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Network.GameMessages.Messages;
 
+using MaterialTypeEnum = ACE.Entity.Enum.MaterialType;
+using TinkerLogHelper = ACE.Server.Entity.TinkerLog;
+
 namespace ACE.Server.WorldObjects
 {
     public class ImbueStripTool : CraftTool
@@ -57,30 +60,30 @@ namespace ACE.Server.WorldObjects
             return true;
         }
 
-        public static MaterialType? GetPrimaryImbueMaterial(ImbuedEffectType imbuedEffect)
+        public static MaterialTypeEnum? GetPrimaryImbueMaterial(ImbuedEffectType imbuedEffect)
         {
             var primary = imbuedEffect & PrimaryImbueMask;
 
             if (primary.HasFlag(ImbuedEffectType.CriticalStrike))
-                return MaterialType.BlackOpal;
+                return MaterialTypeEnum.BlackOpal;
             if (primary.HasFlag(ImbuedEffectType.CripplingBlow))
-                return MaterialType.FireOpal;
+                return MaterialTypeEnum.FireOpal;
             if (primary.HasFlag(ImbuedEffectType.ArmorRending))
-                return MaterialType.Sunstone;
+                return MaterialTypeEnum.Sunstone;
             if (primary.HasFlag(ImbuedEffectType.ColdRending))
-                return MaterialType.Aquamarine;
+                return MaterialTypeEnum.Aquamarine;
             if (primary.HasFlag(ImbuedEffectType.ElectricRending))
-                return MaterialType.Jet;
+                return MaterialTypeEnum.Jet;
             if (primary.HasFlag(ImbuedEffectType.FireRending))
-                return MaterialType.RedGarnet;
+                return MaterialTypeEnum.RedGarnet;
             if (primary.HasFlag(ImbuedEffectType.PierceRending))
-                return MaterialType.BlackGarnet;
+                return MaterialTypeEnum.BlackGarnet;
             if (primary.HasFlag(ImbuedEffectType.BludgeonRending))
-                return MaterialType.WhiteSapphire;
+                return MaterialTypeEnum.WhiteSapphire;
             if (primary.HasFlag(ImbuedEffectType.SlashRending))
-                return MaterialType.ImperialTopaz;
+                return MaterialTypeEnum.ImperialTopaz;
             if (primary.HasFlag(ImbuedEffectType.AcidRending))
-                return MaterialType.Emerald;
+                return MaterialTypeEnum.Emerald;
 
             return null;
         }
@@ -96,7 +99,7 @@ namespace ACE.Server.WorldObjects
 
             target.ImbuedEffect &= ~PrimaryImbueMask;
             target.NumTimesTinkered -= 1;
-            target.TinkerLog = TinkerLog.RemoveLast(target.TinkerLog, material.Value);
+            target.TinkerLog = TinkerLogHelper.RemoveLast(target.TinkerLog, material.Value);
 
             return true;
         }

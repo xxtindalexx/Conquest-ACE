@@ -437,10 +437,10 @@ namespace ACE.Server.Managers
                 var dbParticipants = (
                     from t in context.BiotaPropertiesInt64
                     join w in context.BiotaPropertiesInt64 on t.ObjectId equals w.ObjectId
-                    join c in context.Character on (int)t.ObjectId equals c.Id
+                    join c in context.Character on t.ObjectId equals c.Id
                     where t.Type == ticketType && t.Value > 0
                        && w.Type == weekType && w.Value == currentWeek
-                    select new { CharId = t.ObjectId, Name = c.Name, Tickets = (int)t.Value, AccountId = (uint)c.AccountId }
+                    select new { CharId = t.ObjectId, Name = c.Name, Tickets = (int)t.Value, AccountId = c.AccountId }
                 ).ToList();
 
                 foreach (var p in dbParticipants)
