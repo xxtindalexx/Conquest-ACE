@@ -1,0 +1,216 @@
+using System;
+
+using ACE.Entity;
+using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
+using ACE.Entity.Models;
+using ACE.Server.Entity;
+using ACE.Server.Entity.Actions;
+using ACE.Server.Network.GameMessages.Messages;
+
+namespace ACE.Server.WorldObjects
+{
+    public class ImbueStripTool : CraftTool
+    {
+        // CONQUEST: Powder of Purging
+        public const uint ImbueStripToolWcid = 13370550;
+
+        public const ImbuedEffectType PrimaryImbueMask =
+            ImbuedEffectType.CriticalStrike |
+            ImbuedEffectType.CripplingBlow |
+            ImbuedEffectType.ArmorRending |
+            ImbuedEffectType.SlashRending |
+            ImbuedEffectType.PierceRending |
+            ImbuedEffectType.BludgeonRending |
+            ImbuedEffectType.AcidRending |
+            ImbuedEffectType.ColdRending |
+            ImbuedEffectType.ElectricRending |
+            ImbuedEffectType.FireRending;
+
+        public ImbueStripTool(Weenie weenie, ObjectGuid guid) : base(weenie, guid)
+        {
+        }
+
+        public ImbueStripTool(Biota biota) : base(biota)
+        {
+        }
+
+        public static bool IsValidImbueStripTarget(WorldObject target)
+        {
+            if (target == null)
+                return false;
+
+            if (target.WeenieType != WeenieType.MeleeWeapon &&
+                target.WeenieType != WeenieType.MissileLauncher &&
+                target.WeenieType != WeenieType.Caster)
+                return false;
+
+            if (target.Workmanship == null)
+                return false;
+
+            if ((target.ImbuedEffect & PrimaryImbueMask) == 0)
+                return false;
+
+            if (target.NumTimesTinkered < 1)
+                return false;
+
+            return true;
+        }
+
+        public static MaterialType? GetPrimaryImbueMaterial(ImbuedEffectType imbuedEffect)
+        {
+            var primary = imbuedEffect & PrimaryImbueMask;
+
+            if (primary.HasFlag(ImbuedEffectType.CriticalStrike))
+                return MaterialType.BlackOpal;
+            if (primary.HasFlag(ImbuedEffectType.CripplingBlow))
+                return MaterialType.FireOpal;
+            if (primary.HasFlag(ImbuedEffectType.ArmorRending))
+                return MaterialType.Sunstone;
+            if (primary.HasFlag(ImbuedEffectType.ColdRending))
+                return MaterialType.Aquamarine;
+            if (primary.HasFlag(ImbuedEffectType.ElectricRending))
+                return MaterialType.Jet;
+            if (primary.HasFlag(ImbuedEffectType.FireRending))
+                return MaterialType.RedGarnet;
+            if (primary.HasFlag(ImbuedEffectType.PierceRending))
+                return MaterialType.BlackGarnet;
+            if (primary.HasFlag(ImbuedEffectType.BludgeonRending))
+                return MaterialType.WhiteSapphire;
+            if (primary.HasFlag(ImbuedEffectType.SlashRending))
+                return MaterialType.ImperialTopaz;
+            if (primary.HasFlag(ImbuedEffectType.AcidRending))
+                return MaterialType.Emerald;
+
+            return null;
+        }
+
+        public static bool TryStripPrimaryImbue(WorldObject target)
+        {
+            if (!IsValidImbueStripTarget(target))
+                return false;
+
+            var material = GetPrimaryImbueMaterial(target.ImbuedEffect);
+            if (material == null)
+                return false;
+
+            target.ImbuedEffect &= ~PrimaryImbueMask;
+            target.NumTimesTinkered -= 1;
+            target.TinkerLog = TinkerLog.RemoveLast(target.TinkerLog, material.Value);
+
+            return true;
+        }
+
+        public override void HandleActionUseOnTarget(Player player, WorldObject target)
+        {
+            if (WeenieClassId != ImbueStripToolWcid)
+            {
+                base.HandleActionUseOnTarget(player, target);
+                return;
+            }
+
+            if (target is Player)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot strip imbues from that.", ChatMessageType.Tell));
+                player.SendUseDoneEvent();
+                return;
+            }
+
+            if (target.WeenieType != WeenieType.MeleeWeapon &&
+                target.WeenieType != WeenieType.MissileLauncher &&
+                target.WeenieType != WeenieType.Caster)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("This item cannot have its imbue stripped.", ChatMessageType.Tell));
+                player.SendUseDoneEvent();
+                return;
+            }
+
+            if (target.Workmanship == null)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("This item cannot have its imbue stripped.", ChatMessageType.Tell));
+                player.SendUseDoneEvent();
+                return;
+            }
+
+            if ((target.ImbuedEffect & PrimaryImbueMask) == 0)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("This item has no removable imbue.", ChatMessageType.Tell));
+                player.SendUseDoneEvent();
+                return;
+            }
+
+            if (target.NumTimesTinkered < 1)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("This item has no tinkers to remove.", ChatMessageType.Tell));
+                player.SendUseDoneEvent();
+                return;
+            }
+
+            var animTime = 0.0f;
+
+            var actionChain = new ActionChain();
+
+            if (player.CombatMode != CombatMode.NonCombat)
+            {
+                var stanceTime = player.SetCombatMode(CombatMode.NonCombat);
+                actionChain.AddDelaySeconds(stanceTime);
+                animTime += stanceTime;
+            }
+
+            animTime += player.EnqueueMotion(actionChain, MotionCommand.ClapHands);
+
+            actionChain.AddAction(player, ActionType.ImbueStripTool_ApplyStrip, () =>
+            {
+                try
+                {
+                    if (player.FindObject(Guid.Full, Player.SearchLocations.MyInventory) == null ||
+                        player.FindObject(target.Guid.Full, Player.SearchLocations.MyInventory | Player.SearchLocations.MyEquippedItems) == null)
+                    {
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat("The tool and target item must remain in your possession.", ChatMessageType.Tell));
+                        player.SendUseDoneEvent();
+                        return;
+                    }
+
+                    if (!IsValidImbueStripTarget(target))
+                    {
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat("This item can no longer have its imbue stripped.", ChatMessageType.Tell));
+                        player.SendUseDoneEvent();
+                        return;
+                    }
+
+                    if (!player.TryConsumeFromInventoryWithNetworking(this, 1))
+                    {
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat("The tool could not be consumed.", ChatMessageType.Tell));
+                        player.SendUseDoneEvent();
+                        return;
+                    }
+
+                    if (!TryStripPrimaryImbue(target))
+                    {
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat("The imbue could not be stripped.", ChatMessageType.Tell));
+                        player.SendUseDoneEvent();
+                        return;
+                    }
+
+                    player.EnqueueBroadcast(new GameMessageUpdateObject(target));
+
+                    if (target.CurrentWieldedLocation != null)
+                        player.EnqueueBroadcast(new GameMessageObjDescEvent(player));
+
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You strip the imbue from the {target.Name}.", ChatMessageType.Tell));
+                }
+                catch (Exception ex)
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat("An error occurred while stripping the imbue.", ChatMessageType.Tell));
+                    Console.WriteLine($"ImbueStripTool error: {ex}");
+                }
+
+                player.SendUseDoneEvent();
+            });
+
+            actionChain.EnqueueChain();
+
+            player.NextUseTime = DateTime.UtcNow.AddSeconds(animTime);
+        }
+    }
+}

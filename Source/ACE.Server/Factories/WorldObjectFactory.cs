@@ -137,6 +137,10 @@ namespace ACE.Server.Factories
                 case WeenieType.AttributeTransferDevice:
                     return new AttributeTransferDevice(weenie, guid);
                 case WeenieType.CraftTool:
+                    if (weenie.WeenieClassId == RandomDye.RandomDyeWcid)
+                        return new RandomDye(weenie, guid);
+                    if (weenie.WeenieClassId == ImbueStripTool.ImbueStripToolWcid)
+                        return new ImbueStripTool(weenie, guid);
                     return new CraftTool(weenie, guid);
                 case WeenieType.LightSource:
                     return new LightSource(weenie, guid);
@@ -254,6 +258,10 @@ namespace ACE.Server.Factories
                 case WeenieType.AttributeTransferDevice:
                     return new AttributeTransferDevice(biota);
                 case WeenieType.CraftTool:
+                    if (biota.WeenieClassId == RandomDye.RandomDyeWcid)
+                        return new RandomDye(biota);
+                    if (biota.WeenieClassId == ImbueStripTool.ImbueStripToolWcid)
+                        return new ImbueStripTool(biota);
                     return new CraftTool(biota);
                 case WeenieType.LightSource:
                     return new LightSource(biota);

@@ -716,6 +716,10 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
+            // CONQUEST: Reduce damage from weapon/item "cast on strike" or "cast by weapon" proc spells in PvP
+            if (isPVP && FromProc)
+                finalDamage *= (float)PropertyManager.GetDouble("pvp_weapon_proc_spell_dmg_mod");
+
             // show debug info
             if (sourceCreature != null && sourceCreature.DebugDamage.HasFlag(Creature.DebugDamageType.Attacker))
             {

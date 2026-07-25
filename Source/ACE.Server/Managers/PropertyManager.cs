@@ -737,6 +737,7 @@ namespace ACE.Server.Managers
                 ("pvp_max_bow_damage", new Property<double>(0, "CONQUEST: Maximum bow damage a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
                 ("pvp_max_xbow_damage", new Property<double>(0, "CONQUEST: Maximum crossbow damage a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
                 ("pvp_max_magic_damage", new Property<double>(0, "CONQUEST: Maximum magic damage (war/void) a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
+                ("pvp_weapon_proc_spell_dmg_mod", new Property<double>(0.25, "CONQUEST: Damage multiplier for damaging spells triggered via ProcSpell (weapon 'cast on strike' and casting-implement 'cast by weapon' procs, e.g. Focusing Stone) in PvP. 0.25 = 75% damage reduction (default).")),
                 ("xp_modifier", new Property<double>(1.0, "scales the amount of xp received by players")),
                 ("melee/missile_aug_crit_modifier", new Property<double>(0.002, "the maximum crit damage bonus from melee and missile augs")),
                 ("finesse_attribute_multiplier", new Property<double>(1.5, "the multiplier applied to coordination for calculating finesse weapons attribute damage modifiers")),
