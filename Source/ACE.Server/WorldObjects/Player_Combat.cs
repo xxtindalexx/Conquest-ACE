@@ -1328,12 +1328,13 @@ namespace ACE.Server.WorldObjects
         {
             var enchantmentsToRemove = new List<PropertiesEnchantmentRegistry>();
 
-            // CONQUEST: Get equipped weapon GUIDs so we can also strip their cantrip effects from the player
+            // CONQUEST: Get equipped weapon/shield GUIDs so we can also strip their cantrip effects from the player
             var equippedWeaponGuids = new HashSet<uint>(
                 EquippedObjects.Values
                     .Where(i => i.WeenieType == WeenieType.MeleeWeapon ||
                                 i.WeenieType == WeenieType.MissileLauncher ||
-                                i.WeenieType == WeenieType.Caster)
+                                i.WeenieType == WeenieType.Caster ||
+                                i.IsShield)
                     .Select(i => i.Guid.Full));
 
             // CONQUEST: Remove self-cast enchantments on the player
@@ -1426,11 +1427,12 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
-            // CONQUEST: Remove and re-trigger weapon cantrips so they apply with current (zeroed) aug values
+            // CONQUEST: Remove and re-trigger weapon/shield cantrips so they apply with current (zeroed) aug values
             var equippedWeapons = EquippedObjects.Values.Where(i =>
                 i.WeenieType == WeenieType.MeleeWeapon ||
                 i.WeenieType == WeenieType.MissileLauncher ||
-                i.WeenieType == WeenieType.Caster).ToList();
+                i.WeenieType == WeenieType.Caster ||
+                i.IsShield).ToList();
 
             foreach (var weapon in equippedWeapons)
             {

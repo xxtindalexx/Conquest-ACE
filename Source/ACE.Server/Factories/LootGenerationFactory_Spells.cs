@@ -315,6 +315,10 @@ namespace ACE.Server.Factories
 
         private static SpellId RollCantrip(WorldObject wo, TreasureDeath profile, TreasureRoll roll)
         {
+            // CONQUEST: Route shields to shield-specific cantrip table (weapon cantrips apply to main-hand melee)
+            if (wo.IsShield)
+                return ShieldCantrips.Roll();
+
             if (roll.HasArmorLevel(wo) || roll.IsClothing)
             {
                 // armor / clothing cantrip
