@@ -724,9 +724,17 @@ namespace ACE.Server.WorldObjects
             var baseAL = effectiveLevel;
             var bonusAL = 0.0f;
 
+            var isBalanced = shield.CriticalBlock && shield.GlancingBlow;
+            var cbMaxPercent = isBalanced
+                ? (float)PropertyManager.GetDouble("shield_max_balanced_critical_block_chance")
+                : (float)PropertyManager.GetDouble("shield_max_critical_block_chance");
+            var gbMaxPercent = isBalanced
+                ? (float)PropertyManager.GetDouble("shield_max_balanced_glancing_blow_chance")
+                : (float)PropertyManager.GetDouble("shield_max_glancing_blow_chance");
+
             if (shield.CriticalBlock)
             {
-                var cbChance = GetShieldProcChance((float)PropertyManager.GetDouble("shield_max_critical_block_chance"));
+                var cbChance = GetShieldProcChance(cbMaxPercent);
                 if (RollShieldProc(cbChance))
                 {
                     bonusAL = shieldCap;
@@ -736,7 +744,7 @@ namespace ACE.Server.WorldObjects
 
             if (!result.CriticalBlockProc && shield.GlancingBlow)
             {
-                var gbChance = GetShieldProcChance((float)PropertyManager.GetDouble("shield_max_glancing_blow_chance"));
+                var gbChance = GetShieldProcChance(gbMaxPercent);
                 if (RollShieldProc(gbChance))
                 {
                     bonusAL = shieldCap / 2.0f;
