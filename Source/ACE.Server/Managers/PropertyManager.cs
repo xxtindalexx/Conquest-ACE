@@ -780,6 +780,9 @@ namespace ACE.Server.Managers
                 ("pvp_max_armor_cleaving", new Property<double>(0, "PvP: Max Armor Cleaving reduction (0 = no cap, e.g. 0.5 = 50% armor ignored)")),
                 ("armor_cleaving_mod_override", new Property<double>(0, "Global Armor Cleaving mod override applied to all weapons with IgnoreArmor. 0 = default formula; 0.4 = 60% cleave (40% of armor gets through); 1.0 = no cleave")),
 
+                ("shield_max_critical_block_chance", new Property<double>(0.25, "CONQUEST: Max CriticalBlock proc chance at 433 base shield skill (e.g. 0.25 = 25%)")),
+                ("shield_max_glancing_blow_chance", new Property<double>(0.50, "CONQUEST: Max GlancingBlow proc chance at 433 base shield skill (e.g. 0.50 = 50%)")),
+
                 // Global Imbue Modifiers
                 ("pvp_dmg_mod_ar", new Property<double>(1.0, "PvP: Global Armor Rending damage modifier")),
                 ("pvp_dmg_mod_cb", new Property<double>(1.0, "PvP: Global Crippling Blow damage modifier")),

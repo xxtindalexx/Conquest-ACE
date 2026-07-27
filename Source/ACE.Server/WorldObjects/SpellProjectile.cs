@@ -324,7 +324,7 @@ namespace ACE.Server.WorldObjects
             var critDefended = false;
             var overpower = false;
 
-            var damage = CalculateDamage(ProjectileSource, creatureTarget, ref critical, ref critDefended, ref overpower);
+            var damage = CalculateDamage(ProjectileSource, creatureTarget, ref critical, ref critDefended, ref overpower, out var magicDamageBlocked);
 
             if (damage != null)
             {
@@ -335,7 +335,7 @@ namespace ACE.Server.WorldObjects
                 }
                 else
                 {
-                    DamageTarget(creatureTarget, damage.Value, critical, critDefended, overpower);
+                    DamageTarget(creatureTarget, damage.Value, critical, critDefended, overpower, magicDamageBlocked);
                 }
 
                 // if this SpellProjectile has a TargetEffect, play it on successful hit
@@ -418,8 +418,11 @@ namespace ACE.Server.WorldObjects
         /// Calculates the damage for a spell projectile
         /// Used by war magic, void magic, and life magic projectiles
         /// </summary>
-        public float? CalculateDamage(WorldObject source, Creature target, ref bool criticalHit, ref bool critDefended, ref bool overpower)
+        // CONQUEST: magicDamageBlocked out param is display-only for defender block feedback
+        public float? CalculateDamage(WorldObject source, Creature target, ref bool criticalHit, ref bool critDefended, ref bool overpower, out float magicDamageBlocked)
         {
+            magicDamageBlocked = 0;
+
             var sourcePlayer = source as Player;
             var targetPlayer = target as Player;
 
@@ -720,14 +723,18 @@ namespace ACE.Server.WorldObjects
             if (isPVP && FromProc)
                 finalDamage *= (float)PropertyManager.GetDouble("pvp_weapon_proc_spell_dmg_mod");
 
+            // CONQUEST: Display-only magic absorb block amount for defender combat chat
+            if (!IsChainSpell && absorbMod < 1.0f)
+                magicDamageBlocked = finalDamage * (1.0f / absorbMod - 1.0f);
+
             // show debug info
             if (sourceCreature != null && sourceCreature.DebugDamage.HasFlag(Creature.DebugDamageType.Attacker))
             {
-                ShowInfo(sourceCreature, Spell, attackSkill, criticalChance, criticalHit, critDefended, overpower, weaponCritDamageMod, skillBonus, baseDamage, critDamageBonus, elementalDamageMod, slayerMod, weaponResistanceMod, resistanceMod, absorbMod, LifeProjectileDamage, lifeMagicDamage, finalDamage);
+                ShowInfo(sourceCreature, Spell, attackSkill, criticalChance, criticalHit, critDefended, overpower, weaponCritDamageMod, skillBonus, baseDamage, critDamageBonus, elementalDamageMod, slayerMod, weaponResistanceMod, resistanceMod, absorbMod, LifeProjectileDamage, lifeMagicDamage, finalDamage, magicDamageBlocked);
             }
             if (target.DebugDamage.HasFlag(Creature.DebugDamageType.Defender))
             {
-                ShowInfo(target, Spell, attackSkill, criticalChance, criticalHit, critDefended, overpower, weaponCritDamageMod, skillBonus, baseDamage, critDamageBonus, elementalDamageMod, slayerMod, weaponResistanceMod, resistanceMod, absorbMod, LifeProjectileDamage, lifeMagicDamage, finalDamage);
+                ShowInfo(target, Spell, attackSkill, criticalChance, criticalHit, critDefended, overpower, weaponCritDamageMod, skillBonus, baseDamage, critDamageBonus, elementalDamageMod, slayerMod, weaponResistanceMod, resistanceMod, absorbMod, LifeProjectileDamage, lifeMagicDamage, finalDamage, magicDamageBlocked);
             }
             return finalDamage;
         }
@@ -771,9 +778,7 @@ namespace ACE.Server.WorldObjects
         {
             // is spell projectile in front of creature target,
             // within shield effectiveness area?
-            var effectiveAngle = 180.0f;
-            var angle = target.GetAngle(this);
-            if (Math.Abs(angle) > effectiveAngle / 2.0f)
+            if (!target.IsWithinShieldArc(this, shield))
                 return 1.0f;
 
             // https://asheron.fandom.com/wiki/Shield
@@ -847,7 +852,8 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Called for a spell projectile to damage its target
         /// </summary>
-        public void DamageTarget(Creature target, float damage, bool critical, bool critDefended, bool overpower)
+        // CONQUEST: magicDamageBlocked is display-only for defender block feedback
+        public void DamageTarget(Creature target, float damage, bool critical, bool critDefended, bool overpower, float magicDamageBlocked = 0)
         {
             var targetPlayer = target as Player;
 
@@ -1035,13 +1041,17 @@ namespace ACE.Server.WorldObjects
                 if (targetPlayer != null)
                 {
                     var critProt = critDefended ? " Your augmentation allows you to avoid a critical hit!" : "";
+                    // CONQUEST: Append block suffix to defender magic chat when absorb mitigates damage
+                    var blockedSuffix = Strings.FormatBlockedSuffix((uint)Math.Round(magicDamageBlocked));
 
-                    var defenderMsg = $"{critMsg}{overpowerMsg}{sneakMsg}{ProjectileSource.Name} {plural} you for {amount} points with {Spell.Name}.{critProt}";
+                    var defenderMsg = $"{critMsg}{overpowerMsg}{sneakMsg}{ProjectileSource.Name} {plural} you for {amount} points with {Spell.Name}.{blockedSuffix}{critProt}";
+                    //var defenderMsg = $"{critMsg}{overpowerMsg}{sneakMsg}{ProjectileSource.Name} {plural} you for {amount} points with {Spell.Name}.{critProt}";
 
                     if (nonHealth)
                     {
                         var vital = Spell.Category == SpellCategory.StaminaLowering ? "stamina" : "mana";
-                        defenderMsg = $"{ProjectileSource.Name} casts {Spell.Name} and drains {amount} points of your {vital}.";
+                        defenderMsg = $"{ProjectileSource.Name} casts {Spell.Name} and drains {amount} points of your {vital}.{blockedSuffix}";
+                        //defenderMsg = $"{ProjectileSource.Name} casts {Spell.Name} and drains {amount} points of your {vital}.";
                     }
 
                     if (!targetPlayer.SquelchManager.Squelches.Contains(ProjectileSource, ChatMessageType.Magic))
@@ -1103,7 +1113,7 @@ namespace ACE.Server.WorldObjects
         public static void ShowInfo(Creature observed, Spell spell, CreatureSkill skill, float criticalChance, bool criticalHit, bool critDefended, bool overpower, float weaponCritDamageMod,
             float magicSkillBonus, int baseDamage, float critDamageBonus, float elementalDamageMod, float slayerMod,
             float weaponResistanceMod, float resistanceMod, float absorbMod,
-            float lifeProjectileDamage, float lifeMagicDamage, float finalDamage)
+            float lifeProjectileDamage, float lifeMagicDamage, float finalDamage, float magicDamageBlocked = 0)
         {
             var observer = PlayerManager.GetOnlinePlayer(observed.DebugDamageTarget);
             if (observer == null)
@@ -1162,6 +1172,10 @@ namespace ACE.Server.WorldObjects
 
             if (absorbMod != 1.0f)
                 info += $"AbsorbMod: {absorbMod}\n";
+
+            // CONQUEST: Display-only magic absorb block amount
+            if (magicDamageBlocked > 0)
+                info += $"MagicDamageBlocked: {magicDamageBlocked}\n";
 
             //observer.Session.Network.EnqueueSend(new GameMessageSystemChat(info, ChatMessageType.Broadcast));
             observer.DebugDamageBuffer += info;

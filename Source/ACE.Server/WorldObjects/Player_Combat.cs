@@ -477,15 +477,17 @@ namespace ACE.Server.WorldObjects
                 EnqueueBroadcast(new GameMessageSound(Guid, Sound.Wound1, 1.0f));
         }
 
+        // CONQUEST: Pass DamageEvent through for shield block feedback in combat chat
         public int TakeDamage(WorldObject source, DamageEvent damageEvent)
         {
-            return TakeDamage(source, damageEvent.DamageType, damageEvent.Damage, damageEvent.BodyPart, damageEvent.IsCritical, damageEvent.AttackConditions);
+            return TakeDamage(source, damageEvent.DamageType, damageEvent.Damage, damageEvent.BodyPart, damageEvent.IsCritical, damageEvent.AttackConditions, damageEvent);
         }
 
         /// <summary>
         /// Applies damages to a player from a physical damage source
         /// </summary>
-        public int TakeDamage(WorldObject source, DamageType damageType, float _amount, BodyPart bodyPart, bool crit = false, AttackConditions attackConditions = AttackConditions.None)
+        // CONQUEST: optional damageEvent enables shield block feedback in combat chat
+        public int TakeDamage(WorldObject source, DamageType damageType, float _amount, BodyPart bodyPart, bool crit = false, AttackConditions attackConditions = AttackConditions.None, DamageEvent damageEvent = null)
         {
             if (Invincible || IsDead) return 0;
 
@@ -572,8 +574,24 @@ namespace ACE.Server.WorldObjects
             // send network messages
             if (source is Creature creature)
             {
+                // CONQUEST: Custom combat chat with block suffix when shield mitigates damage
+                var shieldBlocked = damageEvent != null && damageEvent.ShieldEffectiveAL > 0
+                    ? (uint)Math.Round(damageEvent.ShieldDamageBlocked)
+                    : 0;
+
                 if (!SquelchManager.Squelches.Contains(source, ChatMessageType.CombatEnemy))
-                    Session.Network.EnqueueSend(new GameEventDefenderNotification(Session, creature.Name, damageType, percent, amount, damageLocation, crit, attackConditions));
+                {
+                    if (shieldBlocked > 0)
+                    {
+                        SendMessage(Strings.GetDefenderDamageMessage(creature.Name, damageType, percent, amount, attackConditions, crit, damageEvent?.CriticalDefended ?? false, shieldBlocked), ChatMessageType.Combat);
+                    }
+                    else
+                    {
+                        Session.Network.EnqueueSend(new GameEventDefenderNotification(Session, creature.Name, damageType, percent, amount, damageLocation, crit, attackConditions));
+                    }
+
+                    //Session.Network.EnqueueSend(new GameEventDefenderNotification(Session, creature.Name, damageType, percent, amount, damageLocation, crit, attackConditions));
+                }
 
                 var hitSound = new GameMessageSound(Guid, GetHitSound(source, bodyPart), 1.0f);
                 var splatter = new GameMessageScript(Guid, (PlayScript)Enum.Parse(typeof(PlayScript), "Splatter" + creature.GetSplatterHeight() + creature.GetSplatterDir(this)));

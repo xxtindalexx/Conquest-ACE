@@ -662,34 +662,36 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// Return the scalar damage absorbed by a shield
+        /// CONQUEST: Returns effective shield level (AL * RL, capped) when shield applies, or 0.
+        /// Used by additive shield model in DamageEvent.
         /// </summary>
-        public float GetShieldMod(WorldObject attacker, DamageType damageType, WorldObject weapon)
+        public float GetEffectiveShieldLevel(WorldObject attacker, DamageType damageType, WorldObject weapon)
         {
-            // ensure combat stance
+            return GetShieldMitigation(attacker, damageType, weapon).EffectiveLevel;
+        }
+
+        /// <summary>
+        /// CONQUEST: Full shield mitigation result including proc flags for DamageEvent feedback.
+        /// </summary>
+        public ShieldMitigationResult GetShieldMitigation(WorldObject attacker, DamageType damageType, WorldObject weapon)
+        {
+            var result = new ShieldMitigationResult();
+
             if (CombatMode == CombatMode.NonCombat)
-                return 1.0f;
+                return result;
 
-            // does the player have a shield equipped?
             var shield = GetEquippedShield();
-            if (shield == null) return 1.0f;
+            if (shield == null)
+                return result;
 
-            // phantom weapons ignore all armor and shields
             if (weapon != null && weapon.HasImbuedEffect(ImbuedEffectType.IgnoreAllArmor))
-                return 1.0f;
+                return result;
 
-            // is monster in front of player,
-            // within shield effectiveness area?
-            var effectiveAngle = 180.0f;
-            var angle = GetAngle(attacker);
-            if (Math.Abs(angle) > effectiveAngle / 2.0f)
-                return 1.0f;
+            if (!IsWithinShieldArc(attacker, shield))
+                return result;
 
-            // get base shield AL
             var baseSL = shield.GetProperty(PropertyInt.ArmorLevel) ?? 0.0f;
 
-            // shield AL item enchantment additives:
-            // impenetrability, brittlemail
             var ignoreMagicArmor = (weapon?.IgnoreMagicArmor ?? false) || (attacker?.IgnoreMagicArmor ?? false);
 
             var modSL = shield.EnchantmentManager.GetArmorMod();
@@ -699,11 +701,8 @@ namespace ACE.Server.WorldObjects
 
             var effectiveSL = baseSL + modSL;
 
-            // get shield RL against damage type
             var baseRL = GetResistance(shield, damageType);
 
-            // shield RL item enchantment additives:
-            // banes, lures
             var modRL = shield.EnchantmentManager.GetArmorModVsType(damageType);
 
             if (ignoreMagicArmor)
@@ -711,19 +710,10 @@ namespace ACE.Server.WorldObjects
 
             var effectiveRL = (float)(baseRL + modRL);
 
-            // resistance clamp
             effectiveRL = Math.Clamp(effectiveRL, -2.0f, 2.0f);
-
-            // handle negative SL
-            //if (effectiveSL < 0 && effectiveRL != 0)
-                //effectiveRL = 1.0f / effectiveRL;
 
             var effectiveLevel = effectiveSL * effectiveRL;
 
-            // SL cap:
-            // Trained / untrained: 1/2 shield skill
-            // Spec: shield skill
-            // SL cap is applied *after* item enchantments
             var shieldSkill = GetCreatureSkill(Skill.Shield);
             var shieldCap = shieldSkill.Current;
             if (shieldSkill.AdvancementClass != SkillAdvancementClass.Specialized)
@@ -731,15 +721,86 @@ namespace ACE.Server.WorldObjects
 
             effectiveLevel = Math.Min(effectiveLevel, shieldCap);
 
-            var ignoreShieldMod = attacker.GetIgnoreShieldMod(weapon);
-            //Console.WriteLine($"IgnoreShieldMod: {ignoreShieldMod}");
+            var baseAL = effectiveLevel;
+            var bonusAL = 0.0f;
 
-            effectiveLevel *= ignoreShieldMod;
+            if (shield.CriticalBlock)
+            {
+                var cbChance = GetShieldProcChance((float)PropertyManager.GetDouble("shield_max_critical_block_chance"));
+                if (RollShieldProc(cbChance))
+                {
+                    bonusAL = shieldCap;
+                    result.CriticalBlockProc = true;
+                }
+            }
 
-            // SL is multiplied by existing AL
-            var shieldMod = SkillFormula.CalcArmorMod(effectiveLevel);
-            //Console.WriteLine("ShieldMod: " + shieldMod);
-            return shieldMod;
+            if (!result.CriticalBlockProc && shield.GlancingBlow)
+            {
+                var gbChance = GetShieldProcChance((float)PropertyManager.GetDouble("shield_max_glancing_blow_chance"));
+                if (RollShieldProc(gbChance))
+                {
+                    bonusAL = shieldCap / 2.0f;
+                    result.GlancingBlowProc = true;
+                }
+            }
+
+            result.IgnoreShieldProc = attacker != null && attacker.RollIgnoreShield(weapon);
+
+            if (result.IgnoreShieldProc)
+                result.EffectiveLevel = (result.CriticalBlockProc || result.GlancingBlowProc) ? baseAL : 0f;
+            else
+                result.EffectiveLevel = baseAL + bonusAL;
+
+            if (result.EffectiveLevel <= 0)
+                result.EffectiveLevel = 0f;
+
+            return result;
+        }
+
+        /// <summary>
+        /// Returns true if the attacker is within the shield's effective block arc.
+        /// Sentinel shields use 360°; all others use 180° front arc.
+        /// </summary>
+        public bool IsWithinShieldArc(WorldObject attacker, WorldObject shield)
+        {
+            if (attacker == null || shield == null)
+                return false;
+
+            var effectiveAngle = shield.Sentinel ? 360.0f : 180.0f;
+            var angle = GetAngle(attacker);
+
+            return Math.Abs(angle) <= effectiveAngle / 2.0f;
+        }
+
+        /// <summary>
+        /// Shield skill-scaled proc chance for CriticalBlock / GlancingBlow.
+        /// Follows the Magic Absorb shield skill curve.
+        /// </summary>
+        public float GetShieldProcChance(float maxPercent)
+        {
+            var shieldSkill = GetCreatureSkill(Skill.Shield);
+            return ShieldPropertyFormula.GetProcChance(shieldSkill.AdvancementClass, shieldSkill.Base, maxPercent);
+        }
+
+        private static bool RollShieldProc(float chance)
+        {
+            if (chance <= 0)
+                return false;
+
+            return ThreadSafeRandom.Next(0.0f, 1.0f) < chance;
+        }
+
+        /// <summary>
+        /// Return the scalar damage absorbed by a shield (legacy multiplier form)
+        /// CONQUEST: Delegates to GetEffectiveShieldLevel for additive model compatibility
+        /// </summary>
+        public float GetShieldMod(WorldObject attacker, DamageType damageType, WorldObject weapon)
+        {
+            var effectiveLevel = GetEffectiveShieldLevel(attacker, damageType, weapon);
+            if (effectiveLevel <= 0)
+                return 1.0f;
+
+            return SkillFormula.CalcArmorMod(effectiveLevel);
         }
 
         /// <summary>

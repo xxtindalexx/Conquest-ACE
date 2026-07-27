@@ -92,7 +92,14 @@ namespace ACE.Server.Entity
         public float DamageBeforeMitigation;
 
         public float ArmorMod;
-        public float EffectiveAL;        // Total effective armor level before conversion to ArmorMod
+        // CONQUEST: Additive shield model - track body/shield AL separately for block feedback
+        public float BodyEffectiveAL;
+        public float EffectiveAL;        // Total effective armor level (body + shield) before conversion to ArmorMod
+        public float ShieldEffectiveAL;
+        public float ShieldDamageBlocked;
+        public bool CriticalBlockProc;
+        public bool GlancingBlowProc;
+        public bool IgnoreShieldProc;
         public int BodyArmorMod;         // Life magic armor buff/debuff (Armor Self / Imperil)
         public float ResistanceMod;
         public float ShieldMod;
@@ -404,6 +411,9 @@ namespace ACE.Server.Entity
             var ignoreArmorMod = Math.Min(armorRendingMod, armorCleavingMod);
 
             // get body part / armor pieces / armor modifier
+            // CONQUEST: Additive shield model - extract body AL before combining with shield
+            float bodyEffectiveAL;
+
             if (playerDefender != null)
             {
                 // select random body part @ current attack height
@@ -413,7 +423,8 @@ namespace ACE.Server.Entity
                 Armor = attacker.GetArmorLayers(playerDefender, BodyPart);
 
                 // get armor modifiers
-                ArmorMod = attacker.GetArmorMod(playerDefender, DamageType, Armor, Weapon, ignoreArmorMod);
+                //ArmorMod = attacker.GetArmorMod(playerDefender, DamageType, Armor, Weapon, ignoreArmorMod);
+                bodyEffectiveAL = attacker.GetEffectiveBodyArmorLevel(playerDefender, DamageType, Armor, Weapon, ignoreArmorMod);
 
                 // Capture bodyArmorMod for debug output (Armor Self / Imperil effects)
                 BodyArmorMod = playerDefender.EnchantmentManager.GetBodyArmorMod();
@@ -431,19 +442,24 @@ namespace ACE.Server.Entity
                 Armor = CreaturePart.GetArmorLayers(PropertiesBodyPart.Key);
 
                 // get target armor
-                ArmorMod = CreaturePart.GetArmorMod(DamageType, Armor, Attacker, Weapon, ignoreArmorMod);
+                //ArmorMod = CreaturePart.GetArmorMod(DamageType, Armor, Attacker, Weapon, ignoreArmorMod);
+                bodyEffectiveAL = CreaturePart.GetEffectiveArmorVsType(DamageType, Armor, Attacker, Weapon, ignoreArmorMod);
             }
+
+            BodyEffectiveAL = bodyEffectiveAL;
 
             // CONQUEST: Disable IgnoreAllArmor (Phantom weapons) in PvP if configured
             if (Weapon != null && Weapon.HasImbuedEffect(ImbuedEffectType.IgnoreAllArmor))
             {
                 if (!pkBattle || !PropertyManager.GetBool("pvp_disable_ignore_all_armor"))
-                    ArmorMod = 1.0f;
+                    //ArmorMod = 1.0f;
+                    bodyEffectiveAL = 0;
             }
 
             // CONQUEST: Apply synthetic nether armor override in PvP
             // Since players cannot get Nether Bane spells or tinker ArmorModVsNether,
             // this REPLACES the ArmorMod entirely to simulate properly protected armor
+            // CONQUEST: Additive shield model - nether override now operates on body AL
             if (pkBattle && DamageType == DamageType.Nether && PropertyManager.GetBool("pvp_nether_protection_enabled"))
             {
                 var armorOverride = GetNetherArmorOverrideForWeapon(Weapon);
@@ -453,29 +469,63 @@ namespace ACE.Server.Entity
                     // ArmorMod = 66.67 / (AL + 66.67) for positive AL
                     // So AL = 66.67 * (1 - ArmorMod) / ArmorMod
                     const float ArmorModConstant = 200.0f / 3.0f; // ~66.67
-                    float syntheticAL = ArmorModConstant * (1.0f - armorOverride) / armorOverride;
+                    //float syntheticAL = ArmorModConstant * (1.0f - armorOverride) / armorOverride;
+                    bodyEffectiveAL = ArmorModConstant * (1.0f - armorOverride) / armorOverride;
 
                     // Apply Imperil/Armor enchantments (negative = Imperil, positive = Armor Self)
-                    syntheticAL += BodyArmorMod;
+                    //syntheticAL += BodyArmorMod;
+                    bodyEffectiveAL += BodyArmorMod;
 
                     // Apply extremity penalty for head/hands/feet (reduces effective AL)
                     var extremityPenalty = (float)PropertyManager.GetDouble("pvp_nether_armor_extremity_penalty");
                     if (extremityPenalty > 0)
                     {
-                        var bodyPart = PropertiesBodyPart.Key;
-                        if (bodyPart == CombatBodyPart.Head ||
-                            bodyPart == CombatBodyPart.Hand ||
-                            bodyPart == CombatBodyPart.Foot)
+                        // CONQUEST: Additive shield model - player defenders use BodyPart enum
+                        if (playerDefender != null)
                         {
-                            // Convert extremity penalty (ArmorMod delta) to AL reduction
-                            syntheticAL -= extremityPenalty * ArmorModConstant;
+                            if (BodyPart == BodyPart.Head ||
+                                BodyPart == BodyPart.Hand ||
+                                BodyPart == BodyPart.Foot)
+                            {
+                                // Convert extremity penalty (ArmorMod delta) to AL reduction
+                                bodyEffectiveAL -= extremityPenalty * ArmorModConstant;
+                            }
+                        }
+                        else
+                        {
+                            var bodyPart = PropertiesBodyPart.Key;
+                            if (bodyPart == CombatBodyPart.Head ||
+                                bodyPart == CombatBodyPart.Hand ||
+                                bodyPart == CombatBodyPart.Foot)
+                            {
+                                // Convert extremity penalty (ArmorMod delta) to AL reduction
+                                bodyEffectiveAL -= extremityPenalty * ArmorModConstant;
+                            }
                         }
                     }
 
                     // Convert back to ArmorMod using the standard formula
-                    ArmorMod = SkillFormula.CalcArmorMod(syntheticAL);
+                    //ArmorMod = SkillFormula.CalcArmorMod(syntheticAL);
+                    BodyEffectiveAL = bodyEffectiveAL;
                 }
             }
+
+            // CONQUEST: Additive shield model - combine body + shield AL into single ArmorMod
+            var shieldMitigation = defender.GetShieldMitigation(attacker, DamageType, Weapon);
+            ShieldEffectiveAL = shieldMitigation.EffectiveLevel;
+            CriticalBlockProc = shieldMitigation.CriticalBlockProc;
+            GlancingBlowProc = shieldMitigation.GlancingBlowProc;
+            IgnoreShieldProc = shieldMitigation.IgnoreShieldProc;
+
+            var bodyOnlyArmorMod = SkillFormula.CalcArmorMod(bodyEffectiveAL);
+            if (ShieldEffectiveAL > 0)
+                ArmorMod = SkillFormula.CalcArmorMod(bodyEffectiveAL + ShieldEffectiveAL);
+            else
+                ArmorMod = bodyOnlyArmorMod;
+
+            // ShieldMod kept at 1.0 for compatibility with existing damage formula
+            ShieldMod = 1.0f;
+            EffectiveAL = bodyEffectiveAL + ShieldEffectiveAL;
 
             // get resistance modifiers
             WeaponResistanceMod = WorldObject.GetWeaponResistanceModifier(Weapon, attacker, attackSkill, DamageType, defender);
@@ -526,7 +576,8 @@ namespace ACE.Server.Entity
             }
 
             // get shield modifier
-            ShieldMod = defender.GetShieldMod(attacker, DamageType, Weapon);
+            // CONQUEST: Additive shield model - shield AL folded into ArmorMod; ShieldMod no longer applied separately
+            //ShieldMod = defender.GetShieldMod(attacker, DamageType, Weapon);
 
             // calculate final output damage
             Damage = DamageBeforeMitigation * ArmorMod * ShieldMod * ResistanceMod * DamageResistanceRatingMod;
@@ -622,6 +673,10 @@ namespace ACE.Server.Entity
             }
 
             DamageMitigated = DamageBeforeMitigation - Damage;
+
+            // CONQUEST: Display-only shield block amount for defender combat chat
+            if (ShieldEffectiveAL > 0 && ArmorMod > 0)
+                ShieldDamageBlocked = Math.Max(0, Damage * (bodyOnlyArmorMod / ArmorMod - 1.0f));
 
             return Damage;
         }
@@ -884,6 +939,13 @@ namespace ACE.Server.Entity
             }
 
             // damage mitigation
+            // CONQUEST: Additive shield model debug fields
+            if (BodyEffectiveAL > 0)
+                info += $"BodyEffectiveAL: {BodyEffectiveAL}\n";
+
+            if (EffectiveAL > 0)
+                info += $"EffectiveAL: {EffectiveAL}\n";
+
             if (ArmorMod != 0.0f && ArmorMod != 1.0f)
                 info += $"ArmorMod: {ArmorMod}\n";
 
@@ -894,8 +956,14 @@ namespace ACE.Server.Entity
             if (ResistanceMod != 0.0f && ResistanceMod != 1.0f)
                 info += $"ResistanceMod: {ResistanceMod}\n";
 
-            if (ShieldMod != 0.0f && ShieldMod != 1.0f)
-                info += $"ShieldMod: {ShieldMod}\n";
+            if (ShieldEffectiveAL > 0)
+                info += $"ShieldEffectiveAL: {ShieldEffectiveAL}\n";
+
+            if (ShieldDamageBlocked > 0)
+                info += $"ShieldDamageBlocked: {ShieldDamageBlocked}\n";
+
+            //if (ShieldMod != 0.0f && ShieldMod != 1.0f)
+            //    info += $"ShieldMod: {ShieldMod}\n";
 
             if (WeaponResistanceMod != 0.0f && WeaponResistanceMod != 1.0f)
                 info += $"WeaponResistanceMod: {WeaponResistanceMod}\n";

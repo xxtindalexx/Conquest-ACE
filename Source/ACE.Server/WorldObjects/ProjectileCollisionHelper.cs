@@ -106,7 +106,9 @@ namespace ACE.Server.WorldObjects
 
                             // blood splatter?
 
-                            if (damageEvent.ShieldMod != 1.0f)
+                            // CONQUEST: Additive shield model - check shield AL instead of ShieldMod multiplier
+                            if (damageEvent.ShieldEffectiveAL > 0)
+                            //if (damageEvent.ShieldMod != 1.0f)
                             {
                                 var shieldSkill = targetPlayer.GetCreatureSkill(Skill.Shield);
                                 Proficiency.OnSuccessUse(targetPlayer, shieldSkill, shieldSkill.Current);   // ??

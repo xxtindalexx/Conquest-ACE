@@ -556,7 +556,46 @@ namespace ACE.Server.Network.Structure
             ArmorHighlight = ArmorMaskHelper.GetHighlightMask(wo);
             ArmorColor = ArmorMaskHelper.GetColorMask(wo);
 
+            if (wo.IsShield)
+                BuildShieldPropertyDescriptions(wo);
+
             AddEnchantments(wo);
+        }
+
+        private void BuildShieldPropertyDescriptions(WorldObject shield)
+        {
+            var descriptions = new List<string>();
+
+            if (shield.Sentinel)
+                descriptions.Add("- Sentinel: Blocks attacks from all directions");
+
+            var hasCriticalBlock = shield.CriticalBlock;
+            var hasGlancingBlow = shield.GlancingBlow;
+
+            if (hasCriticalBlock && hasGlancingBlow)
+                descriptions.Add("- Balanced: Bulwark and Tactical block effects");
+            else if (hasCriticalBlock)
+                descriptions.Add("- Bulwark: Chance to add shield skill to block strength");
+            else if (hasGlancingBlow)
+                descriptions.Add("- Tactical: Frequent partial shield skill bonus to block strength");
+
+            if (descriptions.Count == 0)
+                return;
+
+            AppendPropertyDescriptions(shield, descriptions);
+        }
+
+        private void AppendPropertyDescriptions(WorldObject wo, List<string> descriptions)
+        {
+            var existingUse = wo.GetProperty(PropertyString.Use) ?? "";
+            var separator = string.IsNullOrEmpty(existingUse) ? "" : "\n\n";
+            var header = "Property Details:";
+            var descriptionText = header + "\n" + string.Join("\n", descriptions);
+
+            if (PropertiesString.ContainsKey(PropertyString.Use))
+                PropertiesString[PropertyString.Use] = existingUse + separator + descriptionText;
+            else
+                PropertiesString[PropertyString.Use] = descriptionText;
         }
 
         private void BuildCreature(Creature creature)
@@ -756,6 +795,14 @@ namespace ACE.Server.Network.Structure
                 var ignorePercent = (1.0f - cleavingMod) * 100;
                 if (ignorePercent >= 1.0f)
                     descriptions.Add($"- Armor Cleaving: Ignores {ignorePercent:F0}% Armor");
+            }
+
+            // Ignore Shield
+            var ignoreShield = weapon.GetProperty(PropertyFloat.IgnoreShield);
+            if (ignoreShield != null && ignoreShield > 0)
+            {
+                var ignoreShieldPercent = ignoreShield.Value * 100;
+                descriptions.Add($"- Ignore Shield: {ignoreShieldPercent:F0}% chance to bypass shield on hit");
             }
 
             // Split Arrows

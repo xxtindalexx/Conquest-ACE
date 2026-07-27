@@ -914,12 +914,21 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyFloat.IgnoreShield); else SetProperty(PropertyFloat.IgnoreShield, value.Value); }
         }
 
-        public float GetIgnoreShieldMod(WorldObject weapon)
+        public float GetIgnoreShieldChance(WorldObject weapon)
         {
-            var creatureMod = IgnoreShield ?? 0.0f;
-            var weaponMod = weapon?.IgnoreShield ?? 0.0f;
+            var creatureChance = (float)(IgnoreShield ?? 0.0);
+            var weaponChance = (float)(weapon?.IgnoreShield ?? 0.0);
 
-            return 1.0f - (float)Math.Max(creatureMod, weaponMod);
+            return Math.Clamp(Math.Max(creatureChance, weaponChance), 0f, 1f);
+        }
+
+        public bool RollIgnoreShield(WorldObject weapon)
+        {
+            var chance = GetIgnoreShieldChance(weapon);
+            if (chance <= 0)
+                return false;
+
+            return ThreadSafeRandom.Next(0.0f, 1.0f) < chance;
         }
 
         public static int GetBaseSkillImbued(CreatureSkill skill)

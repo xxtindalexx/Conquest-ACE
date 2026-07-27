@@ -101,7 +101,18 @@ namespace ACE.Server.Factories
             //if (wo.HasMutateFilter(MutateFilter.Value))   // fixme: data
                 MutateValue(wo, profile.Tier, roll);
 
+            if (wo.IsShield)
+                TryMutateShieldProperties(wo, profile);
+
             wo.LongDesc = GetLongDesc(wo);
+        }
+
+        private static void TryMutateShieldProperties(WorldObject wo, TreasureDeath profile)
+        {
+            if (profile.Tier != 9)
+                return;
+
+            ShieldPropertyLootChance.Roll(wo, profile);
         }
 
         private static bool AssignArmorLevel(WorldObject wo, TreasureDeath profile, TreasureRoll roll)
