@@ -131,6 +131,9 @@ public partial class WorldDbContext : DbContext
     // CONQUEST: PK Dungeon configuration
     public virtual DbSet<PkDungeonLandblock> PkDungeonLandblocks { get; set; }
 
+    // CONQUEST: NPK Dungeon configuration
+    public virtual DbSet<NpkDungeonLandblock> NpkDungeonLandblocks { get; set; }
+
     // CONQUEST: Exempt landblocks (IP restriction bypass)
     public virtual DbSet<ExemptLandblock> ExemptLandblocks { get; set; }
 
@@ -1980,6 +1983,24 @@ public partial class WorldDbContext : DbContext
             entity.HasKey(e => new { e.Landblock, e.Variation }).HasName("PRIMARY");
 
             entity.ToTable("pk_dungeon_landblocks", tb => tb.HasComment("CONQUEST: Stores PK-only dungeon landblock+variant combinations"));
+
+            entity.Property(e => e.Landblock)
+                .HasComment("Landblock ID (e.g., 0x002B)")
+                .HasColumnName("landblock");
+            entity.Property(e => e.Variation)
+                .HasComment("Variation/variant number (0 = base, 1+ = variants)")
+                .HasColumnName("variation");
+            entity.Property(e => e.Description)
+                .HasMaxLength(255)
+                .HasColumnName("description");
+        });
+
+        // CONQUEST: NPK Dungeon Landblock configuration
+        modelBuilder.Entity<NpkDungeonLandblock>(entity =>
+        {
+            entity.HasKey(e => new { e.Landblock, e.Variation }).HasName("PRIMARY");
+
+            entity.ToTable("npk_dungeon_landblocks", tb => tb.HasComment("CONQUEST: Stores NPK-only dungeon landblock+variant combinations"));
 
             entity.Property(e => e.Landblock)
                 .HasComment("Landblock ID (e.g., 0x002B)")

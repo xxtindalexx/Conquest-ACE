@@ -6882,6 +6882,12 @@ namespace ACE.Server.Command.Handlers
                         return;
                     }
 
+                    if (Landblock.npkDungeonLandblocks.Contains((landblock, variation)))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot add PK dungeon: 0x{landblock:X4} Variant {variation} is already configured as an NPK dungeon.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
                     // Add to database
                     var config = new ACE.Database.Models.World.PkDungeonLandblock
                     {
@@ -7002,6 +7008,209 @@ namespace ACE.Server.Command.Handlers
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Error reloading PK dungeons: {ex.Message}", ChatMessageType.Broadcast));
                 log.Error($"Error reloading PK dungeons: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        // CONQUEST: NPK Dungeon Management Command
+        [CommandHandler("npkdungeon", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Manage NPK-only dungeon landblock configurations.",
+            "add <landblock> <variation> [description] - Add an NPK dungeon\n" +
+            "remove <landblock> <variation> - Remove an NPK dungeon\n" +
+            "list - List all configured NPK dungeons\n" +
+            "reload - Reload NPK dungeons from database")]
+        public static void HandleNPKDungeon(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /npkdungeon <add|remove|list|reload>", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> <variation> [description] - Add an NPK dungeon", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> <variation> - Remove an NPK dungeon", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all configured NPK dungeons", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  reload - Reload NPK dungeons from database", ChatMessageType.Help));
+                return;
+            }
+
+            var subcommand = parameters[0].ToLower();
+
+            switch (subcommand)
+            {
+                case "add":
+                    HandleNPKDungeonAdd(session, parameters);
+                    break;
+                case "remove":
+                    HandleNPKDungeonRemove(session, parameters);
+                    break;
+                case "list":
+                    HandleNPKDungeonList(session);
+                    break;
+                case "reload":
+                    HandleNPKDungeonReload(session);
+                    break;
+                default:
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown subcommand: {subcommand}", ChatMessageType.Broadcast));
+                    session.Network.EnqueueSend(new GameMessageSystemChat("Valid subcommands: add, remove, list, reload", ChatMessageType.Help));
+                    break;
+            }
+        }
+
+        private static void HandleNPKDungeonAdd(Session session, string[] parameters)
+        {
+            if (parameters.Length < 3)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /npkdungeon add <landblock> <variation> [description]", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /npkdungeon add 0x002B 2 Safe Egg Orchard Variant 2", ChatMessageType.Help));
+                return;
+            }
+
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Use hex format (0x002B) or decimal (43)", ChatMessageType.Help));
+                return;
+            }
+
+            if (!int.TryParse(parameters[2], out int variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            string description = parameters.Length > 3 ? string.Join(" ", parameters.Skip(3)) : null;
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var existing = context.NpkDungeonLandblocks.Find(landblock, variation);
+                    if (existing != null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"NPK dungeon already exists: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    if (Landblock.pkDungeonLandblocks.Contains((landblock, variation)))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot add NPK dungeon: 0x{landblock:X4} Variant {variation} is already configured as a PK dungeon.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var config = new ACE.Database.Models.World.NpkDungeonLandblock
+                    {
+                        Landblock = landblock,
+                        Variation = variation,
+                        Description = description
+                    };
+
+                    context.NpkDungeonLandblocks.Add(config);
+                    context.SaveChanges();
+
+                    Landblock.npkDungeonLandblocks.Add((landblock, variation));
+
+                    if (!string.IsNullOrWhiteSpace(description))
+                        Landblock.npkDungeonDescriptions[(landblock, variation)] = description;
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Added NPK dungeon: 0x{landblock:X4} Variant {variation}" +
+                        (string.IsNullOrWhiteSpace(description) ? "" : $" ({description})"), ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} added NPK dungeon: 0x{landblock:X4} Variant {variation}");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error adding NPK dungeon: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error adding NPK dungeon: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleNPKDungeonRemove(Session session, string[] parameters)
+        {
+            if (parameters.Length < 3)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /npkdungeon remove <landblock> <variation>", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /npkdungeon remove 0x002B 2", ChatMessageType.Help));
+                return;
+            }
+
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (!int.TryParse(parameters[2], out int variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var existing = context.NpkDungeonLandblocks.Find(landblock, variation);
+                    if (existing == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"NPK dungeon not found: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    context.NpkDungeonLandblocks.Remove(existing);
+                    context.SaveChanges();
+
+                    Landblock.npkDungeonLandblocks.Remove((landblock, variation));
+                    Landblock.npkDungeonDescriptions.Remove((landblock, variation));
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Removed NPK dungeon: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} removed NPK dungeon: 0x{landblock:X4} Variant {variation}");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error removing NPK dungeon: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error removing NPK dungeon: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleNPKDungeonList(Session session)
+        {
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var configs = context.NpkDungeonLandblocks.OrderBy(c => c.Landblock).ThenBy(c => c.Variation).ToList();
+
+                    if (configs.Count == 0)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("No NPK dungeons configured.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"=== NPK Dungeons ({configs.Count}) ===", ChatMessageType.Broadcast));
+                    foreach (var config in configs)
+                    {
+                        var desc = string.IsNullOrWhiteSpace(config.Description) ? "" : $" - {config.Description}";
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{config.Landblock:X4} Variant {config.Variation}{desc}", ChatMessageType.Broadcast));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error listing NPK dungeons: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error listing NPK dungeons: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleNPKDungeonReload(Session session)
+        {
+            try
+            {
+                Landblock.LoadNPKDungeonsFromDatabase();
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Reloaded {Landblock.npkDungeonLandblocks.Count} NPK dungeon configuration(s) from database.", ChatMessageType.Broadcast));
+                log.Info($"[ADMIN] {session.Player.Name} reloaded NPK dungeon configurations from database");
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error reloading NPK dungeons: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error reloading NPK dungeons: {ex.Message}\n{ex.StackTrace}");
             }
         }
 

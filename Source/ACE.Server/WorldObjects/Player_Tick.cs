@@ -125,6 +125,9 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: Check PK-only dungeon enforcement
             PKDungeonEnforcementTick();
 
+            // CONQUEST: Check NPK-only dungeon enforcement
+            NPKDungeonEnforcementTick();
+
             // CONQUEST: Check if PK dungeon lockout has expired and notify player
             PKDungeonLockoutExpirationTick();
 
@@ -959,6 +962,42 @@ namespace ACE.Server.WorldObjects
                         Teleport(holtburg);
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Enforces NPK-only dungeon restrictions
+        /// Boots PK players out of NPK-only dungeons every heartbeat (~5 seconds)
+        /// </summary>
+        private void NPKDungeonEnforcementTick()
+        {
+            if (CurrentLandblock == null || Location == null)
+                return;
+
+            var currentLandblock = (ushort)CurrentLandblock.Id.Landblock;
+            var currentVariation = Location.Variation ?? 0;
+
+            if (!ACE.Server.Entity.Landblock.npkDungeonLandblocks.Contains((currentLandblock, currentVariation)))
+                return;
+
+            if (IsAdmin)
+                return;
+
+            if (PlayerKillerStatus == PlayerKillerStatus.NPK)
+                return;
+
+            Session.Network.EnqueueSend(new GameMessageSystemChat(
+                "You have been removed from this NPK-only dungeon. You must be a non-Player Killer to remain here.",
+                ChatMessageType.Broadcast));
+
+            if (Sanctuary != null)
+                Teleport(Sanctuary);
+            else if (LastPortal != null)
+                Teleport(LastPortal);
+            else
+            {
+                var holtburg = new ACE.Entity.Position(0xA9B40019, 84.0f, 7.1f, 94.0f, 0f, 0f, -0.0784591f, 0.996917f);
+                Teleport(holtburg);
             }
         }
 

@@ -1432,6 +1432,19 @@ namespace ACE.Server.Command.Handlers
                     return;
                 }
 
+                // Check if in NPK-only landblock
+                if (session.Player.CurrentLandblock != null)
+                {
+                    var landblockId = session.Player.CurrentLandblock.Id.Landblock;
+                    var variation = session.Player.Location.Variation ?? 0;
+
+                    if (ACE.Server.Entity.Landblock.npkDungeonLandblocks.Contains((landblockId, variation)))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("You cannot enable PK status while in an NPK-only dungeon. Leave the dungeon first.", ChatMessageType.Broadcast));
+                        return;
+                    }
+                }
+
                 // Check 2-hour cooldown after PK death
                 var lastPKDeath = session.Player.GetProperty(PropertyInt64.LastPKDeathTime) ?? 0;
                 if (lastPKDeath > 0)
