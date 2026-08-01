@@ -121,12 +121,34 @@ namespace ACE.Server.WorldObjects
             if (weapon.WeaponDefense > 0 && weapon.WeaponDefense < 1 && ((weapon.GetProperty(PropertyInt.ImbueStackingBits) ?? 0) & 4) != 0)
                 baseWepDef += 1;
 
-            var defenseMod = baseWepDef + weapon.EnchantmentManager.GetDefenseMod();
+            var weaponDefEnchant = weapon.EnchantmentManager.GetDefenseMod();
+            // CONQUEST: Shield Defender cantrips bind to the shield and apply to main-hand melee (best-only vs weapon)
+            var shieldDefEnchant = GetShieldWeaponDefenseEnchantMod(wielder, weapon);
+            var defenseMod = baseWepDef + Math.Max(weaponDefEnchant, shieldDefEnchant);
 
             if (weapon.IsEnchantable)
                 defenseMod += wielder.EnchantmentManager.GetDefenseMod();
 
             return defenseMod;
+        }
+
+        // CONQUEST: Shield weapon cantrips (Defender / Heart Seeker) apply to main-hand melee
+        public static float GetShieldWeaponDefenseEnchantMod(Creature wielder, WorldObject weapon)
+        {
+            if (wielder == null || weapon == null || weapon.IsRanged)
+                return 0.0f;
+
+            var shield = wielder.GetEquippedShield();
+            return shield?.EnchantmentManager.GetDefenseMod() ?? 0.0f;
+        }
+
+        public static float GetShieldWeaponOffenseEnchantMod(Creature wielder, WorldObject weapon)
+        {
+            if (wielder == null || weapon == null || weapon.IsRanged)
+                return 0.0f;
+
+            var shield = wielder.GetEquippedShield();
+            return shield?.EnchantmentManager.GetAttackMod() ?? 0.0f;
         }
 
         /// <summary>
@@ -222,7 +244,10 @@ namespace ACE.Server.WorldObjects
             if (weapon == null || weapon.IsRanged /* see note above */)
                 return defaultModifier;
 
-            var offenseMod = (float)(weapon.WeaponOffense ?? defaultModifier) + weapon.EnchantmentManager.GetAttackMod();
+            var weaponOffEnchant = weapon.EnchantmentManager.GetAttackMod();
+            // CONQUEST: Shield Heart Seeker cantrips bind to the shield and apply to main-hand melee (best-only vs weapon)
+            var shieldOffEnchant = GetShieldWeaponOffenseEnchantMod(wielder, weapon);
+            var offenseMod = (float)(weapon.WeaponOffense ?? defaultModifier) + Math.Max(weaponOffEnchant, shieldOffEnchant);
 
             if (weapon.IsEnchantable)
                 offenseMod += wielder.EnchantmentManager.GetAttackMod();
