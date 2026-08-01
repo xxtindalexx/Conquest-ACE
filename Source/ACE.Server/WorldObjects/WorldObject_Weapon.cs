@@ -921,10 +921,10 @@ namespace ACE.Server.WorldObjects
             if (IgnoreArmor == null)
                 return 1.0f;
 
-            // Global override: 0 = use default formula; e.g. 0.4 = 60% cleave (40% of armor gets through)
+            // Global override: 0 = use default formula; value is cleave fraction (0.1 = 10% armor ignored)
             var overrideVal = PropertyManager.GetDouble("armor_cleaving_mod_override");
             if (overrideVal > 0)
-                return (float)overrideVal;
+                return 1.0f - (float)Math.Clamp(overrideVal, 0.0, 1.0);
 
             // FIXME: data
             var maxSpellLevel = GetMaxSpellLevel();

@@ -778,7 +778,7 @@ namespace ACE.Server.Managers
                 ("pvp_max_critical_strike", new Property<double>(0, "PvP: Max Critical Strike crit chance (0 = no cap, e.g. 0.25 = 25%)")),
                 ("pvp_max_armor_rend", new Property<double>(0, "PvP: Max Armor Rending penetration multiplier (0 = no cap, e.g. 2.0)")),
                 ("pvp_max_armor_cleaving", new Property<double>(0, "PvP: Max Armor Cleaving reduction (0 = no cap, e.g. 0.5 = 50% armor ignored)")),
-                ("armor_cleaving_mod_override", new Property<double>(0, "Global Armor Cleaving mod override applied to all weapons with IgnoreArmor. 0 = default formula; 0.4 = 60% cleave (40% of armor gets through); 1.0 = no cleave")),
+                ("armor_cleaving_mod_override", new Property<double>(0, "Global armor cleave fraction for weapons with IgnoreArmor. 0 = spell formula; 0.1 = 10% ignored; 0.6 = 60% ignored; 1.0 = all armor ignored")),
 
                 ("shield_max_critical_block_chance", new Property<double>(0.20, "CONQUEST: Max CriticalBlock proc chance at 433 base shield skill (Bulwark; e.g. 0.20 = 20%)")),
                 ("shield_max_glancing_blow_chance", new Property<double>(0.30, "CONQUEST: Max GlancingBlow proc chance at 433 base shield skill (Tactical; e.g. 0.30 = 30%)")),
