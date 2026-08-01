@@ -32,10 +32,21 @@ namespace ACE.Server.WorldObjects
 
         public ImbueStripTool(Weenie weenie, ObjectGuid guid) : base(weenie, guid)
         {
+            SetEphemeralValues();
         }
 
         public ImbueStripTool(Biota biota) : base(biota)
         {
+            SetEphemeralValues();
+        }
+
+        private void SetEphemeralValues()
+        {
+            if (WeenieClassId != ImbueStripToolWcid)
+                return;
+
+            TargetedConsumableTool.ApplyUseOnTargetDefaults(this,
+                ItemType.MeleeWeapon | ItemType.MissileWeapon | ItemType.Caster);
         }
 
         public static bool IsValidImbueStripTarget(WorldObject target)

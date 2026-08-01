@@ -1745,6 +1745,10 @@ namespace ACE.Server.Command.Handlers
                     var patronName = character.PatronId.HasValue ? PlayerManager.FindByGuid(character.PatronId.Value)?.Name ?? "Unknown" : "None";
                     var monarchName = character.MonarchId.HasValue ? PlayerManager.FindByGuid(character.MonarchId.Value)?.Name ?? "Unknown" : "None";
                     message += $"Level: {level}  ENL: {enlightenment}  Augs: {augs}  Patron: {patronName}  Monarch: {monarchName}\n";
+
+                    var fingerDetails = new StringBuilder();
+                    AppendFingerCharacterDetails(fingerDetails, character);
+                    message += fingerDetails.ToString();
                 }
                 else
                     message = $"There was no active character named \"{charName}\" found in the database.\n";
@@ -1838,6 +1842,91 @@ namespace ACE.Server.Command.Handlers
         private static int GetFingerAugmentationCount(IPlayer player)
         {
             return AugmentationDevice.AugProps.Values.Sum(prop => player.GetProperty(prop) ?? 0);
+        }
+
+        private static void AppendFingerCharacterDetails(StringBuilder message, IPlayer character)
+        {
+            var pyreals = character.GetProperty(PropertyInt64.BankedPyreals) ?? 0;
+            var lum = character.GetProperty(PropertyInt64.BankedLuminance) ?? 0;
+            var coins = character.GetProperty(PropertyInt64.ConquestCoins) ?? 0;
+            message.AppendLine($"Bank: {pyreals:N0} pyreals  |  {lum:N0} luminance  |  {coins:N0} conquest coins");
+
+            var onlinePlayer = PlayerManager.GetOnlinePlayer(character.Guid.Full);
+            string referenceIp = null;
+
+            if (onlinePlayer?.Session?.EndPoint?.Address != null)
+            {
+                referenceIp = onlinePlayer.Session.EndPoint.Address.ToString();
+                message.AppendLine($"Current IP: {referenceIp}");
+            }
+            else if (character.Account?.LastLoginIP != null && character.Account.LastLoginIP.Length > 0)
+            {
+                try
+                {
+                    referenceIp = new IPAddress(character.Account.LastLoginIP).ToString();
+                }
+                catch
+                {
+                    // ignore invalid stored IP
+                }
+            }
+
+            if (string.IsNullOrEmpty(referenceIp))
+            {
+                message.AppendLine("IP history: unavailable (character offline with no recorded login IP)");
+                return;
+            }
+
+            try
+            {
+                CharacterTracker.EnsureDatabaseMigrated();
+
+                using (var context = new ShardModels.ShardDbContext())
+                {
+                    var ownAccount = character.Account?.AccountName;
+
+                    var sameIpAccounts = context.CharTracker
+                        .AsNoTracking()
+                        .Where(c => c.LoginIP == referenceIp && c.AccountName != null)
+                        .Where(c => ownAccount == null || c.AccountName != ownAccount)
+                        .Select(c => c.AccountName)
+                        .Distinct()
+                        .OrderBy(a => a)
+                        .ToList();
+
+                    if (sameIpAccounts.Count > 0)
+                        message.AppendLine($"Other accounts on IP {referenceIp}: {string.Join(", ", sameIpAccounts)}");
+                    else
+                        message.AppendLine($"Other accounts on IP {referenceIp}: none found");
+
+                    var recentLogins = context.CharTracker
+                        .AsNoTracking()
+                        .Where(c => c.CharacterId == character.Guid.Full && c.LoginIP != null && c.LoginIP != referenceIp)
+                        .OrderByDescending(c => c.LoginTimestamp)
+                        .Take(5)
+                        .ToList();
+
+                    if (recentLogins.Count > 0)
+                    {
+                        message.AppendLine("Recent logins (other IPs):");
+                        foreach (var login in recentLogins)
+                        {
+                            var localTime = login.LoginTimestamp.ToLocalTime();
+                            var duration = login.ConnectionDuration > 0 ? $" ({login.ConnectionDuration / 60}m)" : "";
+                            message.AppendLine($"  {localTime:M/d/yyyy h:mm tt} - {login.LoginIP}{duration}");
+                        }
+                    }
+                    else
+                    {
+                        message.AppendLine("Recent logins (other IPs): none found");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error retrieving finger IP/login data for {character.Name}: {ex.Message}");
+                message.AppendLine("IP/login history: error retrieving data");
+            }
         }
 
         // freeze

@@ -22,17 +22,28 @@ namespace ACE.Server.WorldObjects
         public RandomDye(Weenie weenie, ObjectGuid guid) : base(weenie, guid)
         {
             SetDyeIcon();
+            SetEphemeralValues();
         }
 
         public RandomDye(Biota biota) : base(biota)
         {
             SetDyeIcon();
+            SetEphemeralValues();
         }
 
         private void SetDyeIcon()
         {
             if (WeenieClassId == RandomDyeWcid)
                 IconId = RandomDyeIcon;
+        }
+
+        private void SetEphemeralValues()
+        {
+            if (WeenieClassId != RandomDyeWcid)
+                return;
+
+            TargetedConsumableTool.ApplyUseOnTargetDefaults(this,
+                ItemType.MeleeWeapon | ItemType.Armor | ItemType.Clothing | ItemType.MissileWeapon | ItemType.Caster);
         }
 
         public override void HandleActionUseOnTarget(Player player, WorldObject target)

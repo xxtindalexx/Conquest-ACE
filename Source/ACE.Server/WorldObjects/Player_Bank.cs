@@ -2064,6 +2064,14 @@ namespace ACE.Server.WorldObjects
                 Session.Network.EnqueueSend(new GameMessageSystemChat("Transfer amount must be greater than zero.", ChatMessageType.System));
                 return false;
             }
+
+            // Verify sender has luminance flagged (earned through gameplay)
+            if (!MaximumLuminance.HasValue || MaximumLuminance == 0)
+            {
+                Session.Network.EnqueueSend(new GameMessageSystemChat("You have not been luminance flagged yet and cannot transfer luminance.", ChatMessageType.System));
+                return false;
+            }
+
             // Check if player has enough luminance to transfer
             if (BankedLuminance < Amount)
             {

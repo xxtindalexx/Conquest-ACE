@@ -1315,8 +1315,7 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Specify amount to transfer.", ChatMessageType.System));
                             break;
                         }
-                        //CONQUEST: Players must be Lum flagged to send luminance.
-                        if (!session.Player.TransferLuminance(amount, transferTargetName) || !session.Player.MaximumLuminance.HasValue)
+                        if (!session.Player.TransferLuminance(amount, transferTargetName))
                         {
                             session.Network.EnqueueSend(new GameMessageSystemChat($"Transfer failed: Luminance to {transferTargetName}", ChatMessageType.System));
                         }

@@ -719,8 +719,8 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
-            // CONQUEST: Reduce damage from weapon/item "cast on strike" or "cast by weapon" proc spells in PvP
-            if (isPVP && FromProc)
+            // CONQUEST: Reduce damage from weapon/item proc spells and built-in SpellDID casts in PvP
+            if (isPVP && (FromProc || IsWeaponSpell))
                 finalDamage *= (float)PropertyManager.GetDouble("pvp_weapon_proc_spell_dmg_mod");
 
             // CONQUEST: Display-only magic absorb block amount for defender combat chat

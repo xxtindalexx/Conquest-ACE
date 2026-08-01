@@ -362,8 +362,9 @@ namespace ACE.Server.Managers
                 AwardLuminance(winnerId, winnerName, prize);
             }
 
-            // Clear all entries for this week from DB and in-memory dict
-            ClearCurrentWeekEntries();
+            // Reset ticket counts for all participants so they can enter the next lottery
+            var participantIds = _entries.Keys.ToHashSet();
+            ResetParticipantsAfterDraw(participantIds);
             _entries.Clear();
 
             // Announce results
@@ -505,34 +506,54 @@ namespace ACE.Server.Managers
         }
 
         /// <summary>
-        /// Zeros out LotteryTickets for all current-week participants so they don't carry over.
-        /// Also clears the IP map so the next week starts fresh.
+        /// Clears lottery ticket state for all draw participants (online, offline, and DB)
+        /// so they can enter again when the next lottery is enabled.
         /// </summary>
-        private static void ClearCurrentWeekEntries()
+        private static void ResetParticipantsAfterDraw(HashSet<uint> participantIds)
         {
-            if (_entries.IsEmpty)
+            if (participantIds == null || participantIds.Count == 0)
                 return;
 
             var ticketType = (ushort)PropertyInt64.LotteryTickets;
-            var participantIds = _entries.Keys.ToHashSet();
+            var weekType = (ushort)PropertyInt64.LotteryWeekNumber;
+
+            foreach (var characterId in participantIds)
+            {
+                var onlinePlayer = PlayerManager.GetOnlinePlayer(characterId);
+                if (onlinePlayer != null)
+                {
+                    onlinePlayer.SetProperty(PropertyInt64.LotteryTickets, 0);
+                    onlinePlayer.RemoveProperty(PropertyInt64.LotteryWeekNumber);
+                    continue;
+                }
+
+                var offlinePlayer = PlayerManager.GetOfflinePlayer(characterId);
+                if (offlinePlayer != null)
+                {
+                    offlinePlayer.SetProperty(PropertyInt64.LotteryTickets, 0);
+                    offlinePlayer.RemoveProperty(PropertyInt64.LotteryWeekNumber);
+                    offlinePlayer.SaveBiotaToDatabase();
+                }
+            }
 
             try
             {
                 using var context = new ShardDbContext();
 
                 var toReset = context.BiotaPropertiesInt64
-                    .Where(p => participantIds.Contains(p.ObjectId) && p.Type == ticketType)
+                    .Where(p => participantIds.Contains(p.ObjectId) &&
+                                (p.Type == ticketType || p.Type == weekType))
                     .ToList();
 
                 foreach (var entry in toReset)
                     entry.Value = 0;
 
                 context.SaveChanges();
-                log.Info($"[LOTTERY] Cleared lottery tickets for {toReset.Count} participant(s).");
+                log.Info($"[LOTTERY] Reset lottery state for {participantIds.Count} participant(s) ({toReset.Count} biota properties cleared).");
             }
             catch (Exception ex)
             {
-                log.Error($"[LOTTERY] Error clearing entries after draw: {ex.Message}", ex);
+                log.Error($"[LOTTERY] Error resetting participant lottery state after draw: {ex.Message}", ex);
             }
 
             _ipToCharId.Clear();
