@@ -1043,14 +1043,15 @@ namespace ACE.Server.WorldObjects
                     var critProt = critDefended ? " Your augmentation allows you to avoid a critical hit!" : "";
                     // CONQUEST: Append block suffix to defender magic chat when absorb mitigates damage
                     var blockedSuffix = Strings.FormatBlockedSuffix((uint)Math.Round(magicDamageBlocked));
+                    var sentenceEnd = blockedSuffix != "" ? blockedSuffix : ".";
 
-                    var defenderMsg = $"{critMsg}{overpowerMsg}{sneakMsg}{ProjectileSource.Name} {plural} you for {amount} points with {Spell.Name}.{blockedSuffix}{critProt}";
+                    var defenderMsg = $"{critMsg}{overpowerMsg}{sneakMsg}{ProjectileSource.Name} {plural} you for {amount} points with {Spell.Name}{sentenceEnd}{critProt}";
                     //var defenderMsg = $"{critMsg}{overpowerMsg}{sneakMsg}{ProjectileSource.Name} {plural} you for {amount} points with {Spell.Name}.{critProt}";
 
                     if (nonHealth)
                     {
                         var vital = Spell.Category == SpellCategory.StaminaLowering ? "stamina" : "mana";
-                        defenderMsg = $"{ProjectileSource.Name} casts {Spell.Name} and drains {amount} points of your {vital}.{blockedSuffix}";
+                        defenderMsg = $"{ProjectileSource.Name} casts {Spell.Name} and drains {amount} points of your {vital}{sentenceEnd}";
                         //defenderMsg = $"{ProjectileSource.Name} casts {Spell.Name} and drains {amount} points of your {vital}.";
                     }
 

@@ -137,7 +137,7 @@ namespace ACE.Server.WorldObjects
                     if (target.CurrentWieldedLocation != null)
                         player.EnqueueBroadcast(new GameMessageObjDescEvent(player));
 
-                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You apply the dye to the {target.Name}.", ChatMessageType.Tell));
+                    player.SendMessage($"You apply the dye to the {target.Name}.", ChatMessageType.Craft);
                 }
                 catch (Exception ex)
                 {

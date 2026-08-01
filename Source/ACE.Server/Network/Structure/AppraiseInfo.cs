@@ -411,9 +411,23 @@ namespace ACE.Server.Network.Structure
             if (PropertiesFloat.ContainsKey(PropertyFloat.WeaponDefense) && !(wo is Ammunition))
             {
                 var defenseMod = wo.EnchantmentManager.GetDefenseMod();
+                // CONQUEST: Shield Defender cantrips apply to main-hand melee (best-only vs weapon)
+                if (wo.Wielder is Creature creature)
+                    defenseMod = Math.Max(defenseMod, WorldObject.GetShieldWeaponDefenseEnchantMod(creature, wo));
                 var auraDefenseMod = wo.Wielder != null && wo.IsEnchantable ? wo.Wielder.EnchantmentManager.GetDefenseMod() : 0.0f;
 
                 PropertiesFloat[PropertyFloat.WeaponDefense] += defenseMod + auraDefenseMod;
+            }
+
+            if (PropertiesFloat.ContainsKey(PropertyFloat.WeaponOffense) && !(wo is Ammunition) && !wo.IsRanged)
+            {
+                var offenseMod = wo.EnchantmentManager.GetAttackMod();
+                // CONQUEST: Shield Heart Seeker cantrips apply to main-hand melee (best-only vs weapon)
+                if (wo.Wielder is Creature creature)
+                    offenseMod = Math.Max(offenseMod, WorldObject.GetShieldWeaponOffenseEnchantMod(creature, wo));
+                var auraOffenseMod = wo.Wielder != null && wo.IsEnchantable ? wo.Wielder.EnchantmentManager.GetAttackMod() : 0.0f;
+
+                PropertiesFloat[PropertyFloat.WeaponOffense] += offenseMod + auraOffenseMod;
             }
 
             if (PropertiesFloat.TryGetValue(PropertyFloat.ManaConversionMod, out var manaConvMod))

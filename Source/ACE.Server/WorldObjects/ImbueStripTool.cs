@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using ACE.Entity;
 using ACE.Entity.Enum;
@@ -6,6 +7,7 @@ using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
 
 using MaterialTypeEnum = ACE.Entity.Enum.MaterialType;
@@ -29,6 +31,20 @@ namespace ACE.Server.WorldObjects
             ImbuedEffectType.ColdRending |
             ImbuedEffectType.ElectricRending |
             ImbuedEffectType.FireRending;
+
+        private static readonly Dictionary<MaterialTypeEnum, ImbuedEffectType> MaterialPrimaryImbue = new Dictionary<MaterialTypeEnum, ImbuedEffectType>
+        {
+            { MaterialTypeEnum.BlackOpal, ImbuedEffectType.CriticalStrike },
+            { MaterialTypeEnum.FireOpal, ImbuedEffectType.CripplingBlow },
+            { MaterialTypeEnum.Sunstone, ImbuedEffectType.ArmorRending },
+            { MaterialTypeEnum.Aquamarine, ImbuedEffectType.ColdRending },
+            { MaterialTypeEnum.Jet, ImbuedEffectType.ElectricRending },
+            { MaterialTypeEnum.RedGarnet, ImbuedEffectType.FireRending },
+            { MaterialTypeEnum.BlackGarnet, ImbuedEffectType.PierceRending },
+            { MaterialTypeEnum.WhiteSapphire, ImbuedEffectType.BludgeonRending },
+            { MaterialTypeEnum.ImperialTopaz, ImbuedEffectType.SlashRending },
+            { MaterialTypeEnum.Emerald, ImbuedEffectType.AcidRending },
+        };
 
         public ImbueStripTool(Weenie weenie, ObjectGuid guid) : base(weenie, guid)
         {
@@ -99,6 +115,72 @@ namespace ACE.Server.WorldObjects
             return null;
         }
 
+        public static ImbuedEffectType? GetPrimaryImbueType(ImbuedEffectType imbuedEffect)
+        {
+            var primary = imbuedEffect & PrimaryImbueMask;
+            if (primary == 0)
+                return null;
+
+            if (primary.HasFlag(ImbuedEffectType.CriticalStrike))
+                return ImbuedEffectType.CriticalStrike;
+            if (primary.HasFlag(ImbuedEffectType.CripplingBlow))
+                return ImbuedEffectType.CripplingBlow;
+            if (primary.HasFlag(ImbuedEffectType.ArmorRending))
+                return ImbuedEffectType.ArmorRending;
+            if (primary.HasFlag(ImbuedEffectType.ColdRending))
+                return ImbuedEffectType.ColdRending;
+            if (primary.HasFlag(ImbuedEffectType.ElectricRending))
+                return ImbuedEffectType.ElectricRending;
+            if (primary.HasFlag(ImbuedEffectType.FireRending))
+                return ImbuedEffectType.FireRending;
+            if (primary.HasFlag(ImbuedEffectType.PierceRending))
+                return ImbuedEffectType.PierceRending;
+            if (primary.HasFlag(ImbuedEffectType.BludgeonRending))
+                return ImbuedEffectType.BludgeonRending;
+            if (primary.HasFlag(ImbuedEffectType.SlashRending))
+                return ImbuedEffectType.SlashRending;
+            if (primary.HasFlag(ImbuedEffectType.AcidRending))
+                return ImbuedEffectType.AcidRending;
+
+            return null;
+        }
+
+        public static uint? GetIconUnderlayForImbueType(ImbuedEffectType imbueType)
+        {
+            if (RecipeManager.IconUnderlay.TryGetValue(imbueType, out var icon))
+                return icon;
+
+            return null;
+        }
+
+        /// <summary>
+        /// After stripping a primary imbue, set icon underlay from any remaining primary imbue on the item,
+        /// else the most recent prior primary-imbue material in TinkerLog, else clear it.
+        /// </summary>
+        public static void UpdateIconUnderlayAfterStrip(Player player, WorldObject target)
+        {
+            uint? icon = null;
+
+            var remainingPrimary = GetPrimaryImbueType(target.ImbuedEffect);
+            if (remainingPrimary != null)
+                icon = GetIconUnderlayForImbueType(remainingPrimary.Value);
+            else if (!string.IsNullOrEmpty(target.TinkerLog))
+            {
+                var log = new TinkerLog(target.TinkerLog);
+                for (var i = log.Tinkers.Count - 1; i >= 0; i--)
+                {
+                    if (!MaterialPrimaryImbue.TryGetValue(log.Tinkers[i], out var imbueType))
+                        continue;
+
+                    icon = GetIconUnderlayForImbueType(imbueType);
+                    if (icon != null)
+                        break;
+                }
+            }
+
+            player.UpdateProperty(target, PropertyDataId.IconUnderlay, icon);
+        }
+
         public static bool TryStripPrimaryImbue(WorldObject target)
         {
             if (!IsValidImbueStripTarget(target))
@@ -108,7 +190,11 @@ namespace ACE.Server.WorldObjects
             if (material == null)
                 return false;
 
-            target.ImbuedEffect &= ~PrimaryImbueMask;
+            var imbueType = GetPrimaryImbueType(target.ImbuedEffect);
+            if (imbueType == null)
+                return false;
+
+            target.ImbuedEffect &= ~imbueType.Value;
             target.NumTimesTinkered -= 1;
             target.TinkerLog = TinkerLogHelper.RemoveLast(target.TinkerLog, material.Value);
 
@@ -206,12 +292,14 @@ namespace ACE.Server.WorldObjects
                         return;
                     }
 
+                    UpdateIconUnderlayAfterStrip(player, target);
+
                     player.EnqueueBroadcast(new GameMessageUpdateObject(target));
 
                     if (target.CurrentWieldedLocation != null)
                         player.EnqueueBroadcast(new GameMessageObjDescEvent(player));
 
-                    player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You strip the imbue from the {target.Name}.", ChatMessageType.Tell));
+                    player.SendMessage($"You strip the imbue from the {target.Name}.", ChatMessageType.Craft);
                 }
                 catch (Exception ex)
                 {
