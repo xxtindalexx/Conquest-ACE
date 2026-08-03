@@ -667,11 +667,9 @@ namespace ACE.Server.Command.Handlers
 
             // XP Augmentation Bonus (5% per augmentation, kills only)
             var augmentationBonusXp = player.AugmentationBonusXp;
-            var augBonus = 1.0 + (augmentationBonusXp * 0.05);
             var augBonusPercent = (augmentationBonusXp * 5.0);
 
             // Equipment Bonus (from enchantments) - GetXPBonus() returns additive modifier (e.g., 0.05 for 5%)
-            var equipmentBonus = 1.0 + player.EnchantmentManager.GetXPBonus();
             var equipmentBonusPercent = (player.EnchantmentManager.GetXPBonus() * 100.0);
 
             session.Network.EnqueueSend(new GameMessageSystemChat("=== XP Bonuses ===", ChatMessageType.Broadcast));
@@ -681,9 +679,14 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat($"Augmentation Bonus: {augBonusPercent:F2}% (kills only, {augmentationBonusXp} augs)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Equipment Bonus: {equipmentBonusPercent:F2}%", ChatMessageType.Broadcast));
 
-            var totalBonus = (questBonus * enlightenmentBonus * pkDungeonBonus * augBonus * equipmentBonus) - 1.0;
-            var totalBonusPercent = totalBonus * 100.0;
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus: {totalBonusPercent:F2}% (aug bonus applies to kills only)", ChatMessageType.Broadcast));
+            var personalModifierKill = player.GetXPAndLuminanceModifier(XpType.Kill);
+            var personalModifierGeneral = player.GetXPAndLuminanceModifier(XpType.Quest);
+
+            var totalBonusKill = (questBonus * pkDungeonBonus * personalModifierKill) - 1.0;
+            var totalBonusGeneral = (questBonus * pkDungeonBonus * personalModifierGeneral) - 1.0;
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus (Kills): {totalBonusKill * 100.0:F2}%", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus (Quest/Lum): {totalBonusGeneral * 100.0:F2}%", ChatMessageType.Broadcast));
         }
 
         [CommandHandler("bonusdetail", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, "Shows detailed enchantment data for XP bonuses (debug)")]
