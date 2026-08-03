@@ -781,9 +781,67 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
+        private static readonly TimeSpan EnlAugsCooldown = TimeSpan.FromSeconds(5);
+        private static readonly ConcurrentDictionary<uint, DateTime> EnlAugsLastUsed = new ConcurrentDictionary<uint, DateTime>();
+
+        private static void HandleEnlightenmentAugs(Session session)
+        {
+            var player = session.Player;
+            var characterId = player.Guid.Full;
+            var currentTime = DateTime.UtcNow;
+
+            if (EnlAugsLastUsed.TryGetValue(characterId, out var lastUsed) && currentTime - lastUsed < EnlAugsCooldown)
+            {
+                var remaining = EnlAugsCooldown - (currentTime - lastUsed);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Please wait {remaining.TotalSeconds:F0}s before using /enl augs again.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            EnlAugsLastUsed[characterId] = currentTime;
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"---------------------------", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Enlightenment Augmentations:", ChatMessageType.Broadcast));
+
+            void Line(string label, PropertyInt prop, int max)
+            {
+                var current = player.GetProperty(prop) ?? 0;
+                session.Network.EnqueueSend(new GameMessageSystemChat($"{label}: {current} ({max} max)", ChatMessageType.Broadcast));
+            }
+
+            Line("Cleave", PropertyInt.EnlightenmentCleaveBonus, 1);
+            Line("Arrow Split", PropertyInt.EnlightenmentSplitArrowBonus, 1);
+            Line("Spell Chain", PropertyInt.EnlightenmentSpellChainBonus, 1);
+            Line("Aetheria Surge", PropertyInt.EnlightenmentAetheriaSurgeBonus, 1);
+            if (PropertyManager.GetBool("void_contagion_enabled"))
+                Line("Void Contagion", PropertyInt.EnlightenmentVoidDotSpreadBonus, 1);
+            Line("Damage", PropertyInt.EnlightenmentBonusDamageRating, 4);
+            Line("Damage Reduction", PropertyInt.EnlightenmentBonusDamageReduction, 4);
+            Line("Crit Damage", PropertyInt.EnlightenmentBonusCritDamageRating, 4);
+            Line("Crit Damage Reduction", PropertyInt.EnlightenmentBonusCritDamageReduction, 4);
+            Line("Imbue", PropertyInt.EnlightenmentImbueBonus, 10);
+            Line("Salvage", PropertyInt.EnlightenmentSalvageBonus, 10);
+            Line("Skill Credits", PropertyInt.EnlightenmentSkillCreditsPurchased, 5);
+            Line("Stamina Benediction", PropertyInt.EnlightenmentStaminaBenediction, 1);
+            Line("Mana Benediction", PropertyInt.EnlightenmentManaBenediction, 1);
+        }
+
+        [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Enlightenment commands: /enl to enlighten, /enl augs to view purchased perks")]
         public static void HandleEnlighten(Session session, params string[] parameters)
         {
+            if (parameters.Length > 0)
+            {
+                switch (parameters[0].ToLower())
+                {
+                    case "augs":
+                    case "aug":
+                        HandleEnlightenmentAugs(session);
+                        return;
+                    default:
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[ENL] Usage: /enl | /enl augs", ChatMessageType.Broadcast));
+                        return;
+                }
+            }
+
             var player = session.Player;
 
             // Calculate costs for confirmation message
@@ -813,7 +871,7 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        [CommandHandler("enlighten", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
+        [CommandHandler("enlighten", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Enlightenment commands: /enlighten to enlighten, /enlighten augs to view purchased perks")]
         public static void HandleEnlighten2(Session session, params string[] parameters)
         {
             HandleEnlighten(session, parameters);
