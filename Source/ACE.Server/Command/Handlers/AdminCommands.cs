@@ -1849,7 +1849,7 @@ namespace ACE.Server.Command.Handlers
             var pyreals = character.GetProperty(PropertyInt64.BankedPyreals) ?? 0;
             var lum = character.GetProperty(PropertyInt64.BankedLuminance) ?? 0;
             var coins = character.GetProperty(PropertyInt64.ConquestCoins) ?? 0;
-            message.AppendLine($"Bank: {pyreals:N0} pyreals  |  {lum:N0} luminance  |  {coins:N0} conquest coins");
+            message.Append($"Bank: {pyreals:N0} pyreals  |  {lum:N0} luminance  |  {coins:N0} conquest coins\n");
 
             var onlinePlayer = PlayerManager.GetOnlinePlayer(character.Guid.Full);
             string referenceIp = null;
@@ -1857,7 +1857,7 @@ namespace ACE.Server.Command.Handlers
             if (onlinePlayer?.Session?.EndPoint?.Address != null)
             {
                 referenceIp = onlinePlayer.Session.EndPoint.Address.ToString();
-                message.AppendLine($"Current IP: {referenceIp}");
+                message.Append($"Current IP: {referenceIp}\n");
             }
             else if (character.Account?.LastLoginIP != null && character.Account.LastLoginIP.Length > 0)
             {
@@ -1873,7 +1873,7 @@ namespace ACE.Server.Command.Handlers
 
             if (string.IsNullOrEmpty(referenceIp))
             {
-                message.AppendLine("IP history: unavailable (character offline with no recorded login IP)");
+                message.Append("IP history: unavailable (character offline with no recorded login IP)\n");
                 return;
             }
 
@@ -1895,9 +1895,9 @@ namespace ACE.Server.Command.Handlers
                         .ToList();
 
                     if (sameIpAccounts.Count > 0)
-                        message.AppendLine($"Other accounts on IP {referenceIp}: {string.Join(", ", sameIpAccounts)}");
+                        message.Append($"Other accounts on IP {referenceIp}: {string.Join(", ", sameIpAccounts)}\n");
                     else
-                        message.AppendLine($"Other accounts on IP {referenceIp}: none found");
+                        message.Append($"Other accounts on IP {referenceIp}: none found\n");
 
                     var recentLogins = context.CharTracker
                         .AsNoTracking()
@@ -1908,24 +1908,24 @@ namespace ACE.Server.Command.Handlers
 
                     if (recentLogins.Count > 0)
                     {
-                        message.AppendLine("Recent logins (other IPs):");
+                        message.Append("Recent logins (other IPs):\n");
                         foreach (var login in recentLogins)
                         {
                             var localTime = login.LoginTimestamp.ToLocalTime();
                             var duration = login.ConnectionDuration > 0 ? $" ({login.ConnectionDuration / 60}m)" : "";
-                            message.AppendLine($"  {localTime:M/d/yyyy h:mm tt} - {login.LoginIP}{duration}");
+                            message.Append($"  {localTime:M/d/yyyy h:mm tt} - {login.LoginIP}{duration}\n");
                         }
                     }
                     else
                     {
-                        message.AppendLine("Recent logins (other IPs): none found");
+                        message.Append("Recent logins (other IPs): none found\n");
                     }
                 }
             }
             catch (Exception ex)
             {
                 log.Error($"Error retrieving finger IP/login data for {character.Name}: {ex.Message}");
-                message.AppendLine("IP/login history: error retrieving data");
+                message.Append("IP/login history: error retrieving data\n");
             }
         }
 
