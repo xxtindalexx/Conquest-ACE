@@ -673,8 +673,8 @@ namespace ACE.Entity.Enum.Properties
         EnrageLeapVisualEffect = 9206,
         EnrageGroundMarkerWCID = 9207,
         EnrageLeapKnockbackEffect = 9208,
-        EnrageHotspotDamageWCID = 9209,
-        EnrageHotspotVisualWCID = 9210,
+        EnrageHotSpotPrimary = 9209,
+        EnrageHotSpotSecondary = 9210,
         EnrageHotspotDamageOverride = 9211,
         [AssessmentProperty]
         SplitArrowCount = 9031,

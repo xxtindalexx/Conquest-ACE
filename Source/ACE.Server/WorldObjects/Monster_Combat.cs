@@ -778,26 +778,30 @@ namespace ACE.Server.WorldObjects
                 (null, 13370037, "An iron cage falls from the sky, dodge it or be trapped!")
             };
 
-            // If the weenie specifies an explicit hotspot WCID, use it instead of a random pick.
-            var hotspotDamageWCID = GetProperty(PropertyInt.EnrageHotspotDamageWCID);
-            var hotspotVisualWCID = GetProperty(PropertyInt.EnrageHotspotVisualWCID);
+            // If the weenie specifies explicit hotspot WCIDs, use them instead of a random pick.
+            var hotspotPrimaryWCID = GetProperty(PropertyInt.EnrageHotSpotPrimary);
+            var hotspotSecondaryWCID = GetProperty(PropertyInt.EnrageHotSpotSecondary);
 
             int? damageObjectId;
             int visualObjectId;
             string message;
 
             var random = new Random();
-            if (hotspotDamageWCID.HasValue || hotspotVisualWCID.HasValue)
+            if (hotspotPrimaryWCID.HasValue || hotspotSecondaryWCID.HasValue)
             {
-                damageObjectId = hotspotDamageWCID;
-                // Fall back to a random visual from the default pool when none is explicitly configured.
-                visualObjectId = hotspotVisualWCID ?? spawnOptions[random.Next(0, spawnOptions.Count)].VisualObjectId;
-                message = "Beware the incoming attack!";
+                damageObjectId = hotspotPrimaryWCID;
+                // When primary is set but secondary is not, spawn no secondary object.
+                visualObjectId = hotspotSecondaryWCID ?? 0;
+                message = GetProperty(PropertyString.EnrageHotSpotMessage) ?? "Beware the incoming attack!";
             }
             else
             {
                 // Select a random object set
                 (damageObjectId, visualObjectId, message) = spawnOptions[random.Next(0, spawnOptions.Count)];
+
+                var customMessage = GetProperty(PropertyString.EnrageHotSpotMessage);
+                if (!string.IsNullOrWhiteSpace(customMessage))
+                    message = customMessage;
             }
 
             WorldObject damageObj = null;
