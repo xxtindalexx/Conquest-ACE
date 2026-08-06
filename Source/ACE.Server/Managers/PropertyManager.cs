@@ -665,6 +665,7 @@ namespace ACE.Server.Managers
                 ("max_chars_per_account", new Property<long>(11, "retail defaults to 11, client supports up to 20")),
                 ("monster_tick_throttle_limit", new Property<long>(75, "Maximum number of monsters to process per tick per landblock. Higher = faster AI reactions but larger spikes during mass spawns. Adjust based on Discord alerts.")),
                 ("pk_timer", new Property<long>(20, "the number of seconds where a player cannot perform certain actions (ie. teleporting) after becoming involved in a PK battle")),
+                ("pk_command_cooldown", new Property<long>(7200, "PkCommandCooldown: the number of seconds a player must wait after /pk on before /pk off, and after a PK vs PK death before /pk on again. Default 7200 (2 hours). Set to 0 to disable.")),
                 ("pet_mythic_heal_spell_level", new Property<long>(1, "the spell level (1-7) of Heal Other that Mythic pets cast on their owner. 1 = level I, 2 = level II, etc.")),
                 ("pet_mythic_stamina_spell_level", new Property<long>(1, "the spell level (1-5) of Stamina to Health Other that Mythic pets cast on their owner. 1 = level I, 2 = level II, etc.")),
                 ("pet_mythic_spell_cooldown", new Property<long>(15, "the number of seconds Mythic pets must wait between casting healing/stamina spells on their owner")),

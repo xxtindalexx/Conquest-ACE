@@ -1505,16 +1505,16 @@ namespace ACE.Server.Command.Handlers
                     }
                 }
 
-                // Check 2-hour cooldown after PK death
+                // Check cooldown after PK death before re-flagging
+                var pkCommandCooldown = PropertyManager.GetLong("pk_command_cooldown");
                 var lastPKDeath = session.Player.GetProperty(PropertyInt64.LastPKDeathTime) ?? 0;
-                if (lastPKDeath > 0)
+                if (pkCommandCooldown > 0 && lastPKDeath > 0)
                 {
                     var timeSinceDeath = Time.GetUnixTime() - lastPKDeath;
-                    var cooldown = 7200; // 2 hours in seconds
 
-                    if (timeSinceDeath < cooldown)
+                    if (timeSinceDeath < pkCommandCooldown)
                     {
-                        var remainingSeconds = (long)(cooldown - timeSinceDeath);
+                        var remainingSeconds = (long)(pkCommandCooldown - timeSinceDeath);
                         var timeDisplay = FormatTimeRemaining(remainingSeconds);
                         session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {timeDisplay} before you can flag PK again after dying in PvP combat.", ChatMessageType.Broadcast));
                         return;
@@ -1548,18 +1548,18 @@ namespace ACE.Server.Command.Handlers
             // /pk off
             else if (param == "off" || param == "disable" || param == "0")
             {
-                // Check 2-hour minimum PK duration first (before checking current status, to handle respite NPK correctly)
+                // Check minimum PK duration first (before checking current status, to handle respite NPK correctly)
+                var pkCommandCooldown = PropertyManager.GetLong("pk_command_cooldown");
                 var lastPKFlagTime = session.Player.GetProperty(PropertyInt64.LastPKFlagTime) ?? 0;
-                if (lastPKFlagTime > 0 && session.Player.PkLevel == PKLevel.PK) // Only check if they're a "real" PK (not just temporarily NPK from respite)
+                if (pkCommandCooldown > 0 && lastPKFlagTime > 0 && session.Player.PkLevel == PKLevel.PK) // Only check if they're a "real" PK (not just temporarily NPK from respite)
                 {
                     var timeSinceFlagged = Time.GetUnixTime() - lastPKFlagTime;
-                    var minimumDuration = 7200; // 2 hours in seconds
 
-                    if (timeSinceFlagged < minimumDuration)
+                    if (timeSinceFlagged < pkCommandCooldown)
                     {
-                        var remainingSeconds = (long)(minimumDuration - timeSinceFlagged);
+                        var remainingSeconds = (long)(pkCommandCooldown - timeSinceFlagged);
                         var timeDisplay = FormatTimeRemaining(remainingSeconds);
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must remain PK for at least 2 hours after flagging. {timeDisplay} remaining.", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must remain PK for at least {FormatTimeRemaining(pkCommandCooldown)} after flagging. {timeDisplay} remaining.", ChatMessageType.Broadcast));
                         return;
                     }
                 }
