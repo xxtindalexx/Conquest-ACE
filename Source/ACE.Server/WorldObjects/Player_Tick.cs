@@ -627,6 +627,23 @@ namespace ACE.Server.WorldObjects
                     }
                 }
 
+                // CONQUEST: Combat pet landblock restrictions on cross-landblock movement
+                if (landblockUpdate && CurrentActiveCombatPet != null)
+                {
+                    var newLandblock = (ushort)(newPosition.Cell >> 16);
+
+                    if (!SummonRestrictedLandblocks.CanSummonCombatPet(newLandblock))
+                    {
+                        // CONQUEST: Block prop enabled — dismiss combat pet entering restricted landblock
+                        CurrentActiveCombatPet.Destroy();
+                        Session.Network.EnqueueSend(new GameMessageSystemChat("Your combat pet cannot remain in this area.", ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        SummonRestrictedLandblocks.ApplyCombatPetRestrictions(CurrentActiveCombatPet, newLandblock);
+                    }
+                }
+
                 if (RecordCast.Enabled)
                     RecordCast.Log($"CurPos: {Location.ToLOCString()}");
 

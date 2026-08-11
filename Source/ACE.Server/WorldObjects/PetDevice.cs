@@ -129,6 +129,14 @@ namespace ACE.Server.WorldObjects
                     // Allow re-clicking to stow/toggle
                     // The HandleCurrentActivePet logic will handle this
                 }
+
+                // CONQUEST: Block combat pet summoning on restricted landblocks when configured
+                if (player.CurrentLandblock != null &&
+                    !SummonRestrictedLandblocks.CanSummonCombatPet((ushort)player.CurrentLandblock.Id.Landblock))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot summon a combat pet here.", ChatMessageType.Broadcast));
+                    return new ActivationResult(false);
+                }
             }
             else
             {

@@ -428,6 +428,15 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// CONQUEST: Clears cached awareness range values after runtime property changes
+        /// </summary>
+        public void ResetAwarenessRangeCache()
+        {
+            _visualAwarenessRangeSq = null;
+            _auralAwarenessRangeSq = null;
+        }
+
+        /// <summary>
         /// A monster can only alert friendly mobs to the presence of each attack target
         /// once every AlertThreshold
         /// </summary>

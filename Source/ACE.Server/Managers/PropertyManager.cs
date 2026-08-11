@@ -581,6 +581,8 @@ namespace ACE.Server.Managers
                 ("pet_stow_replace", new Property<bool>(false, "pet stowing for different pet devices becomes a stow and replace. defaults to retail value of false")),
                 ("pet_rating_bonuses_disabled_in_pvp", new Property<bool>(true, "if TRUE, pet rating bonuses (Rare/Legendary/Mythic) are disabled during PvP combat")),
                 ("pet_speed_match_owner", new Property<bool>(true, "CONQUEST: if TRUE, pets move 20% faster than their owner to ensure they always keep up and never fall behind.")),
+                ("summon_combat_pet_block_in_restricted_landblocks", new Property<bool>(false, "CONQUEST: if TRUE, combat pet summoning is blocked entirely on landblocks in summon_restricted_landblocks")),
+                ("summon_combat_pet_ethereal", new Property<bool>(false, "CONQUEST: Ethereal override for combat pets in summon_restricted_landblocks when block prop is false")),
                 ("player_config_command", new Property<bool>(false, "If enabled, players can use /config to change their settings via text commands")),
                 ("player_receive_immediate_save", new Property<bool>(false, "if enabled, when the player receives items from an NPC, they will be saved immediately")),
                 ("pk_server", new Property<bool>(false, "set this to TRUE for darktide servers")),
@@ -716,6 +718,7 @@ namespace ACE.Server.Managers
                 ("luminance_modifier", new Property<double>(1.0, "Scales the amount of luminance received by players")),
                 ("melee_max_angle", new Property<double>(0.0, "for melee players, the maximum angle before a TurnTo is required. retail appeared to have required a TurnTo even for the smallest of angle offsets.")),
                 ("mob_awareness_range", new Property<double>(1.0, "Scales the distance the monsters become alerted and aggro the players")),
+                ("summon_combat_pet_visual_awareness_range", new Property<double>(5, "CONQUEST: VisualAwarenessRange override for combat pets in summon_restricted_landblocks")),
                 ("pk_new_character_grace_period", new Property<double>(300, "the number of seconds, in addition to pk_respite_timer, that a player killer is set to non-player killer status after first exiting training academy")),
                 ("pk_respite_timer", new Property<double>(300, "the number of seconds that a player killer is set to non-player killer status after dying to another player killer")),
                 ("pvp_custom_aug_timeout", new Property<double>(30, "CONQUEST: the number of seconds without PvP combat before custom augmentations are restored. During PvP combat, all custom augmentations are temporarily set to 0 for balanced fights.")),
@@ -1165,6 +1168,7 @@ namespace ACE.Server.Managers
                 ("popup_motd", new Property<string>("", "Popup message of the day")),
                 ("server_motd", new Property<string>("", "Server message of the day")),
                 ("proxycheck_api_key", new Property<string>("", "API key for proxycheck.io VPN detection service. Get a free key at https://proxycheck.io/")),
+                ("summon_restricted_landblocks", new Property<string>("", "CONQUEST: Comma-separated restricted landblocks for combat pet overrides (e.g. 0x0066:Conquest Arena,0x1234)")),
                 ("town_control_alleglist", new Property<string>("", "Comma-separated list of monarch IDs whitelisted for PK quest credit"))
                 );
     }
