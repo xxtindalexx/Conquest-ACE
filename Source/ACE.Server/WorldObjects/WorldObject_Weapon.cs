@@ -921,16 +921,21 @@ namespace ACE.Server.WorldObjects
             if (IgnoreArmor == null)
                 return 1.0f;
 
-            // Global override: 0 = use default formula; value is cleave fraction (0.1 = 10% armor ignored)
-            var overrideVal = PropertyManager.GetDouble("armor_cleaving_mod_override");
-            if (overrideVal > 0)
-                return 1.0f - (float)Math.Clamp(overrideVal, 0.0, 1.0);
-
             // FIXME: data
             var maxSpellLevel = GetMaxSpellLevel();
 
             // thanks to moro for this formula
-            return 1.0f - (0.1f + maxSpellLevel * 0.05f);
+            var mod = 1.0f - (0.1f + maxSpellLevel * 0.05f);
+
+            // Global cap: 0 = no cap; value is max cleave fraction (0.25 = cannot ignore more than 25% armor)
+            var capVal = PropertyManager.GetDouble("armor_cleaving_mod_override");
+            if (capVal > 0)
+            {
+                var capMod = 1.0f - (float)Math.Clamp(capVal, 0.0, 1.0);
+                mod = Math.Max(mod, capMod);
+            }
+
+            return mod;
         }
 
         public double? IgnoreShield
