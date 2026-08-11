@@ -371,8 +371,8 @@ namespace ACE.Server.Command.Handlers
         // CONQUEST: Luminance Lottery
         [CommandHandler("lum", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
             "Luminance lottery commands.",
-            "/lum lottery [count]  — Buy [count] tickets (1–max, default 1). Each ticket costs 1M lum.\n" +
-            "/lum lottery status   — Show current pot, participants, and time until the next draw.")]
+            "/lum lottery — Show current lottery status.\n" +
+            "/lum lottery <count> — Buy <count> tickets (1–max). Each ticket costs 1M lum.")]
         public static void HandleLum(Session session, params string[] parameters)
         {
             if (session?.Player == null)
@@ -383,23 +383,24 @@ namespace ACE.Server.Command.Handlers
             if (sub != "lottery")
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat(
-                    "[LUM] Usage: /lum lottery [count]  |  /lum lottery status", ChatMessageType.Broadcast));
+                    "[LUM] Usage: /lum lottery  |  /lum lottery <count>", ChatMessageType.Broadcast));
                 return;
             }
 
             var arg = parameters.Length > 1 ? parameters[1].ToLowerInvariant() : "";
 
-            if (arg == "status")
+            if (string.IsNullOrEmpty(arg))
             {
                 ACE.Server.Managers.LotteryManager.SendStatusToPlayer(session.Player);
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "[LOTTERY] To buy tickets, use /lum lottery <count> (e.g. /lum lottery 1).", ChatMessageType.Broadcast));
                 return;
             }
 
-            int count = 1;
-            if (arg.Length > 0 && !int.TryParse(arg, out count))
+            if (!int.TryParse(arg, out var count))
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat(
-                    "[LOTTERY] Usage: /lum lottery [count]  (e.g. /lum lottery 3)  |  /lum lottery status", ChatMessageType.Broadcast));
+                    "[LOTTERY] Usage: /lum lottery  |  /lum lottery <count>  (e.g. /lum lottery 3)", ChatMessageType.Broadcast));
                 return;
             }
 

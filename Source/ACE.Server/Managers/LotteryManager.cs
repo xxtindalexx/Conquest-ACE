@@ -216,7 +216,7 @@ namespace ACE.Server.Managers
         }
 
         // ──────────────────────────────────────────────────────────────────
-        // Status query (used by /lum status)
+        // Status query (used by /lum lottery and /lottery status)
         // ──────────────────────────────────────────────────────────────────
 
         public static void SendStatusToPlayer(Player player)
