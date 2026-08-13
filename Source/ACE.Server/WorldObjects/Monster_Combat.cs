@@ -692,7 +692,9 @@ namespace ACE.Server.WorldObjects
                         }
 
                         lastHotspotTarget = targetPlayer;
-                        SpawnObjectAtPlayer(targetPlayer);
+
+                        if (IsAlive && !IsDestroyed && !ct.IsCancellationRequested)
+                            SpawnObjectAtPlayer(targetPlayer);
                     }
 
                     int nextHotspotTime = random.Next(10000, 15000);
@@ -735,36 +737,58 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// Retrieves all players within a specified range of the current creature.
+        /// Retrieves all players within a specified range of the current creature,
+        /// scoped to this landblock (dungeon) or landblock group (outdoor).
         /// </summary>
         /// <param name="range">The range to search for players.</param>
         /// <returns>A list of players within the specified range.</returns>
         private List<Player> GetPlayersInRange(double range)
         {
             var playersInRange = new List<Player>();
+
+            var mobLandblock = CurrentLandblock;
+            if (mobLandblock == null || !IsAlive || IsDestroyed)
+                return playersInRange;
+
             var mobPosition = new Position(Location);
+            var rangeSq = range * range;
 
             foreach (var player in PlayerManager.GetAllOnline())
             {
                 if (player == null || !player.IsAlive)
                     continue;
 
+                if (!IsPlayerInEnrageScope(player, mobLandblock))
+                    continue;
+
                 var playerPosition = new Position(player.Location);
-                if (mobPosition.SquaredDistanceTo(playerPosition) <= range * range)
-                {
+                if (mobPosition.SquaredDistanceTo(playerPosition) <= rangeSq)
                     playersInRange.Add(player);
-                }
             }
 
             return playersInRange;
         }
 
+        private bool IsPlayerInEnrageScope(Player player, Landblock mobLandblock)
+        {
+            var playerLandblock = player.CurrentLandblock;
+            if (playerLandblock == null)
+                return false;
+
+            if (mobLandblock.IsDungeon)
+                return playerLandblock == mobLandblock;
+
+            var group = mobLandblock.CurrentLandblockGroup;
+            if (group == null)
+                return playerLandblock == mobLandblock;
+
+            return playerLandblock.CurrentLandblockGroup == group;
+        }
+
         private void SpawnObjectAtPlayer(Player targetPlayer)
         {
-            if (targetPlayer == null)
-            {
+            if (targetPlayer == null || !IsAlive || IsDestroyed || CurrentLandblock == null)
                 return;
-            }
 
             // Define items and their respective messages
             var spawnOptions = new List<(int? DamageObjectId, int VisualObjectId, string Message)>
@@ -805,6 +829,7 @@ namespace ACE.Server.WorldObjects
             }
 
             WorldObject damageObj = null;
+            var spawnerEnragedHotspot = GetProperty(PropertyBool.EnragedHotspot) ?? false;
 
             // **Create Damage Object if it's not null**
             if (damageObjectId.HasValue)
@@ -820,12 +845,19 @@ namespace ACE.Server.WorldObjects
                         if (damageOverride.HasValue)
                             damageObj.SetProperty(PropertyInt.Damage, damageOverride.Value);
 
+                        if (spawnerEnragedHotspot)
+                            damageObj.SetProperty(PropertyBool.EnragedHotspot, true);
+
                         damageObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
                         damageObj.Location.LandblockId = new LandblockId(damageObj.Location.GetCell());
                         // Thread-safe EnterWorld
                         var damageObjToSpawn = damageObj;
+                        var spawner = this;
                         WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
                         {
+                            if (!spawner.IsAlive || spawner.IsDestroyed)
+                                return;
+
                             if (!damageObjToSpawn.EnterWorld())
                             {
                                 log.Warn($"Failed to spawn enrage hotspot damage object {damageObjToSpawn.Name} at {damageObjToSpawn.Location}");
@@ -845,12 +877,19 @@ namespace ACE.Server.WorldObjects
                     visualObj = WorldObjectFactory.CreateNewWorldObject(visualWeenie);
                     if (visualObj != null)
                     {
+                        if (spawnerEnragedHotspot)
+                            visualObj.SetProperty(PropertyBool.EnragedHotspot, true);
+
                         visualObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
                         visualObj.Location.LandblockId = new LandblockId(visualObj.Location.GetCell());
                         // Thread-safe EnterWorld
                         var visualObjToSpawn = visualObj;
+                        var spawner = this;
                         WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
                         {
+                            if (!spawner.IsAlive || spawner.IsDestroyed)
+                                return;
+
                             if (!visualObjToSpawn.EnterWorld())
                             {
                                 log.Warn($"Failed to spawn enrage hotspot visual {visualObjToSpawn.Name} at {visualObjToSpawn.Location}");
@@ -1035,6 +1074,8 @@ namespace ACE.Server.WorldObjects
             grappleLoopCTS?.Cancel();
             leapLoopCTS?.Cancel();
             mirrorLoopCTS?.Cancel();
+
+            IsEnraged = false;
 
             // Clear any pending mirror image state
             EnrageMirrorImageImmune = false;

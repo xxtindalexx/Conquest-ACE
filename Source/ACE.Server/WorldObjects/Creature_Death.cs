@@ -41,10 +41,11 @@ namespace ACE.Server.WorldObjects
             IsMoving = false;
 
             // Cancel all enrage async loops to prevent thread conflicts
+            var wasEnraged = IsEnraged;
             CancelEnrageLoops();
 
             // Reset fog to Clear upon death only if the creature was enraged
-            if (IsEnraged && CurrentLandblock != null)
+            if (wasEnraged && CurrentLandblock != null)
             {
                 var fogResetType = EnvironChangeType.Clear;
                 CurrentLandblock.SendEnvironChange(fogResetType);
@@ -194,8 +195,9 @@ namespace ACE.Server.WorldObjects
             }
             else
             {
-                OnDeath();
+                UpdateVital(Health, 0);
                 var smiterInfo = new DamageHistoryInfo(smiter);
+                OnDeath(null, DamageType.Undef);
                 Die(smiterInfo, smiterInfo);
             }
         }
