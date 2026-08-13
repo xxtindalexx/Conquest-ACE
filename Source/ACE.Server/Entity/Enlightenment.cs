@@ -507,7 +507,7 @@ namespace ACE.Server.Entity
                 player.SendMessage($"Skill credits restored: {(int)heritageGroup.SkillCredits} (heritage) + {purchasedCredits} (enlightenment purchases) = {availableSkillCredits} total.", ChatMessageType.Broadcast);
             }
 
-            // CONQUEST: Clear inflated spell chain / void contagion skill bonuses, then re-apply from training.
+            // CONQUEST: Clear inflated spell chain skill bonuses, then re-apply from training.
             // ENL combat trophy bonuses (EnlightenmentSpellChainBonus etc.) and weapon imbues are untouched.
             player.ResetSkillGrantedCombatBonuses();
         }

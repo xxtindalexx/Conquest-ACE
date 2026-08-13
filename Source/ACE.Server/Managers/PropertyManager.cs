@@ -631,8 +631,7 @@ namespace ACE.Server.Managers
                 ("arena_allow_observers", new Property<bool>(true, "enable this to allow players to watch arena matches as invisible observers")),
                 ("use_wield_requirements", new Property<bool>(true, "disable this to bypass wield requirements. mostly for dev debugging")),
                 ("version_info_enabled", new Property<bool>(false, "toggles the /aceversion player command")),
-                ("void_contagion_enabled", new Property<bool>(false, "CONQUEST: Master toggle for Void Contagion system. Set to TRUE to enable the Void DoT spread/explosion perk.")),
-                ("void_contagion_explosion_mode", new Property<bool>(false, "CONQUEST: Void Contagion mode toggle (requires void_contagion_enabled). FALSE (default) = DoTs spread to nearby targets at 50% duration. TRUE = Dying mob explodes dealing % of DoT damage to ALL nearby enemies (20%/40%/60% based on perk level).")),
+                ("void_contagion_enabled", new Property<bool>(false, "CONQUEST: Master toggle for Void Contagion. Requires ENL combat trophy aug (EnlightenmentVoidDotSpreadBonus). Dotted mobs spread DoTs to 2 nearby enemies on death, or (20% chance) explode for 20% of their max HP per DoT (up to 3) to all nearby enemies within 10m.")),
                 ("vendor_shop_uses_generator", new Property<bool>(false, "enables or disables vendors using generator system in addition to createlist to create artificial scarcity")),
                 ("world_closed", new Property<bool>(false, "enable this to startup world as a closed to players world"))
                 );

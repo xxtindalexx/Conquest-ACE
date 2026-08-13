@@ -238,11 +238,6 @@ namespace ACE.Server.WorldObjects
             if (skill == Skill.WarMagic)
                 SyncWarMagicSpellChainBonus(notifyOnGrant: true);
 
-            // CONQUEST: Void Magic training grants +1 Void Contagion (DoT spread on death)
-            // Only grant if the feature is enabled on the server
-            if (skill == Skill.VoidMagic && PropertyManager.GetBool("void_contagion_enabled"))
-                SyncVoidMagicDotSpreadBonus(notifyOnGrant: true);
-
             return true;
         }
 
@@ -334,11 +329,6 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: War Magic untraining removes Spell Chain bonus
             if (skill == Skill.WarMagic)
                 SyncWarMagicSpellChainBonus(notifyOnRemove: true);
-
-            // CONQUEST: Void Magic untraining removes Void Contagion bonus
-            // Only process if the feature is enabled (otherwise they shouldn't have the bonus anyway)
-            if (skill == Skill.VoidMagic && PropertyManager.GetBool("void_contagion_enabled"))
-                SyncVoidMagicDotSpreadBonus(notifyOnRemove: true);
 
             return true;
         }
@@ -532,48 +522,15 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// CONQUEST: Keeps player VoidDotSpreadTargets in sync with Void Magic training (0 or 1).
-        /// EnlightenmentVoidDotSpreadBonus is tracked separately and added at death time.
-        /// </summary>
-        private void SyncVoidMagicDotSpreadBonus(bool notifyOnGrant = false, bool notifyOnRemove = false)
-        {
-            if (!PropertyManager.GetBool("void_contagion_enabled"))
-                return;
-
-            var voidMagic = GetCreatureSkill(Skill.VoidMagic);
-            var shouldHaveBonus = voidMagic?.AdvancementClass >= SkillAdvancementClass.Trained;
-            var currentSpread = GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
-            var expectedSpread = shouldHaveBonus ? 1 : 0;
-
-            if (currentSpread == expectedSpread)
-                return;
-
-            if (expectedSpread > 0)
-            {
-                SetProperty(PropertyInt.VoidDotSpreadTargets, 1);
-                if (notifyOnGrant && currentSpread < expectedSpread)
-                    Session?.Network.EnqueueSend(new GameMessageSystemChat("Your knowledge of Void Magic grants you +1 Void Contagion!", ChatMessageType.Advancement));
-            }
-            else
-            {
-                RemoveProperty(PropertyInt.VoidDotSpreadTargets);
-                if (notifyOnRemove && currentSpread > 0)
-                    Session?.Network.EnqueueSend(new GameMessageSystemChat("You have lost -1 Void Contagion due to untraining Void Magic.", ChatMessageType.Advancement));
-            }
-        }
-
-        /// <summary>
-        /// CONQUEST: Clears skill-granted chain/spread counts and re-applies from current training.
+        /// CONQUEST: Clears skill-granted chain counts and re-applies from current training.
         /// Called on enlightenment to fix inflated values. ENL gem bonuses and weapon imbues are separate.
         /// </summary>
         public void ResetSkillGrantedCombatBonuses()
         {
             RemoveProperty(PropertyInt.SpellChainTargets);
             RemoveProperty(PropertyInt.SpellChainDamagePercent);
-            RemoveProperty(PropertyInt.VoidDotSpreadTargets);
 
             SyncWarMagicSpellChainBonus();
-            SyncVoidMagicDotSpreadBonus();
         }
 
         /// <summary>
@@ -584,17 +541,6 @@ namespace ACE.Server.WorldObjects
         public void ApplyWarMagicSpellChainBonus()
         {
             SyncWarMagicSpellChainBonus(notifyOnGrant: true);
-        }
-
-        /// <summary>
-        /// CONQUEST: Applies the Void Magic DoT spread bonus on login
-        /// Players with Void Magic trained/specialized get +1 to VoidDotSpreadTargets (Void Contagion)
-        /// This ensures existing characters get the bonus without needing to retrain
-        /// Only runs if void_contagion_enabled is true
-        /// </summary>
-        public void ApplyVoidMagicDotSpreadBonus()
-        {
-            SyncVoidMagicDotSpreadBonus(notifyOnGrant: true);
         }
 
         /// <summary>
@@ -1247,11 +1193,9 @@ namespace ACE.Server.WorldObjects
             if (skill == Skill.VoidMagic && creatureSkill.AdvancementClass == SkillAdvancementClass.Untrained)
                 ResetSummoningIfTrained();
 
-            // CONQUEST: War Magic / Void Magic reset syncs chain bonuses to skill state
+            // CONQUEST: War Magic reset syncs chain bonus to skill state
             if (skill == Skill.WarMagic)
                 SyncWarMagicSpellChainBonus();
-            else if (skill == Skill.VoidMagic)
-                SyncVoidMagicDotSpreadBonus();
 
             return true;
         }
