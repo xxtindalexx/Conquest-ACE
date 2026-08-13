@@ -631,8 +631,9 @@ namespace ACE.Server.WorldObjects
                 if (landblockUpdate && CurrentActiveCombatPet != null)
                 {
                     var newLandblock = (ushort)(newPosition.Cell >> 16);
+                    var newVariation = newPosition.Variation ?? 0;
 
-                    if (!SummonRestrictedLandblocks.CanSummonCombatPet(newLandblock))
+                    if (!SummonRestrictedLandblocks.CanSummonCombatPet(newLandblock, newVariation))
                     {
                         // CONQUEST: Block prop enabled — dismiss combat pet entering restricted landblock
                         CurrentActiveCombatPet.Destroy();
@@ -640,7 +641,7 @@ namespace ACE.Server.WorldObjects
                     }
                     else
                     {
-                        SummonRestrictedLandblocks.ApplyCombatPetRestrictions(CurrentActiveCombatPet, newLandblock);
+                        SummonRestrictedLandblocks.ApplyCombatPetRestrictions(CurrentActiveCombatPet, newLandblock, newVariation);
                     }
                 }
 

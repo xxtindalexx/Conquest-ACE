@@ -62,7 +62,8 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Apply combat pet landblock property overrides on summon
             var landblock = player.CurrentLandblock != null ? (ushort)player.CurrentLandblock.Id.Landblock : (ushort)Location.Landblock;
-            SummonRestrictedLandblocks.ApplyCombatPetRestrictions(this, landblock);
+            var variation = player.Location.Variation ?? player.CurrentLandblock?.VariationId ?? Location.Variation ?? 0;
+            SummonRestrictedLandblocks.ApplyCombatPetRestrictions(this, landblock, variation);
 
             return true;
         }

@@ -8779,13 +8779,15 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is {(isExempt ? "EXEMPT" : "NOT exempt")} from IP restrictions.", ChatMessageType.Broadcast));
         }
 
+        private const string SummonRestrictedLbCommands = "/srlb or /summonrestrictedlb";
+
         // CONQUEST: Summon restricted landblock management command
-        [CommandHandler("summonrestrictedlb", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+        [CommandHandler("summonrestrictedlb", AccessLevel.Admin, CommandHandlerFlag.None, 0,
             "Manage landblocks where combat pet restrictions apply.",
-            "add <landblock> [label] - Add a landblock to the restricted list\n" +
-            "remove <landblock> - Remove a landblock from the restricted list\n" +
+            "add <landblock> [variation] [label] - Add a landblock (all variants if variation omitted)\n" +
+            "remove <landblock> [variation] - Remove a landblock entry\n" +
             "list - List all restricted landblocks\n" +
-            "check <landblock> - Check if a landblock is restricted")]
+            "check <landblock> [variation] - Check if a landblock + variant is restricted")]
         public static void HandleSummonRestrictedLandblock(Session session, params string[] parameters)
         {
             if (parameters.Length < 1)
@@ -8816,9 +8818,9 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        [CommandHandler("srlb", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+        [CommandHandler("srlb", AccessLevel.Admin, CommandHandlerFlag.None, 0,
             "Shorthand for /summonrestrictedlb",
-            "add <landblock> [label] | remove <landblock> | list | check <landblock>")]
+            "add <landblock> [variation] [label] | remove <landblock> [variation] | list | check <landblock> [variation]")]
         public static void HandleSummonRestrictedLandblockShort(Session session, params string[] parameters)
         {
             HandleSummonRestrictedLandblock(session, parameters);
@@ -8826,19 +8828,31 @@ namespace ACE.Server.Command.Handlers
 
         private static void ShowSummonRestrictedLandblockUsage(Session session)
         {
-            session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /summonrestrictedlb <add|remove|list|check> or /srlb", ChatMessageType.Help));
-            session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> [label] - Add landblock (e.g. 0x0066 Conquest Arena)", ChatMessageType.Help));
-            session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> - Remove landblock from restricted list", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {SummonRestrictedLbCommands} <add|remove|list|check>", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> [variation] [label] - Add entry (all variants if variation omitted)", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> [variation] - Remove entry (all-variants entry if variation omitted)", ChatMessageType.Help));
             session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all restricted landblocks", ChatMessageType.Help));
-            session.Network.EnqueueSend(new GameMessageSystemChat("  check <landblock> - Check if landblock is restricted", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  check <landblock> [variation] - Check restriction (defaults to variant 0 if omitted)", ChatMessageType.Help));
+        }
+
+        private static bool TryParseOptionalVariation(string input, out int? variation)
+        {
+            variation = null;
+
+            if (!int.TryParse(input, out var parsed))
+                return false;
+
+            variation = parsed;
+            return true;
         }
 
         private static void HandleSummonRestrictedLandblockAdd(Session session, string[] parameters)
         {
             if (parameters.Length < 2)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /summonrestrictedlb add <landblock> [label]", ChatMessageType.Help));
-                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /summonrestrictedlb add 0x0066 Conquest Arena", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {SummonRestrictedLbCommands} add <landblock> [variation] [label]", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Example: /srlb add 0x0066 Conquest Arena", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Example: /srlb add 0x0066 2 Arena v2 only", ChatMessageType.Help));
                 return;
             }
 
@@ -8849,31 +8863,39 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            var label = parameters.Length > 2 ? string.Join(" ", parameters.Skip(2)) : null;
+            int? variation = null;
+            string label = null;
+            var labelStartIndex = 2;
 
-            if (SummonRestrictedLandblocks.IsRestricted(landblock))
+            if (parameters.Length > 2 && TryParseOptionalVariation(parameters[2], out variation))
+                labelStartIndex = 3;
+
+            if (parameters.Length > labelStartIndex)
+                label = string.Join(" ", parameters.Skip(labelStartIndex));
+
+            if (SummonRestrictedLandblocks.ContainsEntry(landblock, variation))
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is already in the restricted list.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} is already in the restricted list.", ChatMessageType.Broadcast));
                 return;
             }
 
-            if (!SummonRestrictedLandblocks.AddLandblock(landblock, label))
+            if (!SummonRestrictedLandblocks.AddLandblock(landblock, variation, label))
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to add landblock 0x{landblock:X4} to restricted list.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to add landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} to restricted list.", ChatMessageType.Broadcast));
                 return;
             }
 
-            var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock);
+            var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock, variation);
             var count = SummonRestrictedLandblocks.GetRestrictedLandblocksSorted().Count;
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Added landblock 0x{landblock:X4} ({displayName}) to restricted list. ({count} total)", ChatMessageType.Broadcast));
-            log.Info($"[ADMIN] {session.Player.Name} added landblock 0x{landblock:X4} ({displayName}) to summon restricted list");
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Added landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) to restricted list. ({count} total)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} added landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) to summon restricted list");
         }
 
         private static void HandleSummonRestrictedLandblockRemove(Session session, string[] parameters)
         {
             if (parameters.Length < 2)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /summonrestrictedlb remove <landblock>", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {SummonRestrictedLbCommands} remove <landblock> [variation]", ChatMessageType.Help));
                 return;
             }
 
@@ -8883,23 +8905,33 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            if (!SummonRestrictedLandblocks.IsRestricted(landblock))
+            int? variation = null;
+            if (parameters.Length > 2)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is not in the restricted list.", ChatMessageType.Broadcast));
+                if (!TryParseOptionalVariation(parameters[2], out variation))
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            if (!SummonRestrictedLandblocks.ContainsEntry(landblock, variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} is not in the restricted list.", ChatMessageType.Broadcast));
                 return;
             }
 
-            var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock);
+            var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock, variation);
 
-            if (!SummonRestrictedLandblocks.RemoveLandblock(landblock))
+            if (!SummonRestrictedLandblocks.RemoveLandblock(landblock, variation))
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to remove landblock 0x{landblock:X4} from restricted list.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to remove landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} from restricted list.", ChatMessageType.Broadcast));
                 return;
             }
 
             var count = SummonRestrictedLandblocks.GetRestrictedLandblocksSorted().Count;
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Removed landblock 0x{landblock:X4} ({displayName}) from restricted list. ({count} remaining)", ChatMessageType.Broadcast));
-            log.Info($"[ADMIN] {session.Player.Name} removed landblock 0x{landblock:X4} ({displayName}) from summon restricted list");
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Removed landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) from restricted list. ({count} remaining)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} removed landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) from summon restricted list");
         }
 
         private static void HandleSummonRestrictedLandblockList(Session session)
@@ -8909,16 +8941,16 @@ namespace ACE.Server.Command.Handlers
             if (landblocks.Count == 0)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat("No landblocks are currently restricted for combat pet overrides.", ChatMessageType.Broadcast));
-                session.Network.EnqueueSend(new GameMessageSystemChat("Use /summonrestrictedlb add <landblock> [label] to add landblocks.", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Use {SummonRestrictedLbCommands} add <landblock> [variation] [label] to add landblocks.", ChatMessageType.Help));
                 return;
             }
 
             session.Network.EnqueueSend(new GameMessageSystemChat($"=== Summon Restricted Landblocks ({landblocks.Count}) ===", ChatMessageType.Broadcast));
 
-            foreach (var lb in landblocks)
+            foreach (var entry in landblocks)
             {
-                var displayName = SummonRestrictedLandblocks.GetDisplayName(lb);
-                session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{lb:X4} - {displayName}", ChatMessageType.Broadcast));
+                var displayName = SummonRestrictedLandblocks.GetDisplayName(entry.Landblock, entry.Variation);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{entry.Landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(entry.Variation)} - {displayName}", ChatMessageType.Broadcast));
             }
         }
 
@@ -8926,7 +8958,7 @@ namespace ACE.Server.Command.Handlers
         {
             if (parameters.Length < 2)
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /summonrestrictedlb check <landblock>", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {SummonRestrictedLbCommands} check <landblock> [variation]", ChatMessageType.Help));
                 return;
             }
 
@@ -8936,18 +8968,31 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            var isRestricted = SummonRestrictedLandblocks.IsRestricted(landblock);
+            var variation = 0;
+            var variationSpecified = parameters.Length > 2;
+            if (variationSpecified)
+            {
+                if (!int.TryParse(parameters[2], out variation))
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            var variantSuffix = SummonRestrictedLandblocks.FormatCheckVariantSuffix(variation, variationSpecified);
+            var isRestricted = SummonRestrictedLandblocks.IsRestricted(landblock, variation);
 
             if (isRestricted)
             {
-                var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock);
-                var canSummon = SummonRestrictedLandblocks.CanSummonCombatPet(landblock);
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} ({displayName}) is RESTRICTED.", ChatMessageType.Broadcast));
+                var displayVariation = SummonRestrictedLandblocks.ContainsEntry(landblock, variation) ? (int?)variation : null;
+                var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock, displayVariation);
+                var canSummon = SummonRestrictedLandblocks.CanSummonCombatPet(landblock, variation);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{variantSuffix} ({displayName}) is RESTRICTED.", ChatMessageType.Broadcast));
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Combat pet summoning: {(canSummon ? "allowed (property overrides apply)" : "blocked")}", ChatMessageType.Broadcast));
             }
             else
             {
-                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is NOT restricted.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{variantSuffix} is NOT restricted.", ChatMessageType.Broadcast));
             }
         }
 
