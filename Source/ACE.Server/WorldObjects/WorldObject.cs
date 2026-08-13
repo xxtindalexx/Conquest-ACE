@@ -887,11 +887,12 @@ namespace ACE.Server.WorldObjects
 
             ReleasedTimestamp = Time.GetUnixTime();
 
-            if (this is Creature creature)
-            {
+            if (this is Creature creature && (creature.IsEnraged || creature.HasActiveEnrageLoops()))
                 creature.CancelEnrageLoops();
 
-                foreach (var item in creature.EquippedObjects.Values)
+            if (this is Creature creatureForEquip)
+            {
+                foreach (var item in creatureForEquip.EquippedObjects.Values)
                     item.Destroy();
             }
 

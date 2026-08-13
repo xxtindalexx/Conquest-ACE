@@ -498,6 +498,7 @@ namespace ACE.Server.WorldObjects
 
         public void Enrage()
         {
+            if (IsMirrorImageClone) return;
             if (IsEnraged) return; // Avoid multiple enrages
             IsEnraged = true;
 
@@ -632,7 +633,7 @@ namespace ACE.Server.WorldObjects
 
             try
             {
-                while (IsEnraged && IsAlive && !ct.IsCancellationRequested)
+                while (IsEnraged && IsAlive && !IsDestroyed && !ct.IsCancellationRequested)
                 {
                     var playersInRange = GetPlayersInRange(250.0f);
                     if (playersInRange.Count > 1)
@@ -679,7 +680,7 @@ namespace ACE.Server.WorldObjects
 
             try
             {
-                while (IsEnraged && IsAlive && CanAOE && !ct.IsCancellationRequested)
+                while (IsEnraged && IsAlive && !IsDestroyed && CanAOE && !ct.IsCancellationRequested)
                 {
                     var playersInRange = GetPlayersInRange(250.0f);
                     if (playersInRange.Count > 0)
@@ -787,7 +788,7 @@ namespace ACE.Server.WorldObjects
 
         private void SpawnObjectAtPlayer(Player targetPlayer)
         {
-            if (targetPlayer == null || !IsAlive || IsDestroyed || CurrentLandblock == null)
+            if (targetPlayer == null || !CanRunEnrageAction)
                 return;
 
             // Define items and their respective messages
@@ -966,7 +967,7 @@ namespace ACE.Server.WorldObjects
         {
             try
             {
-                while (IsEnraged && IsAlive && !ct.IsCancellationRequested)
+                while (IsEnraged && IsAlive && !IsDestroyed && !ct.IsCancellationRequested)
                 {
                     var interval = GetProperty(PropertyFloat.EnrageLeapInterval) ?? 25.0f;
 
@@ -1013,7 +1014,7 @@ namespace ACE.Server.WorldObjects
 
             try
             {
-                while (IsEnraged && IsAlive && !ct.IsCancellationRequested)
+                while (IsEnraged && IsAlive && !IsDestroyed && !ct.IsCancellationRequested)
                 {
                     var interval = GetProperty(PropertyFloat.EnrageMirrorImageInterval) ?? 45.0f;
                     var chance = GetProperty(PropertyFloat.EnrageMirrorImageChance) ?? 0.35f;
@@ -1021,7 +1022,7 @@ namespace ACE.Server.WorldObjects
                     // Wait for interval
                     await Task.Delay(TimeSpan.FromSeconds(interval), ct);
 
-                    if (ct.IsCancellationRequested || !IsAlive) break;
+                    if (ct.IsCancellationRequested || !CanRunEnrageAction) break;
 
                     // Check if mirror hasn't triggered yet and random chance passes
                     if (!EnrageMirrorImageTriggered && random.NextDouble() <= chance)
@@ -1036,7 +1037,7 @@ namespace ACE.Server.WorldObjects
                         var actionChain = new ActionChain();
                         actionChain.AddAction(this, ActionType.MonsterCombat_SpawnHotspot, () =>
                         {
-                            if (!IsAlive || EnrageMirrorImageClones == null) return;
+                            if (!CanRunEnrageAction || EnrageMirrorImageClones == null) return;
 
                             // Remove dead clones from list
                             EnrageMirrorImageClones.RemoveAll(c => c == null || c.IsDead || c.IsDestroyed);
@@ -1051,7 +1052,7 @@ namespace ACE.Server.WorldObjects
                                 var players = GetPlayersInRange(250.0f);
                                 foreach (var player in players)
                                 {
-                                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
+                                    player.Session?.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
                                 }
                             }
                         });
@@ -1066,6 +1067,23 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// Returns true if deferred enrage actions can safely run on this creature.
+        /// </summary>
+        private bool CanRunEnrageAction =>
+            IsAlive && !IsDestroyed && CurrentLandblock != null;
+
+        /// <summary>
+        /// Returns true if any enrage async loop cancellation token is still active.
+        /// </summary>
+        public bool HasActiveEnrageLoops()
+        {
+            return (hotspotLoopCTS != null && !hotspotLoopCTS.IsCancellationRequested)
+                || (grappleLoopCTS != null && !grappleLoopCTS.IsCancellationRequested)
+                || (leapLoopCTS != null && !leapLoopCTS.IsCancellationRequested)
+                || (mirrorLoopCTS != null && !mirrorLoopCTS.IsCancellationRequested);
+        }
+
+        /// <summary>
         /// Cancels all enrage-related async loops to prevent thread conflicts on death
         /// </summary>
         public void CancelEnrageLoops()
@@ -1076,6 +1094,21 @@ namespace ACE.Server.WorldObjects
             mirrorLoopCTS?.Cancel();
 
             IsEnraged = false;
+
+            // Destroy tracked mirror clones when the parent boss is removed
+            if (!IsMirrorImageClone && EnrageMirrorImageClones != null && EnrageMirrorImageClones.Count > 0)
+            {
+                foreach (var clone in EnrageMirrorImageClones.ToList())
+                {
+                    if (clone == null || clone.IsDestroyed)
+                        continue;
+
+                    if (clone.IsAlive)
+                        clone.UpdateVital(clone.Health, 0);
+
+                    clone.Destroy();
+                }
+            }
 
             // Clear any pending mirror image state
             EnrageMirrorImageImmune = false;
