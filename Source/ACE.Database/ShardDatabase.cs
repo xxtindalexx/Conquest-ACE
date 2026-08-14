@@ -175,6 +175,29 @@ namespace ACE.Database
             return retVal;
         }
 
+        public static List<Leaderboard> GetQuestCompletionsByIp(string questName, string ipAddress)
+        {
+            List<Leaderboard> retVal = [];
+            if (!string.IsNullOrEmpty(questName) && !string.IsNullOrEmpty(ipAddress))
+            {
+                using var context = new ShardDbContext();
+                var charIds = context.CharTracker
+                    .Where(ct => ct.LoginIP == ipAddress)
+                    .Select(ct => ct.CharacterId)
+                    .Distinct();
+                retVal = [.. context.CharacterPropertiesQuestRegistry
+                    .Where(x => x.QuestName == questName && charIds.Contains(x.CharacterId))
+                    .GroupBy(x => x.Character.Name)
+                    .Select(x => new Leaderboard {
+                        Character = x.Key,
+                        Score = (ulong)x.Sum(s => s.NumTimesCompleted)
+                    })
+                    .Where(x => x.Score > 0)
+                    .OrderByDescending(x => x.Score)];
+            }
+            return retVal;
+        }
+
         public int GetEstimatedBiotaCount(string dbName)
         {
             // https://mariadb.com/kb/en/incredibly-slow-count-on-mariadb-mysql/

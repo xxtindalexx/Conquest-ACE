@@ -263,6 +263,9 @@ namespace ACE.Server
             log.Info("Loading PK dungeon configurations...");
             ACE.Server.Entity.Landblock.LoadPKDungeonsFromDatabase();
 
+            log.Info("Loading NPK dungeon configurations...");
+            ACE.Server.Entity.Landblock.LoadNPKDungeonsFromDatabase();
+
             log.Info("Loading exempt landblocks...");
             ACE.Server.Entity.Landblock.LoadExemptLandblocksFromDatabase();
 
@@ -352,6 +355,9 @@ namespace ACE.Server
 
             log.Info("Initializing EconomyStatsManager...");
             EconomyStatsManager.Initialize();
+
+            log.Info("Initializing LotteryManager...");
+            LotteryManager.Initialize();
 
             log.Info("Initializing ChatFilterManager...");
             ChatFilterManager.Initialize();

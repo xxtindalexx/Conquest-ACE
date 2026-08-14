@@ -311,6 +311,32 @@ namespace ACE.Server.Command.Handlers
             CommandHandlerHelper.WriteOutputInfo(session, $"Current world population: {PlayerManager.GetOnlineCount():N0}", ChatMessageType.Broadcast);
         }
 
+        // CONQUEST: roll a random number, announced to nearby players
+        [CommandHandler("roll", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 1,
+            "Roll a random number between 1 and a chosen value",
+            "/roll <1-999999>")]
+        public static void HandleRoll(Session session, params string[] parameters)
+        {
+            if (parameters == null || parameters.Length == 0 || !int.TryParse(parameters[0], out var max) || max < 1 || max > 999999)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /roll <1-999999>", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (DateTime.UtcNow - session.Player.PrevRoll < TimeSpan.FromSeconds(5))
+            {
+                session.Player.SendTransientError("You can only roll once every 5 seconds.");
+                return;
+            }
+            session.Player.PrevRoll = DateTime.UtcNow;
+
+            var result = ThreadSafeRandom.Next(1, max);
+
+            session.Player.EnqueueBroadcast(
+                new GameMessageSystemChat($"{session.Player.Name} rolls {result} (1-{max}).", ChatMessageType.Broadcast),
+                WorldObject.LocalBroadcastRange);
+        }
+
         // CONQUEST: Luminance Per Hour tracking
         [CommandHandler("lph", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
             "Track luminance earned per hour",
@@ -340,6 +366,45 @@ namespace ACE.Server.Command.Handlers
                     session.Network.EnqueueSend(new GameMessageSystemChat("[LPH] Usage: /lph, /lph start, /lph restart, /lph stop", ChatMessageType.Broadcast));
                     break;
             }
+        }
+
+        // CONQUEST: Luminance Lottery
+        [CommandHandler("lum", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0,
+            "Luminance lottery commands.",
+            "/lum lottery — Show current lottery status.\n" +
+            "/lum lottery <count> — Buy <count> tickets (1–max). Each ticket costs 1M lum.")]
+        public static void HandleLum(Session session, params string[] parameters)
+        {
+            if (session?.Player == null)
+                return;
+
+            var sub = parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "";
+
+            if (sub != "lottery")
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "[LUM] Usage: /lum lottery  |  /lum lottery <count>", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var arg = parameters.Length > 1 ? parameters[1].ToLowerInvariant() : "";
+
+            if (string.IsNullOrEmpty(arg))
+            {
+                ACE.Server.Managers.LotteryManager.SendStatusToPlayer(session.Player);
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "[LOTTERY] To buy tickets, use /lum lottery <count> (e.g. /lum lottery 1).", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (!int.TryParse(arg, out var count))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "[LOTTERY] Usage: /lum lottery  |  /lum lottery <count>  (e.g. /lum lottery 3)", ChatMessageType.Broadcast));
+                return;
+            }
+
+            ACE.Server.Managers.LotteryManager.EnterLottery(session.Player, count);
         }
 
         // upop - admin command to show unique IP connections
@@ -603,11 +668,9 @@ namespace ACE.Server.Command.Handlers
 
             // XP Augmentation Bonus (5% per augmentation, kills only)
             var augmentationBonusXp = player.AugmentationBonusXp;
-            var augBonus = 1.0 + (augmentationBonusXp * 0.05);
             var augBonusPercent = (augmentationBonusXp * 5.0);
 
             // Equipment Bonus (from enchantments) - GetXPBonus() returns additive modifier (e.g., 0.05 for 5%)
-            var equipmentBonus = 1.0 + player.EnchantmentManager.GetXPBonus();
             var equipmentBonusPercent = (player.EnchantmentManager.GetXPBonus() * 100.0);
 
             session.Network.EnqueueSend(new GameMessageSystemChat("=== XP Bonuses ===", ChatMessageType.Broadcast));
@@ -617,9 +680,14 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat($"Augmentation Bonus: {augBonusPercent:F2}% (kills only, {augmentationBonusXp} augs)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat($"Equipment Bonus: {equipmentBonusPercent:F2}%", ChatMessageType.Broadcast));
 
-            var totalBonus = (questBonus * enlightenmentBonus * pkDungeonBonus * augBonus * equipmentBonus) - 1.0;
-            var totalBonusPercent = totalBonus * 100.0;
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus: {totalBonusPercent:F2}% (aug bonus applies to kills only)", ChatMessageType.Broadcast));
+            var personalModifierKill = player.GetXPAndLuminanceModifier(XpType.Kill);
+            var personalModifierGeneral = player.GetXPAndLuminanceModifier(XpType.Quest);
+
+            var totalBonusKill = (questBonus * pkDungeonBonus * personalModifierKill) - 1.0;
+            var totalBonusGeneral = (questBonus * pkDungeonBonus * personalModifierGeneral) - 1.0;
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus (Kills): {totalBonusKill * 100.0:F2}%", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Total Bonus (Quest/Lum): {totalBonusGeneral * 100.0:F2}%", ChatMessageType.Broadcast));
         }
 
         [CommandHandler("bonusdetail", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, "Shows detailed enchantment data for XP bonuses (debug)")]
@@ -717,9 +785,67 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
+        private static readonly TimeSpan EnlAugsCooldown = TimeSpan.FromSeconds(5);
+        private static readonly ConcurrentDictionary<uint, DateTime> EnlAugsLastUsed = new ConcurrentDictionary<uint, DateTime>();
+
+        private static void HandleEnlightenmentAugs(Session session)
+        {
+            var player = session.Player;
+            var characterId = player.Guid.Full;
+            var currentTime = DateTime.UtcNow;
+
+            if (EnlAugsLastUsed.TryGetValue(characterId, out var lastUsed) && currentTime - lastUsed < EnlAugsCooldown)
+            {
+                var remaining = EnlAugsCooldown - (currentTime - lastUsed);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Please wait {remaining.TotalSeconds:F0}s before using /enl augs again.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            EnlAugsLastUsed[characterId] = currentTime;
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"---------------------------", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Enlightenment Augmentations:", ChatMessageType.Broadcast));
+
+            void Line(string label, PropertyInt prop, int max)
+            {
+                var current = player.GetProperty(prop) ?? 0;
+                session.Network.EnqueueSend(new GameMessageSystemChat($"{label}: {current} ({max} max)", ChatMessageType.Broadcast));
+            }
+
+            Line("Cleave", PropertyInt.EnlightenmentCleaveBonus, 1);
+            Line("Arrow Split", PropertyInt.EnlightenmentSplitArrowBonus, 1);
+            Line("Spell Chain", PropertyInt.EnlightenmentSpellChainBonus, 1);
+            Line("Aetheria Surge", PropertyInt.EnlightenmentAetheriaSurgeBonus, 1);
+            if (PropertyManager.GetBool("void_contagion_enabled"))
+                Line("Void Contagion", PropertyInt.EnlightenmentVoidDotSpreadBonus, 1);
+            Line("Damage", PropertyInt.EnlightenmentBonusDamageRating, 4);
+            Line("Damage Reduction", PropertyInt.EnlightenmentBonusDamageReduction, 4);
+            Line("Crit Damage", PropertyInt.EnlightenmentBonusCritDamageRating, 4);
+            Line("Crit Damage Reduction", PropertyInt.EnlightenmentBonusCritDamageReduction, 4);
+            Line("Imbue", PropertyInt.EnlightenmentImbueBonus, 10);
+            Line("Salvage", PropertyInt.EnlightenmentSalvageBonus, 10);
+            Line("Skill Credits", PropertyInt.EnlightenmentSkillCreditsPurchased, 5);
+            Line("Stamina Benediction", PropertyInt.EnlightenmentStaminaBenediction, 1);
+            Line("Mana Benediction", PropertyInt.EnlightenmentManaBenediction, 1);
+        }
+
+        [CommandHandler("enl", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Enlightenment commands: /enl to enlighten, /enl augs to view purchased perks")]
         public static void HandleEnlighten(Session session, params string[] parameters)
         {
+            if (parameters.Length > 0)
+            {
+                switch (parameters[0].ToLower())
+                {
+                    case "augs":
+                    case "aug":
+                        HandleEnlightenmentAugs(session);
+                        return;
+                    default:
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[ENL] Usage: /enl | /enl augs", ChatMessageType.Broadcast));
+                        return;
+                }
+            }
+
             var player = session.Player;
 
             // Calculate costs for confirmation message
@@ -749,7 +875,7 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
-        [CommandHandler("enlighten", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Begin the enlightenment process")]
+        [CommandHandler("enlighten", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Enlightenment commands: /enlighten to enlighten, /enlighten augs to view purchased perks")]
         public static void HandleEnlighten2(Session session, params string[] parameters)
         {
             HandleEnlighten(session, parameters);
@@ -1367,16 +1493,29 @@ namespace ACE.Server.Command.Handlers
                     return;
                 }
 
-                // Check 2-hour cooldown after PK death
+                // Check if in NPK-only landblock
+                if (session.Player.CurrentLandblock != null)
+                {
+                    var landblockId = session.Player.CurrentLandblock.Id.Landblock;
+                    var variation = session.Player.Location.Variation ?? 0;
+
+                    if (ACE.Server.Entity.Landblock.npkDungeonLandblocks.Contains((landblockId, variation)))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("You cannot enable PK status while in an NPK-only dungeon. Leave the dungeon first.", ChatMessageType.Broadcast));
+                        return;
+                    }
+                }
+
+                // Check cooldown after PK death before re-flagging
+                var pkCommandCooldown = PropertyManager.GetLong("pk_command_cooldown");
                 var lastPKDeath = session.Player.GetProperty(PropertyInt64.LastPKDeathTime) ?? 0;
-                if (lastPKDeath > 0)
+                if (pkCommandCooldown > 0 && lastPKDeath > 0)
                 {
                     var timeSinceDeath = Time.GetUnixTime() - lastPKDeath;
-                    var cooldown = 7200; // 2 hours in seconds
 
-                    if (timeSinceDeath < cooldown)
+                    if (timeSinceDeath < pkCommandCooldown)
                     {
-                        var remainingSeconds = (long)(cooldown - timeSinceDeath);
+                        var remainingSeconds = (long)(pkCommandCooldown - timeSinceDeath);
                         var timeDisplay = FormatTimeRemaining(remainingSeconds);
                         session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {timeDisplay} before you can flag PK again after dying in PvP combat.", ChatMessageType.Broadcast));
                         return;
@@ -1410,18 +1549,18 @@ namespace ACE.Server.Command.Handlers
             // /pk off
             else if (param == "off" || param == "disable" || param == "0")
             {
-                // Check 2-hour minimum PK duration first (before checking current status, to handle respite NPK correctly)
+                // Check minimum PK duration first (before checking current status, to handle respite NPK correctly)
+                var pkCommandCooldown = PropertyManager.GetLong("pk_command_cooldown");
                 var lastPKFlagTime = session.Player.GetProperty(PropertyInt64.LastPKFlagTime) ?? 0;
-                if (lastPKFlagTime > 0 && session.Player.PkLevel == PKLevel.PK) // Only check if they're a "real" PK (not just temporarily NPK from respite)
+                if (pkCommandCooldown > 0 && lastPKFlagTime > 0 && session.Player.PkLevel == PKLevel.PK) // Only check if they're a "real" PK (not just temporarily NPK from respite)
                 {
                     var timeSinceFlagged = Time.GetUnixTime() - lastPKFlagTime;
-                    var minimumDuration = 7200; // 2 hours in seconds
 
-                    if (timeSinceFlagged < minimumDuration)
+                    if (timeSinceFlagged < pkCommandCooldown)
                     {
-                        var remainingSeconds = (long)(minimumDuration - timeSinceFlagged);
+                        var remainingSeconds = (long)(pkCommandCooldown - timeSinceFlagged);
                         var timeDisplay = FormatTimeRemaining(remainingSeconds);
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must remain PK for at least 2 hours after flagging. {timeDisplay} remaining.", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"You must remain PK for at least {FormatTimeRemaining(pkCommandCooldown)} after flagging. {timeDisplay} remaining.", ChatMessageType.Broadcast));
                         return;
                     }
                 }
@@ -2668,7 +2807,7 @@ namespace ACE.Server.Command.Handlers
                 }
 
                 session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"{index}. {quest.Quest}{charInfo}",
+                    $"{quest.Quest}",
                     ChatMessageType.Broadcast));
                 index++;
             }
@@ -2767,6 +2906,51 @@ namespace ACE.Server.Command.Handlers
                     "Error retrieving luminance history. Please try again later.",
                     ChatMessageType.Broadcast));
             }
+        }
+
+        private static readonly TimeSpan WhoCooldown = TimeSpan.FromSeconds(3);
+        private static readonly ConcurrentDictionary<uint, DateTime> WhoLastUsed = new ConcurrentDictionary<uint, DateTime>();
+
+        [CommandHandler("who", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 1,
+            "Displays basic information about a character.",
+            "<charname>\nReturns Level, Enlightenment, Augmentations, Patron, and Monarch for the named character.")]
+        public static void HandleWho(Session session, params string[] parameters)
+        {
+            var characterId = session.Player.Guid.Full;
+            var currentTime = DateTime.UtcNow;
+
+            if (WhoLastUsed.TryGetValue(characterId, out var lastUsed) && currentTime - lastUsed < WhoCooldown)
+            {
+                var remaining = WhoCooldown - (currentTime - lastUsed);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Please wait {remaining.TotalSeconds:F1}s before using /who again.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            WhoLastUsed[characterId] = currentTime;
+
+            var charName = string.Join(" ", parameters);
+            var target = PlayerManager.FindByName(charName);
+
+            if (target == null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"No character named \"{charName}\" was found.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var level = target.Level ?? 0;
+            var enlightenment = target.GetProperty(PropertyInt.Enlightenment) ?? 0;
+            var augs = GetPlayerAugmentationCount(target);
+            var patronName = target.PatronId.HasValue ? PlayerManager.FindByGuid(target.PatronId.Value)?.Name ?? "Unknown" : "None";
+            var monarchName = target.MonarchId.HasValue ? PlayerManager.FindByGuid(target.MonarchId.Value)?.Name ?? "Unknown" : "None";
+
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"[{target.Name}]  Level: {level}  ENL: {enlightenment}  Augs: {augs}  Patron: {patronName}  Monarch: {monarchName}",
+                ChatMessageType.Broadcast));
+        }
+
+        private static int GetPlayerAugmentationCount(IPlayer player)
+        {
+            return AugmentationDevice.AugProps.Values.Sum(prop => player.GetProperty(prop) ?? 0);
         }
 
         [CommandHandler("lhr", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows luminance you have received in the last 7 days")]

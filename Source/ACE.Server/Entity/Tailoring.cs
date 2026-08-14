@@ -571,18 +571,10 @@ namespace ACE.Server.Entity
             switch (source.TargetType)
             {
                 case ItemType.MeleeWeapon:
-                    // CONQUEST: Allow cross-weapon-type tailoring (mace to sword, etc.)
+                    // CONQUEST: Allow cross-weapon-type and cross-element tailoring (mace to sword, fire to cold, etc.)
                     // Restrictions:
-                    // - Element must match (fire to fire, cold to cold)
                     // - Two-handed must stay two-handed
                     // - Unarmed must stay unarmed
-
-                    // Check element matching
-                    if (source.W_DamageType != target.W_DamageType)
-                    {
-                        player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
-                        return;
-                    }
 
                     // Check two-handed restriction
                     if (source.W_WeaponType == WeaponType.TwoHanded && target.W_WeaponType != WeaponType.TwoHanded)
@@ -612,8 +604,7 @@ namespace ACE.Server.Entity
 
                 case ItemType.MissileWeapon:
 
-                    if (source.DefaultCombatStyle != target.DefaultCombatStyle ||
-                        source.W_DamageType != DamageType.Undef && source.W_DamageType != target.W_DamageType)
+                    if (source.DefaultCombatStyle != target.DefaultCombatStyle)
                     {
                         player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
                         return;
@@ -621,12 +612,6 @@ namespace ACE.Server.Entity
                     break;
 
                 case ItemType.Caster:
-
-                    if (source.W_DamageType != DamageType.Undef && source.W_DamageType != target.W_DamageType)
-                    {
-                        player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
-                        return;
-                    }
                     break;
 
                 default:

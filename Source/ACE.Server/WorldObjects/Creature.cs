@@ -68,6 +68,8 @@ namespace ACE.Server.WorldObjects
         public List<Creature> EnrageMirrorImageClones = new List<Creature>();
         public bool EnrageMirrorImageImmune;
         public double EnrageMirrorImageLastCheck;
+        public bool IsMirrorImageClone;
+        public ObjectGuid? MirrorImageParentGuid;
 
         /// <summary>
         /// A new biota be created taking all of its values from weenie.
@@ -408,7 +410,7 @@ namespace ACE.Server.WorldObjects
             var initChain = new ACE.Server.Entity.Actions.ActionChain();
             initChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
             {
-                if (!IsAlive) return;
+                if (!CanRunEnrageAction) return;
 
                 // Get all players in range using GetPlayersInRange helper
                 var allPlayers = GetPlayersInRange((double)maxRange);
@@ -473,7 +475,7 @@ namespace ACE.Server.WorldObjects
             spawnChain.AddDelaySeconds(0.1);
             spawnChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
             {
-                if (!IsAlive) return;
+                if (!CanRunEnrageAction) return;
 
                 var groundMarker = WorldObjectFactory.CreateNewWorldObject((uint)markerWCID);
                 if (groundMarker == null) return;
@@ -501,7 +503,7 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void ExecuteEnrageLeap()
         {
-            if (EnrageLeapTargetPosition == null)
+            if (!CanRunEnrageAction || EnrageLeapTargetPosition == null)
             {
                 EnrageLeapInProgress = false;
                 return;
@@ -519,6 +521,8 @@ namespace ACE.Server.WorldObjects
 
             jumpChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.WorldObjectNetworking_EnqueueMotion, () =>
             {
+                if (!CanRunEnrageAction) return;
+
                 // Make boss invisible during "jump"
                 Hidden = true;
                 EnqueueBroadcast(new Network.GameMessages.Messages.GameMessageScript(Guid, PlayScript.Hide));
@@ -528,6 +532,8 @@ namespace ACE.Server.WorldObjects
 
             jumpChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
             {
+                if (!CanRunEnrageAction) return;
+
                 // Teleport while hidden (no portal effect)
                 var newPos = new Position(EnrageLeapTargetPosition);
                 FakeTeleport(newPos);
@@ -548,6 +554,8 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         private void ExecuteLeapDamage()
         {
+            if (!CanRunEnrageAction) return;
+
             // Get damage properties
             var baseDamage = GetProperty(PropertyInt.EnrageLeapBaseDamage) ?? 5000;
             var radius = GetProperty(PropertyFloat.EnrageLeapRadius) ?? 6.0f;
@@ -676,7 +684,7 @@ namespace ACE.Server.WorldObjects
             var actionChain = new ACE.Server.Entity.Actions.ActionChain();
             actionChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
             {
-                if (!IsAlive) return;
+                if (!CanRunEnrageAction) return;
 
                 // Make boss immune if configured
                 if (immuneDuringClones)
@@ -711,6 +719,7 @@ namespace ACE.Server.WorldObjects
                 resetChain.AddDelaySeconds(5.0);
                 resetChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
                 {
+                    if (!CanRunEnrageAction) return;
                     EnrageMirrorImageTriggered = false;
                 });
                 resetChain.EnqueueChain();
@@ -747,7 +756,7 @@ namespace ACE.Server.WorldObjects
             actionChain.AddDelaySeconds(0.1);
             actionChain.AddAction(this, ACE.Server.Entity.Actions.ActionType.MonsterCombat_SpawnHotspot, () =>
             {
-                if (!IsAlive) return;
+                if (!CanRunEnrageAction) return;
 
                 // Create clone using same WeenieClassId
                 var clone = WorldObjectFactory.CreateNewWorldObject(wcid) as Creature;
@@ -773,6 +782,16 @@ namespace ACE.Server.WorldObjects
 
                 // Set clone name to indicate it's a mirror
                 clone.Name = $"{bossName} (Mirror Image)";
+
+                clone.IsMirrorImageClone = true;
+                clone.MirrorImageParentGuid = Guid;
+
+                // Prevent clones from starting enrage async loops
+                clone.RemoveProperty(PropertyBool.CanEnrage);
+                clone.RemoveProperty(PropertyBool.CanAOE);
+                clone.RemoveProperty(PropertyBool.CanGrapple);
+                clone.RemoveProperty(PropertyBool.EnrageMirrorImageEnabled);
+                clone.RemoveProperty(PropertyBool.EnrageLeapEnabled);
 
                 // Prevent clones from dropping loot
                 clone.DeathTreasureType = null;

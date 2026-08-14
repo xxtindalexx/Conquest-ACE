@@ -41888,6 +41888,8 @@ namespace ACE.Server.Factories.Enum
         ace87832_rootsofskuldgenerator = 87832,
         // Treasure Map System (Conquest custom)
         treasureMap = 13370024,
+        // CONQUEST: Random Dye — adjust WCID before release if needed
+        ace13370148_randomdye = 13370148,
 
         // Nether Weapons - WCIDs matching database (Conquest custom)
         // Heavy Weapons

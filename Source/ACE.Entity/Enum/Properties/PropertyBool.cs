@@ -244,5 +244,23 @@ namespace ACE.Entity.Enum.Properties
         /// Removes inflated StartingValue from enlightenment (now calculated in Base instead)
         /// </summary>
         EnlightenmentAttributeMigrationApplied = 9222,
+
+        /// <summary>
+        /// CONQUEST: Shield property - blocks attacks from all directions (360° arc)
+        /// </summary>
+        [AssessmentProperty]
+        Sentinel = 9230,
+
+        /// <summary>
+        /// CONQUEST: Shield property (Bulwark) - chance to add full shield skill to block AL
+        /// </summary>
+        [AssessmentProperty]
+        CriticalBlock = 9231,
+
+        /// <summary>
+        /// CONQUEST: Shield property (Tactical) - chance to add half shield skill to block AL
+        /// </summary>
+        [AssessmentProperty]
+        GlancingBlow = 9232,
     }
 }

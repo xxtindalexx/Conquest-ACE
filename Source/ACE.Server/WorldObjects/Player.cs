@@ -75,6 +75,8 @@ namespace ACE.Server.WorldObjects
 
         public DateTime PrevObjSend;
 
+        public DateTime PrevRoll;
+
         public float CurrentRadarRange => Location.Indoors ? MaxRadarRange_Indoors : MaxRadarRange_Outdoors;
 
         /// <summary>

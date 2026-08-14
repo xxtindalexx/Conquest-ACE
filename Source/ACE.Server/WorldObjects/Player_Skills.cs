@@ -236,21 +236,7 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: War Magic training grants +1 Spell Chain with 50% chain damage
             if (skill == Skill.WarMagic)
-            {
-                var currentChain = GetProperty(PropertyInt.SpellChainTargets) ?? 0;
-                SetProperty(PropertyInt.SpellChainTargets, currentChain + 1);
-                SetProperty(PropertyInt.SpellChainDamagePercent, 50);  // Chain targets take 50% damage
-                Session?.Network.EnqueueSend(new GameMessageSystemChat("Your knowledge of War Magic grants you +1 Spell Chain!", ChatMessageType.Advancement));
-            }
-
-            // CONQUEST: Void Magic training grants +1 Void Contagion (DoT spread on death)
-            // Only grant if the feature is enabled on the server
-            if (skill == Skill.VoidMagic && PropertyManager.GetBool("void_contagion_enabled"))
-            {
-                var currentSpread = GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
-                SetProperty(PropertyInt.VoidDotSpreadTargets, currentSpread + 1);
-                Session?.Network.EnqueueSend(new GameMessageSystemChat("Your knowledge of Void Magic grants you +1 Void Contagion!", ChatMessageType.Advancement));
-            }
+                SyncWarMagicSpellChainBonus(notifyOnGrant: true);
 
             return true;
         }
@@ -342,35 +328,7 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: War Magic untraining removes Spell Chain bonus
             if (skill == Skill.WarMagic)
-            {
-                var currentChain = GetProperty(PropertyInt.SpellChainTargets) ?? 0;
-                if (currentChain > 0)
-                {
-                    SetProperty(PropertyInt.SpellChainTargets, currentChain - 1);
-                    Session?.Network.EnqueueSend(new GameMessageSystemChat("You have lost -1 Spell Chain due to untraining War Magic.", ChatMessageType.Advancement));
-                }
-                if ((GetProperty(PropertyInt.SpellChainTargets) ?? 0) == 0)
-                {
-                    RemoveProperty(PropertyInt.SpellChainTargets);
-                    RemoveProperty(PropertyInt.SpellChainDamagePercent);
-                }
-            }
-
-            // CONQUEST: Void Magic untraining removes Void Contagion bonus
-            // Only process if the feature is enabled (otherwise they shouldn't have the bonus anyway)
-            if (skill == Skill.VoidMagic && PropertyManager.GetBool("void_contagion_enabled"))
-            {
-                var currentSpread = GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
-                if (currentSpread > 0)
-                {
-                    SetProperty(PropertyInt.VoidDotSpreadTargets, currentSpread - 1);
-                    Session?.Network.EnqueueSend(new GameMessageSystemChat("You have lost -1 Void Contagion due to untraining Void Magic.", ChatMessageType.Advancement));
-                }
-                if ((GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0) == 0)
-                {
-                    RemoveProperty(PropertyInt.VoidDotSpreadTargets);
-                }
-            }
+                SyncWarMagicSpellChainBonus(notifyOnRemove: true);
 
             return true;
         }
@@ -530,76 +488,59 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// CONQUEST: Keeps player SpellChainTargets in sync with War Magic training (0 or 1).
+        /// EnlightenmentSpellChainBonus is tracked separately and added at hit time.
+        /// </summary>
+        private void SyncWarMagicSpellChainBonus(bool notifyOnGrant = false, bool notifyOnRemove = false)
+        {
+            var warMagic = GetCreatureSkill(Skill.WarMagic);
+            var shouldHaveBonus = warMagic?.AdvancementClass >= SkillAdvancementClass.Trained;
+            var currentChain = GetProperty(PropertyInt.SpellChainTargets) ?? 0;
+            var expectedChain = shouldHaveBonus ? 1 : 0;
+
+            if (currentChain == expectedChain)
+            {
+                if (expectedChain > 0 && GetProperty(PropertyInt.SpellChainDamagePercent) == null)
+                    SetProperty(PropertyInt.SpellChainDamagePercent, 50);
+                return;
+            }
+
+            if (expectedChain > 0)
+            {
+                SetProperty(PropertyInt.SpellChainTargets, 1);
+                SetProperty(PropertyInt.SpellChainDamagePercent, 50);
+                if (notifyOnGrant && currentChain < expectedChain)
+                    Session?.Network.EnqueueSend(new GameMessageSystemChat("Your knowledge of War Magic grants you +1 Spell Chain!", ChatMessageType.Advancement));
+            }
+            else
+            {
+                RemoveProperty(PropertyInt.SpellChainTargets);
+                RemoveProperty(PropertyInt.SpellChainDamagePercent);
+                if (notifyOnRemove && currentChain > 0)
+                    Session?.Network.EnqueueSend(new GameMessageSystemChat("You have lost -1 Spell Chain due to untraining War Magic.", ChatMessageType.Advancement));
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Clears skill-granted chain counts and re-applies from current training.
+        /// Called on enlightenment to fix inflated values. ENL gem bonuses and weapon imbues are separate.
+        /// </summary>
+        public void ResetSkillGrantedCombatBonuses()
+        {
+            RemoveProperty(PropertyInt.SpellChainTargets);
+            RemoveProperty(PropertyInt.SpellChainDamagePercent);
+
+            SyncWarMagicSpellChainBonus();
+        }
+
+        /// <summary>
         /// CONQUEST: Applies the War Magic spell chain bonus on login
         /// Players with War Magic trained/specialized get +1 to SpellChainTargets with 50% chain damage
         /// This ensures existing characters get the bonus without needing to retrain
         /// </summary>
         public void ApplyWarMagicSpellChainBonus()
         {
-            var warMagic = GetCreatureSkill(Skill.WarMagic);
-            var currentChain = GetProperty(PropertyInt.SpellChainTargets) ?? 0;
-            var enlightenmentBonus = GetProperty(PropertyInt.EnlightenmentSpellChainBonus) ?? 0;
-            var shouldHaveBonus = warMagic?.AdvancementClass >= SkillAdvancementClass.Trained;
-
-            // Calculate what the base chain targets should be (excluding enlightenment bonus)
-            // War Magic trained = 1 base chain target
-            var expectedBaseChain = shouldHaveBonus ? 1 : 0;
-
-            // Only modify if the current value doesn't match expected
-            // This preserves any enlightenment bonuses
-            if (shouldHaveBonus && currentChain == 0)
-            {
-                SetProperty(PropertyInt.SpellChainTargets, 1);
-                SetProperty(PropertyInt.SpellChainDamagePercent, 50);  // Chain targets take 50% damage
-                Session?.Network.EnqueueSend(new GameMessageSystemChat("Your War Magic training has granted you +1 Spell Chain!", ChatMessageType.Advancement));
-            }
-            else if (!shouldHaveBonus && currentChain > 0 && enlightenmentBonus == 0)
-            {
-                // Only remove if there's no enlightenment bonus keeping it
-                RemoveProperty(PropertyInt.SpellChainTargets);
-                RemoveProperty(PropertyInt.SpellChainDamagePercent);
-            }
-
-            // Ensure SpellChainDamagePercent is set if player has spell chain but it's missing
-            if ((GetProperty(PropertyInt.SpellChainTargets) ?? 0) > 0 && GetProperty(PropertyInt.SpellChainDamagePercent) == null)
-            {
-                SetProperty(PropertyInt.SpellChainDamagePercent, 50);
-            }
-        }
-
-        /// <summary>
-        /// CONQUEST: Applies the Void Magic DoT spread bonus on login
-        /// Players with Void Magic trained/specialized get +1 to VoidDotSpreadTargets (Void Contagion)
-        /// This ensures existing characters get the bonus without needing to retrain
-        /// Only runs if void_contagion_enabled is true
-        /// </summary>
-        public void ApplyVoidMagicDotSpreadBonus()
-        {
-            // Skip if the feature is disabled
-            if (!PropertyManager.GetBool("void_contagion_enabled"))
-                return;
-
-            var voidMagic = GetCreatureSkill(Skill.VoidMagic);
-            var currentSpread = GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
-            var enlightenmentBonus = GetProperty(PropertyInt.EnlightenmentVoidDotSpreadBonus) ?? 0;
-            var shouldHaveBonus = voidMagic?.AdvancementClass >= SkillAdvancementClass.Trained;
-
-            // Calculate what the base spread targets should be (excluding enlightenment bonus)
-            // Void Magic trained = 1 base spread target
-            var expectedBaseSpread = shouldHaveBonus ? 1 : 0;
-
-            // Only modify if the current value doesn't match expected
-            // This preserves any enlightenment bonuses
-            if (shouldHaveBonus && currentSpread == 0)
-            {
-                SetProperty(PropertyInt.VoidDotSpreadTargets, 1);
-                Session?.Network.EnqueueSend(new GameMessageSystemChat("Your Void Magic training has granted you +1 Void Contagion!", ChatMessageType.Advancement));
-            }
-            else if (!shouldHaveBonus && currentSpread > 0 && enlightenmentBonus == 0)
-            {
-                // Only remove if there's no enlightenment bonus keeping it
-                RemoveProperty(PropertyInt.VoidDotSpreadTargets);
-            }
+            SyncWarMagicSpellChainBonus(notifyOnGrant: true);
         }
 
         /// <summary>
@@ -1251,6 +1192,10 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: If Void Magic is now untrained, also reset Summoning if trained/specialized
             if (skill == Skill.VoidMagic && creatureSkill.AdvancementClass == SkillAdvancementClass.Untrained)
                 ResetSummoningIfTrained();
+
+            // CONQUEST: War Magic reset syncs chain bonus to skill state
+            if (skill == Skill.WarMagic)
+                SyncWarMagicSpellChainBonus();
 
             return true;
         }

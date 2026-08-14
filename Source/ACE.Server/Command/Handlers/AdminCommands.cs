@@ -1738,6 +1738,17 @@ namespace ACE.Server.Command.Handlers
                         message = $"Login name: {character.Account.AccountName}      Character: {character.Name}\n";
                     else
                         message = $"Login name: account not found, character is orphaned.      Character: {character.Name}\n";
+
+                    var level = character.Level ?? 0;
+                    var enlightenment = character.GetProperty(PropertyInt.Enlightenment) ?? 0;
+                    var augs = GetFingerAugmentationCount(character);
+                    var patronName = character.PatronId.HasValue ? PlayerManager.FindByGuid(character.PatronId.Value)?.Name ?? "Unknown" : "None";
+                    var monarchName = character.MonarchId.HasValue ? PlayerManager.FindByGuid(character.MonarchId.Value)?.Name ?? "Unknown" : "None";
+                    message += $"Level: {level}  ENL: {enlightenment}  Augs: {augs}  Patron: {patronName}  Monarch: {monarchName}\n";
+
+                    var fingerDetails = new StringBuilder();
+                    AppendFingerCharacterDetails(fingerDetails, character);
+                    message += fingerDetails.ToString();
                 }
                 else
                     message = $"There was no active character named \"{charName}\" found in the database.\n";
@@ -1790,7 +1801,20 @@ namespace ACE.Server.Command.Handlers
                     message += $"{characters.Count} Character(s) owned by: {account.AccountName}\n";
                     message += "-------------------\n";
                     foreach (var character in characters.Where(x => !x.IsDeleted && x.DeleteTime == 0))
-                        message += $"\"{(character.IsPlussed ? "+" : "")}{character.Name}\", ID 0x{character.Id.ToString("X8")}\n";
+                    {
+                        message += $"\"{(character.IsPlussed ? "+" : "")}{character.Name}\", ID 0x{character.Id.ToString("X8")}";
+                        var charPlayer = PlayerManager.FindByGuid(character.Id);
+                        if (charPlayer != null)
+                        {
+                            var level = charPlayer.Level ?? 0;
+                            var enl = charPlayer.GetProperty(PropertyInt.Enlightenment) ?? 0;
+                            var augs = GetFingerAugmentationCount(charPlayer);
+                            var patronName = charPlayer.PatronId.HasValue ? PlayerManager.FindByGuid(charPlayer.PatronId.Value)?.Name ?? "Unknown" : "None";
+                            var monarchName = charPlayer.MonarchId.HasValue ? PlayerManager.FindByGuid(charPlayer.MonarchId.Value)?.Name ?? "Unknown" : "None";
+                            message += $"  [Lvl {level}  ENL {enl}  Augs {augs}  Patron: {patronName}  Monarch: {monarchName}]";
+                        }
+                        message += "\n";
+                    }
                     var pendingDeletedCharacters = characters.Where(x => !x.IsDeleted && x.DeleteTime > 0).ToList();
                     if (pendingDeletedCharacters.Count > 0)
                     {
@@ -1813,6 +1837,96 @@ namespace ACE.Server.Command.Handlers
             }
 
             CommandHandlerHelper.WriteOutputInfo(session, message, ChatMessageType.WorldBroadcast);
+        }
+
+        private static int GetFingerAugmentationCount(IPlayer player)
+        {
+            return AugmentationDevice.AugProps.Values.Sum(prop => player.GetProperty(prop) ?? 0);
+        }
+
+        private static void AppendFingerCharacterDetails(StringBuilder message, IPlayer character)
+        {
+            var pyreals = character.GetProperty(PropertyInt64.BankedPyreals) ?? 0;
+            var lum = character.GetProperty(PropertyInt64.BankedLuminance) ?? 0;
+            var coins = character.GetProperty(PropertyInt64.ConquestCoins) ?? 0;
+            message.Append($"Bank: {pyreals:N0} pyreals  |  {lum:N0} luminance  |  {coins:N0} conquest coins\n");
+
+            var onlinePlayer = PlayerManager.GetOnlinePlayer(character.Guid.Full);
+            string referenceIp = null;
+
+            if (onlinePlayer?.Session?.EndPoint?.Address != null)
+            {
+                referenceIp = onlinePlayer.Session.EndPoint.Address.ToString();
+                message.Append($"Current IP: {referenceIp}\n");
+            }
+            else if (character.Account?.LastLoginIP != null && character.Account.LastLoginIP.Length > 0)
+            {
+                try
+                {
+                    referenceIp = new IPAddress(character.Account.LastLoginIP).ToString();
+                }
+                catch
+                {
+                    // ignore invalid stored IP
+                }
+            }
+
+            if (string.IsNullOrEmpty(referenceIp))
+            {
+                message.Append("IP history: unavailable (character offline with no recorded login IP)\n");
+                return;
+            }
+
+            try
+            {
+                CharacterTracker.EnsureDatabaseMigrated();
+
+                using (var context = new ShardModels.ShardDbContext())
+                {
+                    var ownAccount = character.Account?.AccountName;
+
+                    var sameIpAccounts = context.CharTracker
+                        .AsNoTracking()
+                        .Where(c => c.LoginIP == referenceIp && c.AccountName != null)
+                        .Where(c => ownAccount == null || c.AccountName != ownAccount)
+                        .Select(c => c.AccountName)
+                        .Distinct()
+                        .OrderBy(a => a)
+                        .ToList();
+
+                    if (sameIpAccounts.Count > 0)
+                        message.Append($"Other accounts on IP {referenceIp}: {string.Join(", ", sameIpAccounts)}\n");
+                    else
+                        message.Append($"Other accounts on IP {referenceIp}: none found\n");
+
+                    var recentLogins = context.CharTracker
+                        .AsNoTracking()
+                        .Where(c => c.CharacterId == character.Guid.Full && c.LoginIP != null && c.LoginIP != referenceIp)
+                        .OrderByDescending(c => c.LoginTimestamp)
+                        .Take(5)
+                        .ToList();
+
+                    if (recentLogins.Count > 0)
+                    {
+                        message.Append("Recent logins (other IPs):\n");
+                        foreach (var login in recentLogins)
+                        {
+                            var localTime = login.LoginTimestamp.ToLocalTime();
+                            var duration = login.ConnectionDuration > 0 ? $" ({login.ConnectionDuration / 60}m)" : "";
+                            message.Append($"  {localTime:M/d/yyyy h:mm tt} - {login.LoginIP}{duration}\n");
+                        }
+                    }
+                    else
+                    {
+                        message.Append("Recent logins (other IPs): none found\n");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error retrieving finger IP/login data for {character.Name}: {ex.Message}");
+                message.Append("IP/login history: error retrieving data\n");
+            }
         }
 
         // freeze
@@ -6693,7 +6807,7 @@ namespace ACE.Server.Command.Handlers
             HandleServerQuestCompletions(session, parameters);
         }
 
-        [CommandHandler("serverquestcompletions", AccessLevel.Developer, CommandHandlerFlag.None, "Get Total Completions of a Quest for all Characters, if the top parameter is passed will list top 25 player completion counts. If the player parameter is passed with a player name then it will list completions for that player", "<quest_name>, optional: top, player <player_name>")]
+        [CommandHandler("serverquestcompletions", AccessLevel.Developer, CommandHandlerFlag.None, "Get Total Completions of a Quest for all Characters, if the top parameter is passed will list top 25 player completion counts. If the player parameter is passed with a player name then it will list completions for that player. If the ip parameter is passed with an IP address then it will list completions for all characters linked to that IP", "<quest_name>, optional: top, player <player_name>, ip <ip_address>")]
         public static void HandleServerQuestCompletions(Session session, params string[] parameters)
         {
             if (parameters.Length > 0)
@@ -6735,9 +6849,38 @@ namespace ACE.Server.Command.Handlers
                             session.Network.EnqueueSend(new GameMessageSystemChat($"{questName} - {count} - {playerName}", ChatMessageType.Broadcast));
                         }
                     }
+                    else if (string.Equals("Ip", parameters[1], StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (parameters.Length < 3 || string.IsNullOrEmpty(parameters[2]))
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat("You must specify an IP address.", ChatMessageType.Broadcast));
+                        }
+                        else
+                        {
+                            var ipAddress = parameters[2];
+                            var list = ShardDatabase.GetQuestCompletionsByIp(questName, ipAddress);
+                            if (list.Count > 0)
+                            {
+                                var total = list.Sum(x => (long)x.Score);
+                                session.Network.EnqueueSend(new GameMessageSystemChat(
+                                    $"IP {ipAddress} completions for quest {questName} ({list.Count} character(s), {total:N0} total):",
+                                    ChatMessageType.Broadcast));
+                                for (int i = 0; i < list.Count; i++)
+                                    session.Network.EnqueueSend(new GameMessageSystemChat(
+                                        $"  {i + 1}: {list[i].Score:N0} - {list[i].Character}",
+                                        ChatMessageType.Broadcast));
+                            }
+                            else
+                            {
+                                session.Network.EnqueueSend(new GameMessageSystemChat(
+                                    $"No characters linked to IP {ipAddress} have completed quest {questName}.",
+                                    ChatMessageType.Broadcast));
+                            }
+                        }
+                    }
                     else
                     {
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid parameter '{parameters[1]}'. Use 'top' or 'player <player_name>'.", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid parameter '{parameters[1]}'. Use 'top', 'player <player_name>', or 'ip <ip_address>'.", ChatMessageType.Broadcast));
                     }
                 }
             }
@@ -6825,6 +6968,12 @@ namespace ACE.Server.Command.Handlers
                     if (existing != null)
                     {
                         session.Network.EnqueueSend(new GameMessageSystemChat($"PK dungeon already exists: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    if (Landblock.npkDungeonLandblocks.Contains((landblock, variation)))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot add PK dungeon: 0x{landblock:X4} Variant {variation} is already configured as an NPK dungeon.", ChatMessageType.Broadcast));
                         return;
                     }
 
@@ -6948,6 +7097,209 @@ namespace ACE.Server.Command.Handlers
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Error reloading PK dungeons: {ex.Message}", ChatMessageType.Broadcast));
                 log.Error($"Error reloading PK dungeons: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        // CONQUEST: NPK Dungeon Management Command
+        [CommandHandler("npkdungeon", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Manage NPK-only dungeon landblock configurations.",
+            "add <landblock> <variation> [description] - Add an NPK dungeon\n" +
+            "remove <landblock> <variation> - Remove an NPK dungeon\n" +
+            "list - List all configured NPK dungeons\n" +
+            "reload - Reload NPK dungeons from database")]
+        public static void HandleNPKDungeon(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /npkdungeon <add|remove|list|reload>", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> <variation> [description] - Add an NPK dungeon", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> <variation> - Remove an NPK dungeon", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all configured NPK dungeons", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("  reload - Reload NPK dungeons from database", ChatMessageType.Help));
+                return;
+            }
+
+            var subcommand = parameters[0].ToLower();
+
+            switch (subcommand)
+            {
+                case "add":
+                    HandleNPKDungeonAdd(session, parameters);
+                    break;
+                case "remove":
+                    HandleNPKDungeonRemove(session, parameters);
+                    break;
+                case "list":
+                    HandleNPKDungeonList(session);
+                    break;
+                case "reload":
+                    HandleNPKDungeonReload(session);
+                    break;
+                default:
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Unknown subcommand: {subcommand}", ChatMessageType.Broadcast));
+                    session.Network.EnqueueSend(new GameMessageSystemChat("Valid subcommands: add, remove, list, reload", ChatMessageType.Help));
+                    break;
+            }
+        }
+
+        private static void HandleNPKDungeonAdd(Session session, string[] parameters)
+        {
+            if (parameters.Length < 3)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /npkdungeon add <landblock> <variation> [description]", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /npkdungeon add 0x002B 2 Safe Egg Orchard Variant 2", ChatMessageType.Help));
+                return;
+            }
+
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Use hex format (0x002B) or decimal (43)", ChatMessageType.Help));
+                return;
+            }
+
+            if (!int.TryParse(parameters[2], out int variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            string description = parameters.Length > 3 ? string.Join(" ", parameters.Skip(3)) : null;
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var existing = context.NpkDungeonLandblocks.Find(landblock, variation);
+                    if (existing != null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"NPK dungeon already exists: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    if (Landblock.pkDungeonLandblocks.Contains((landblock, variation)))
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"Cannot add NPK dungeon: 0x{landblock:X4} Variant {variation} is already configured as a PK dungeon.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    var config = new ACE.Database.Models.World.NpkDungeonLandblock
+                    {
+                        Landblock = landblock,
+                        Variation = variation,
+                        Description = description
+                    };
+
+                    context.NpkDungeonLandblocks.Add(config);
+                    context.SaveChanges();
+
+                    Landblock.npkDungeonLandblocks.Add((landblock, variation));
+
+                    if (!string.IsNullOrWhiteSpace(description))
+                        Landblock.npkDungeonDescriptions[(landblock, variation)] = description;
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Added NPK dungeon: 0x{landblock:X4} Variant {variation}" +
+                        (string.IsNullOrWhiteSpace(description) ? "" : $" ({description})"), ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} added NPK dungeon: 0x{landblock:X4} Variant {variation}");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error adding NPK dungeon: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error adding NPK dungeon: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleNPKDungeonRemove(Session session, string[] parameters)
+        {
+            if (parameters.Length < 3)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: /npkdungeon remove <landblock> <variation>", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Example: /npkdungeon remove 0x002B 2", ChatMessageType.Help));
+                return;
+            }
+
+            if (!TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (!int.TryParse(parameters[2], out int variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var existing = context.NpkDungeonLandblocks.Find(landblock, variation);
+                    if (existing == null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"NPK dungeon not found: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    context.NpkDungeonLandblocks.Remove(existing);
+                    context.SaveChanges();
+
+                    Landblock.npkDungeonLandblocks.Remove((landblock, variation));
+                    Landblock.npkDungeonDescriptions.Remove((landblock, variation));
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Removed NPK dungeon: 0x{landblock:X4} Variant {variation}", ChatMessageType.Broadcast));
+                    log.Info($"[ADMIN] {session.Player.Name} removed NPK dungeon: 0x{landblock:X4} Variant {variation}");
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error removing NPK dungeon: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error removing NPK dungeon: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleNPKDungeonList(Session session)
+        {
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var configs = context.NpkDungeonLandblocks.OrderBy(c => c.Landblock).ThenBy(c => c.Variation).ToList();
+
+                    if (configs.Count == 0)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("No NPK dungeons configured.", ChatMessageType.Broadcast));
+                        return;
+                    }
+
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"=== NPK Dungeons ({configs.Count}) ===", ChatMessageType.Broadcast));
+                    foreach (var config in configs)
+                    {
+                        var desc = string.IsNullOrWhiteSpace(config.Description) ? "" : $" - {config.Description}";
+                        session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{config.Landblock:X4} Variant {config.Variation}{desc}", ChatMessageType.Broadcast));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error listing NPK dungeons: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error listing NPK dungeons: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void HandleNPKDungeonReload(Session session)
+        {
+            try
+            {
+                Landblock.LoadNPKDungeonsFromDatabase();
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Reloaded {Landblock.npkDungeonLandblocks.Count} NPK dungeon configuration(s) from database.", ChatMessageType.Broadcast));
+                log.Info($"[ADMIN] {session.Player.Name} reloaded NPK dungeon configurations from database");
+            }
+            catch (Exception ex)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error reloading NPK dungeons: {ex.Message}", ChatMessageType.Broadcast));
+                log.Error($"Error reloading NPK dungeons: {ex.Message}\n{ex.StackTrace}");
             }
         }
 
@@ -8427,6 +8779,223 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4} is {(isExempt ? "EXEMPT" : "NOT exempt")} from IP restrictions.", ChatMessageType.Broadcast));
         }
 
+        private const string SummonRestrictedLbCommands = "/srlb or /summonrestrictedlb";
+
+        // CONQUEST: Summon restricted landblock management command
+        [CommandHandler("summonrestrictedlb", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Manage landblocks where combat pet restrictions apply.",
+            "add <landblock> [variation] [label] - Add a landblock (all variants if variation omitted)\n" +
+            "remove <landblock> [variation] - Remove a landblock entry\n" +
+            "list - List all restricted landblocks\n" +
+            "check <landblock> [variation] - Check if a landblock + variant is restricted")]
+        public static void HandleSummonRestrictedLandblock(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                ShowSummonRestrictedLandblockUsage(session);
+                return;
+            }
+
+            var subcommand = parameters[0].ToLower();
+
+            switch (subcommand)
+            {
+                case "add":
+                    HandleSummonRestrictedLandblockAdd(session, parameters);
+                    break;
+                case "remove":
+                    HandleSummonRestrictedLandblockRemove(session, parameters);
+                    break;
+                case "list":
+                    HandleSummonRestrictedLandblockList(session);
+                    break;
+                case "check":
+                    HandleSummonRestrictedLandblockCheck(session, parameters);
+                    break;
+                default:
+                    ShowSummonRestrictedLandblockUsage(session);
+                    break;
+            }
+        }
+
+        [CommandHandler("srlb", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Shorthand for /summonrestrictedlb",
+            "add <landblock> [variation] [label] | remove <landblock> [variation] | list | check <landblock> [variation]")]
+        public static void HandleSummonRestrictedLandblockShort(Session session, params string[] parameters)
+        {
+            HandleSummonRestrictedLandblock(session, parameters);
+        }
+
+        private static void ShowSummonRestrictedLandblockUsage(Session session)
+        {
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {SummonRestrictedLbCommands} <add|remove|list|check>", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> [variation] [label] - Add entry (all variants if variation omitted)", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> [variation] - Remove entry (all-variants entry if variation omitted)", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all restricted landblocks", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  check <landblock> [variation] - Check restriction (defaults to variant 0 if omitted)", ChatMessageType.Help));
+        }
+
+        private static bool TryParseOptionalVariation(string input, out int? variation)
+        {
+            variation = null;
+
+            if (!int.TryParse(input, out var parsed))
+                return false;
+
+            variation = parsed;
+            return true;
+        }
+
+        private static void HandleSummonRestrictedLandblockAdd(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {SummonRestrictedLbCommands} add <landblock> [variation] [label]", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Example: /srlb add 0x0066 Conquest Arena", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Example: /srlb add 0x0066 2 Arena v2 only", ChatMessageType.Help));
+                return;
+            }
+
+            if (!SummonRestrictedLandblocks.TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Use hex format (0x0066) or decimal (102)", ChatMessageType.Help));
+                return;
+            }
+
+            int? variation = null;
+            string label = null;
+            var labelStartIndex = 2;
+
+            if (parameters.Length > 2 && TryParseOptionalVariation(parameters[2], out variation))
+                labelStartIndex = 3;
+
+            if (parameters.Length > labelStartIndex)
+                label = string.Join(" ", parameters.Skip(labelStartIndex));
+
+            if (SummonRestrictedLandblocks.ContainsEntry(landblock, variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} is already in the restricted list.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (!SummonRestrictedLandblocks.AddLandblock(landblock, variation, label))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to add landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} to restricted list.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock, variation);
+            var count = SummonRestrictedLandblocks.GetRestrictedLandblocksSorted().Count;
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Added landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) to restricted list. ({count} total)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} added landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) to summon restricted list");
+        }
+
+        private static void HandleSummonRestrictedLandblockRemove(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {SummonRestrictedLbCommands} remove <landblock> [variation]", ChatMessageType.Help));
+                return;
+            }
+
+            if (!SummonRestrictedLandblocks.TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            int? variation = null;
+            if (parameters.Length > 2)
+            {
+                if (!TryParseOptionalVariation(parameters[2], out variation))
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            if (!SummonRestrictedLandblocks.ContainsEntry(landblock, variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} is not in the restricted list.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock, variation);
+
+            if (!SummonRestrictedLandblocks.RemoveLandblock(landblock, variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to remove landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} from restricted list.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var count = SummonRestrictedLandblocks.GetRestrictedLandblocksSorted().Count;
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Removed landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) from restricted list. ({count} remaining)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} removed landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) from summon restricted list");
+        }
+
+        private static void HandleSummonRestrictedLandblockList(Session session)
+        {
+            var landblocks = SummonRestrictedLandblocks.GetRestrictedLandblocksSorted();
+
+            if (landblocks.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("No landblocks are currently restricted for combat pet overrides.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Use {SummonRestrictedLbCommands} add <landblock> [variation] [label] to add landblocks.", ChatMessageType.Help));
+                return;
+            }
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"=== Summon Restricted Landblocks ({landblocks.Count}) ===", ChatMessageType.Broadcast));
+
+            foreach (var entry in landblocks)
+            {
+                var displayName = SummonRestrictedLandblocks.GetDisplayName(entry.Landblock, entry.Variation);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{entry.Landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(entry.Variation)} - {displayName}", ChatMessageType.Broadcast));
+            }
+        }
+
+        private static void HandleSummonRestrictedLandblockCheck(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {SummonRestrictedLbCommands} check <landblock> [variation]", ChatMessageType.Help));
+                return;
+            }
+
+            if (!SummonRestrictedLandblocks.TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var variation = 0;
+            var variationSpecified = parameters.Length > 2;
+            if (variationSpecified)
+            {
+                if (!int.TryParse(parameters[2], out variation))
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            var variantSuffix = SummonRestrictedLandblocks.FormatCheckVariantSuffix(variation, variationSpecified);
+            var isRestricted = SummonRestrictedLandblocks.IsRestricted(landblock, variation);
+
+            if (isRestricted)
+            {
+                var displayVariation = SummonRestrictedLandblocks.ContainsEntry(landblock, variation) ? (int?)variation : null;
+                var displayName = SummonRestrictedLandblocks.GetDisplayName(landblock, displayVariation);
+                var canSummon = SummonRestrictedLandblocks.CanSummonCombatPet(landblock, variation);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{variantSuffix} ({displayName}) is RESTRICTED.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Combat pet summoning: {(canSummon ? "allowed (property overrides apply)" : "blocked")}", ChatMessageType.Broadcast));
+            }
+            else
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{variantSuffix} is NOT restricted.", ChatMessageType.Broadcast));
+            }
+        }
+
         // CONQUEST: Allegiance Whitelist Management Command
         [CommandHandler("allegwhitelist", AccessLevel.Admin, CommandHandlerFlag.None, 1,
             "Manage whitelisted allegiances for PK quest credit.",
@@ -8842,6 +9411,52 @@ namespace ACE.Server.Command.Handlers
 
                 default:
                     CommandHandlerHelper.WriteOutputInfo(session, "Unknown subcommand. Use: reload, status, list, add <word>, or remove <word>");
+                    break;
+            }
+        }
+
+        // CONQUEST: Luminance Lottery admin commands
+        [CommandHandler("lottery", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Administer the weekly luminance lottery.",
+            "/lottery enable  — Open the lottery for player entries.\n" +
+            "/lottery disable — Close the lottery (no new entries or draws).\n" +
+            "/lottery run     — Force the weekly draw immediately, then auto-disable.\n" +
+            "/lottery status  — Show current participants, ticket counts, and prize pool.")]
+        public static void HandleLotteryAdmin(Session session, params string[] parameters)
+        {
+            var sub = parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "status";
+
+            switch (sub)
+            {
+                case "enable":
+                    PropertyManager.ModifyBool("lottery_enabled", true);
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Lottery is now ENABLED. Players may enter with /lum lottery.");
+                    PlayerManager.BroadcastToAuditChannel(session?.Player,
+                        $"[LOTTERY] Lottery enabled by {session?.Player?.Name ?? "CONSOLE"}.");
+                    break;
+
+                case "disable":
+                    PropertyManager.ModifyBool("lottery_enabled", false);
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Lottery is now DISABLED. No new entries will be accepted.");
+                    PlayerManager.BroadcastToAuditChannel(session?.Player,
+                        $"[LOTTERY] Lottery disabled by {session?.Player?.Name ?? "CONSOLE"}.");
+                    break;
+
+                case "run":
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Forcing weekly draw...");
+                    Managers.LotteryManager.ForceRunDraw(session);
+                    CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Draw complete. Lottery auto-disabled. Use /lottery enable to reopen.");
+                    break;
+
+                case "status":
+                    if (session?.Player != null)
+                        Managers.LotteryManager.SendStatusToPlayer(session.Player);
+                    else
+                        CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] /lottery status requires an in-world session.");
+                    break;
+
+                default:
+                    CommandHandlerHelper.WriteOutputInfo(session, "Usage: /lottery enable | /lottery disable | /lottery run | /lottery status");
                     break;
             }
         }

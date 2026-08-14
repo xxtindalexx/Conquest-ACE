@@ -45,9 +45,14 @@ Understanding the order of operations is critical for effective balancing:
 8. Resistance Calculation
    └─ Protection spells, vulnerabilities, wards
    └─ For Nether: Synthetic protection may override
-9. Shield Modifier (if blocking)
+9. Shield (if blocking)
+   └─ Shield AL is added to body AL (additive model)
+   └─ ArmorMod = CalcArmorMod(bodyAL + shieldAL)
+   └─ ShieldMod = 1.0 (kept for compatibility)
 10. Damage Resistance Rating
 11. Final Damage = DamageBeforeMitigation × ArmorMod × ResistanceMod × ShieldMod × DRR
+    └─ Physical block feedback: ShieldDamageBlocked shown in defender combat chat when shield AL applies
+    └─ Magic absorb block feedback: MagicDamageBlocked suffix on magic projectile defender chat (display only)
 ```
 
 ---
@@ -381,7 +386,10 @@ Use `/debugdamage` to see detailed damage calculations:
 **Key values to check:**
 - `BodyArmorMod`: Shows Armor Self (+) or Imperil (-) effect
 - `ArmorMod`: Final armor damage multiplier (lower = more protection)
+- `BodyEffectiveAL` / `ShieldEffectiveAL`: Additive armor levels used for physical mitigation
+- `ShieldDamageBlocked`: Display-only amount blocked by shield AL on physical hits
 - `ResistanceMod`: Resistance multiplier (lower = more protection)
+- `AbsorbMod` / `MagicDamageBlocked`: Magic absorb multiplier and display-only blocked amount
 - `DamageBeforeMitigation`: Damage before armor/resistance
 - `Damage`: Final damage dealt
 

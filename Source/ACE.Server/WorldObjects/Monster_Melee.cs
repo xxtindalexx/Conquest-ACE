@@ -107,7 +107,9 @@ namespace ACE.Server.WorldObjects
                             // this is a player taking damage
                             targetPlayer.TakeDamage(this, damageEvent);
 
-                            if (damageEvent.ShieldMod != 1.0f)
+                            // CONQUEST: Additive shield model - check shield AL instead of ShieldMod multiplier
+                            if (damageEvent.ShieldEffectiveAL > 0)
+                            //if (damageEvent.ShieldMod != 1.0f)
                             {
                                 var shieldSkill = targetPlayer.GetCreatureSkill(Skill.Shield);
                                 Proficiency.OnSuccessUse(targetPlayer, shieldSkill, shieldSkill.Current); // ?
@@ -429,13 +431,11 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// Returns the percent of damage absorbed by layered armor + clothing
+        /// CONQUEST: Returns total effective body armor level for a player defender (before shield).
         /// </summary>
-        /// <param name="armors">The list of armor/clothing covering the targeted body part</param>
-        public float GetArmorMod(Creature defender, DamageType damageType, List<WorldObject> armors, WorldObject weapon, float armorRendingMod = 1.0f)
+        public float GetEffectiveBodyArmorLevel(Creature defender, DamageType damageType, List<WorldObject> armors, WorldObject weapon, float armorRendingMod = 1.0f)
         {
-            var ignoreMagicArmor =  (weapon?.IgnoreMagicArmor ?? false)  || IgnoreMagicArmor;
-            var ignoreMagicResist = (weapon?.IgnoreMagicResist ?? false) || IgnoreMagicResist;
+            var ignoreMagicArmor = (weapon?.IgnoreMagicArmor ?? false) || IgnoreMagicArmor;
 
             var effectiveAL = 0.0f;
 
@@ -445,6 +445,7 @@ namespace ACE.Server.WorldObjects
             // life spells
             // additive: armor/imperil
             var bodyArmorMod = defender.EnchantmentManager.GetBodyArmorMod();
+            var ignoreMagicResist = (weapon?.IgnoreMagicResist ?? false) || IgnoreMagicResist;
             if (ignoreMagicResist)
                 bodyArmorMod = IgnoreMagicResistScaled(bodyArmorMod);
 
@@ -460,12 +461,37 @@ namespace ACE.Server.WorldObjects
             if (effectiveAL > 0)
                 effectiveAL *= armorRendingMod;
 
-            var armorMod = SkillFormula.CalcArmorMod(effectiveAL);
-
             //Console.WriteLine("Total AL: " + effectiveAL);
-            //Console.WriteLine("Armor mod: " + armorMod);
+            return effectiveAL;
+        }
 
-            return armorMod;
+        /// <summary>
+        /// Returns the percent of damage absorbed by layered armor + clothing
+        /// </summary>
+        /// <param name="armors">The list of armor/clothing covering the targeted body part</param>
+        public float GetArmorMod(Creature defender, DamageType damageType, List<WorldObject> armors, WorldObject weapon, float armorRendingMod = 1.0f)
+        {
+            // CONQUEST: Additive shield model - body AL extracted to GetEffectiveBodyArmorLevel
+            var effectiveAL = GetEffectiveBodyArmorLevel(defender, damageType, armors, weapon, armorRendingMod);
+
+            //var armorMod = SkillFormula.CalcArmorMod(effectiveAL);
+            //Console.WriteLine("Armor mod: " + armorMod);
+            return SkillFormula.CalcArmorMod(effectiveAL);
+
+            // Original inline implementation:
+            //var ignoreMagicArmor =  (weapon?.IgnoreMagicArmor ?? false)  || IgnoreMagicArmor;
+            //var ignoreMagicResist = (weapon?.IgnoreMagicResist ?? false) || IgnoreMagicResist;
+            //var effectiveAL = 0.0f;
+            //foreach (var armor in armors)
+            //    effectiveAL += GetArmorMod(armor, damageType, ignoreMagicArmor);
+            //var bodyArmorMod = defender.EnchantmentManager.GetBodyArmorMod();
+            //if (ignoreMagicResist)
+            //    bodyArmorMod = IgnoreMagicResistScaled(bodyArmorMod);
+            //effectiveAL += bodyArmorMod;
+            //if (effectiveAL > 0)
+            //    effectiveAL *= armorRendingMod;
+            //var armorMod = SkillFormula.CalcArmorMod(effectiveAL);
+            //return armorMod;
         }
 
         public float IgnoreMagicArmorScaled(float enchantments)

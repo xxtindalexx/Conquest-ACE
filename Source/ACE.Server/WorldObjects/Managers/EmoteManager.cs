@@ -737,6 +737,32 @@ namespace ACE.Server.WorldObjects.Managers
                                 }
 
                                 var ipBlocked = ipSolves >= ipLimit;
+
+                                if (ipBlocked)
+                                {
+                                    var refreshSuffix = string.Empty;
+                                    if (quest.MinDelta > 0 && ipTracking != null)
+                                    {
+                                        var baseTime = quest.ResetFromFirst ? ipTracking.FirstSolveTime : ipTracking.LastSolveTime;
+                                        if (baseTime.HasValue)
+                                        {
+                                            var refreshAt = baseTime.Value.AddSeconds(quest.MinDelta);
+                                            var remaining = refreshAt - DateTime.UtcNow;
+                                            if (remaining > TimeSpan.Zero)
+                                            {
+                                                var parts = new System.Text.StringBuilder();
+                                                if ((int)remaining.TotalDays > 0) parts.Append($"{(int)remaining.TotalDays}d ");
+                                                if (remaining.Hours > 0) parts.Append($"{remaining.Hours}h ");
+                                                if (remaining.Minutes > 0 || ((int)remaining.TotalDays == 0 && remaining.Hours == 0))
+                                                    parts.Append($"{remaining.Minutes}m");
+                                                refreshSuffix = $" The limit refreshes in {parts.ToString().Trim()}.";
+                                            }
+                                        }
+                                    }
+                                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                                        $"Your IP-wide limit has been reached for this quest.{refreshSuffix}", ChatMessageType.Broadcast));
+                                }
+
                                 ExecuteEmoteSet(ipBlocked ? EmoteCategory.QuestSuccess : EmoteCategory.QuestFailure, emote.Message, targetObject, true);
                             }
                         }

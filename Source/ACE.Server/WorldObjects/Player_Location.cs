@@ -1025,9 +1025,6 @@ namespace ACE.Server.WorldObjects
             // CONQUEST: Apply War Magic spell chain bonus for existing characters
             ApplyWarMagicSpellChainBonus();
 
-            // CONQUEST: Apply Void Magic DoT spread bonus (Void Contagion) for existing characters
-            ApplyVoidMagicDotSpreadBonus();
-
             // CONQUEST: Enforce Summoning skill restrictions (drop attack skills if Summoning is trained)
             EnforceSummoningSkillRestrictions();
 

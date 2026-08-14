@@ -68,6 +68,16 @@ namespace ACE.Server.Entity
         // Loaded from database on server startup via LoadPKDungeonsFromDatabase()
         public static readonly Dictionary<(ushort landblock, int variation), string> pkDungeonDescriptions = new();
 
+        // CONQUEST: NPK-only dungeon variants where players must remain NPK
+        // Stores (landblock, variation) tuples to identify specific dungeon variants
+        // Loaded from database on server startup via LoadNPKDungeonsFromDatabase()
+        public static readonly HashSet<(ushort landblock, int variation)> npkDungeonLandblocks = new();
+
+        // CONQUEST: Cache of NPK dungeon descriptions for admin display
+        // Key is (landblock, variation) tuple, value is the description (e.g., "Safe Egg Orchard")
+        // Loaded from database on server startup via LoadNPKDungeonsFromDatabase()
+        public static readonly Dictionary<(ushort landblock, int variation), string> npkDungeonDescriptions = new();
+
         // CONQUEST: Cache of landblock names for fellowship list display
         // Key is landblock ID, value is the location name (e.g., "Egg Orchard")
         // Loaded from database on server startup via LoadLandblockNamesFromDatabase()
@@ -88,6 +98,15 @@ namespace ACE.Server.Entity
         public static string GetPKDungeonDescription(ushort landblockId, int variation)
         {
             return pkDungeonDescriptions.TryGetValue((landblockId, variation), out var desc) ? desc : "";
+        }
+
+        /// <summary>
+        /// CONQUEST: Gets the cached description for an NPK dungeon by landblock and variation
+        /// Returns empty string if not found or no description set
+        /// </summary>
+        public static string GetNPKDungeonDescription(ushort landblockId, int variation)
+        {
+            return npkDungeonDescriptions.TryGetValue((landblockId, variation), out var desc) ? desc : "";
         }
 
         /// <summary>
@@ -167,6 +186,47 @@ namespace ACE.Server.Entity
             catch (Exception ex)
             {
                 log.Error($"Error loading PK dungeon landblocks from database: {ex.Message}");
+                log.Error($"Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// CONQUEST: Loads NPK dungeon landblock configurations from database into npkDungeonLandblocks HashSet
+        /// Called during server startup
+        /// </summary>
+        public static void LoadNPKDungeonsFromDatabase()
+        {
+            log.Info("Loading NPK dungeon landblock configurations from database...");
+
+            try
+            {
+                using (var context = new ACE.Database.Models.World.WorldDbContext())
+                {
+                    var configs = context.NpkDungeonLandblocks.ToList();
+
+                    npkDungeonLandblocks.Clear();
+                    npkDungeonDescriptions.Clear();
+
+                    foreach (var config in configs)
+                    {
+                        npkDungeonLandblocks.Add((config.Landblock, config.Variation));
+
+                        if (!string.IsNullOrWhiteSpace(config.Description))
+                            npkDungeonDescriptions[(config.Landblock, config.Variation)] = config.Description;
+
+                        log.Info($"  Loaded NPK dungeon: 0x{config.Landblock:X4} Variant {config.Variation}" +
+                                (string.IsNullOrWhiteSpace(config.Description) ? "" : $" ({config.Description})"));
+                    }
+
+                    if (configs.Count == 0)
+                        log.Info("  No NPK dungeon landblocks configured.");
+                    else
+                        log.Info($"Successfully loaded {configs.Count} NPK dungeon landblock configuration(s).");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error loading NPK dungeon landblocks from database: {ex.Message}");
                 log.Error($"Stack trace: {ex.StackTrace}");
             }
         }
