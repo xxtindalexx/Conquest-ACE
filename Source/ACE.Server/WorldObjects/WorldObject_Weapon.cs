@@ -121,12 +121,34 @@ namespace ACE.Server.WorldObjects
             if (weapon.WeaponDefense > 0 && weapon.WeaponDefense < 1 && ((weapon.GetProperty(PropertyInt.ImbueStackingBits) ?? 0) & 4) != 0)
                 baseWepDef += 1;
 
-            var defenseMod = baseWepDef + weapon.EnchantmentManager.GetDefenseMod();
+            var weaponDefEnchant = weapon.EnchantmentManager.GetDefenseMod();
+            // CONQUEST: Shield Defender cantrips bind to the shield and apply to main-hand melee (best-only vs weapon)
+            var shieldDefEnchant = GetShieldWeaponDefenseEnchantMod(wielder, weapon);
+            var defenseMod = baseWepDef + Math.Max(weaponDefEnchant, shieldDefEnchant);
 
             if (weapon.IsEnchantable)
                 defenseMod += wielder.EnchantmentManager.GetDefenseMod();
 
             return defenseMod;
+        }
+
+        // CONQUEST: Shield weapon cantrips (Defender / Heart Seeker) apply to main-hand melee
+        public static float GetShieldWeaponDefenseEnchantMod(Creature wielder, WorldObject weapon)
+        {
+            if (wielder == null || weapon == null || weapon.IsRanged)
+                return 0.0f;
+
+            var shield = wielder.GetEquippedShield();
+            return shield?.EnchantmentManager.GetDefenseMod() ?? 0.0f;
+        }
+
+        public static float GetShieldWeaponOffenseEnchantMod(Creature wielder, WorldObject weapon)
+        {
+            if (wielder == null || weapon == null || weapon.IsRanged)
+                return 0.0f;
+
+            var shield = wielder.GetEquippedShield();
+            return shield?.EnchantmentManager.GetAttackMod() ?? 0.0f;
         }
 
         /// <summary>
@@ -222,7 +244,10 @@ namespace ACE.Server.WorldObjects
             if (weapon == null || weapon.IsRanged /* see note above */)
                 return defaultModifier;
 
-            var offenseMod = (float)(weapon.WeaponOffense ?? defaultModifier) + weapon.EnchantmentManager.GetAttackMod();
+            var weaponOffEnchant = weapon.EnchantmentManager.GetAttackMod();
+            // CONQUEST: Shield Heart Seeker cantrips bind to the shield and apply to main-hand melee (best-only vs weapon)
+            var shieldOffEnchant = GetShieldWeaponOffenseEnchantMod(wielder, weapon);
+            var offenseMod = (float)(weapon.WeaponOffense ?? defaultModifier) + Math.Max(weaponOffEnchant, shieldOffEnchant);
 
             if (weapon.IsEnchantable)
                 offenseMod += wielder.EnchantmentManager.GetAttackMod();
@@ -309,7 +334,7 @@ namespace ACE.Server.WorldObjects
             {
                 var pvpCapBiting = (float)PropertyManager.GetDouble("pvp_max_biting_strike");
                 if (pvpCapBiting > 0)
-                    critRate = Math.Min(critRate, pvpCapBiting);
+                    critRate = pvpCapBiting;
             }
 
             if (weapon != null && weapon.HasImbuedEffect(ImbuedEffectType.CriticalStrike))
@@ -900,7 +925,17 @@ namespace ACE.Server.WorldObjects
             var maxSpellLevel = GetMaxSpellLevel();
 
             // thanks to moro for this formula
-            return 1.0f - (0.1f + maxSpellLevel * 0.05f);
+            var mod = 1.0f - (0.1f + maxSpellLevel * 0.05f);
+
+            // Global cap: 0 = no cap; value is max cleave fraction (0.25 = cannot ignore more than 25% armor)
+            var capVal = PropertyManager.GetDouble("armor_cleaving_mod_override");
+            if (capVal > 0)
+            {
+                var capMod = 1.0f - (float)Math.Clamp(capVal, 0.0, 1.0);
+                mod = Math.Max(mod, capMod);
+            }
+
+            return mod;
         }
 
         public double? IgnoreShield
@@ -909,12 +944,21 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyFloat.IgnoreShield); else SetProperty(PropertyFloat.IgnoreShield, value.Value); }
         }
 
-        public float GetIgnoreShieldMod(WorldObject weapon)
+        public float GetIgnoreShieldChance(WorldObject weapon)
         {
-            var creatureMod = IgnoreShield ?? 0.0f;
-            var weaponMod = weapon?.IgnoreShield ?? 0.0f;
+            var creatureChance = (float)(IgnoreShield ?? 0.0);
+            var weaponChance = (float)(weapon?.IgnoreShield ?? 0.0);
 
-            return 1.0f - (float)Math.Max(creatureMod, weaponMod);
+            return Math.Clamp(Math.Max(creatureChance, weaponChance), 0f, 1f);
+        }
+
+        public bool RollIgnoreShield(WorldObject weapon)
+        {
+            var chance = GetIgnoreShieldChance(weapon);
+            if (chance <= 0)
+                return false;
+
+            return ThreadSafeRandom.Next(0.0f, 1.0f) < chance;
         }
 
         public static int GetBaseSkillImbued(CreatureSkill skill)

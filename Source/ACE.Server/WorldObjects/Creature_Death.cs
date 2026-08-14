@@ -41,10 +41,11 @@ namespace ACE.Server.WorldObjects
             IsMoving = false;
 
             // Cancel all enrage async loops to prevent thread conflicts
+            var wasEnraged = IsEnraged;
             CancelEnrageLoops();
 
             // Reset fog to Clear upon death only if the creature was enraged
-            if (IsEnraged && CurrentLandblock != null)
+            if (wasEnraged && CurrentLandblock != null)
             {
                 var fogResetType = EnvironChangeType.Clear;
                 CurrentLandblock.SendEnvironChange(fogResetType);
@@ -137,7 +138,7 @@ namespace ACE.Server.WorldObjects
 
             PhysicsObj.StopCompletely(true);
 
-            // CONQUEST: Try to spread Void DoTs to nearby targets (Void Contagion)
+            // CONQUEST: Void Contagion — spread or explode nether DoTs when a dotted mob dies (ENL aug required)
             TrySpreadVoidDots(topDamager);
 
             // broadcast death animation
@@ -194,8 +195,9 @@ namespace ACE.Server.WorldObjects
             }
             else
             {
-                OnDeath();
+                UpdateVital(Health, 0);
                 var smiterInfo = new DamageHistoryInfo(smiter);
+                OnDeath(null, DamageType.Undef);
                 Die(smiterInfo, smiterInfo);
             }
         }
@@ -1102,12 +1104,17 @@ namespace ACE.Server.WorldObjects
 
         public bool IsOnNoDeathXPLandblock => Location != null ? NoDeathXP_Landblocks.Contains(Location.LandblockId.Landblock) : false;
 
+        private const int VoidContagionSpreadTargets = 2;              // Max nearby creatures to receive spread DoTs
+        private const float VoidContagionExplosionChance = 0.20f;      // Per-death roll; explosion blocks spread
+        private const float VoidContagionExplosionHealthPercent = 0.20f; // Of dying creature max HP, per active dot
+        private const int VoidContagionMaxDotsForExplosion = 3;        // Dot count cap for explosion damage scaling
+
         /// <summary>
-        /// CONQUEST: Void Contagion - two modes controlled by server property "void_contagion_explosion_mode"
-        /// Mode 1 (default, explosion_mode=false): Spreads DoTs at 50% duration to nearby targets
-        /// Mode 2 (explosion_mode=true): Dying creature explodes, dealing % of DoT damage to ALL nearby enemies
-        /// Note: PvP protected - only triggers on monster deaths, never spreads/damages players
-        /// Master toggle: void_contagion_enabled must be TRUE for this feature to work
+        /// CONQUEST: Void Contagion entry point on mob death.
+        /// Requires void_contagion_enabled, killer player (or pet owner) with EnlightenmentVoidDotSpreadBonus >= 1,
+        /// and active nether DoTs on the dying creature. Void Magic training is not required.
+        /// On success: 20% chance to explode (no spread), otherwise spread all DoTs to up to 2 nearby enemies at 50% duration.
+        /// PvP protected — never triggers on player deaths or targets players.
         /// </summary>
         private void TrySpreadVoidDots(DamageHistoryInfo killer)
         {
@@ -1128,17 +1135,9 @@ namespace ACE.Server.WorldObjects
             if (killerPlayer == null)
                 return;
 
-            // Calculate total spread targets from player and enlightenment bonus
-            var baseSpreadTargets = killerPlayer.GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
-            var enlightenmentBonus = killerPlayer.GetProperty(PropertyInt.EnlightenmentVoidDotSpreadBonus) ?? 0;
-
-            // Also check if weapon has imbued VoidDotSpreadTargets (like spell chain on weapons)
-            var weapon = killerPlayer.GetEquippedWeapon();
-            var weaponBonus = weapon?.GetProperty(PropertyInt.VoidDotSpreadTargets) ?? 0;
-
-            var totalSpreadTargets = baseSpreadTargets + enlightenmentBonus + weaponBonus;
-
-            if (totalSpreadTargets <= 0)
+            // ENL combat trophy aug is the sole gate for Void Contagion
+            var enlBonus = killerPlayer.GetProperty(PropertyInt.EnlightenmentVoidDotSpreadBonus) ?? 0;
+            if (enlBonus < 1)
                 return;
 
             // Get all Nether DoT enchantments on the dying creature
@@ -1148,26 +1147,23 @@ namespace ACE.Server.WorldObjects
             if (netherDots == null || netherDots.Count == 0)
                 return;
 
-            // Check which mode to use
-            if (PropertyManager.GetBool("void_contagion_explosion_mode"))
+            // 20% per-death roll: explosion replaces spread for this death (dot chain does not continue)
+            if (ThreadSafeRandom.Next(0.0f, 1.0f) < VoidContagionExplosionChance)
             {
-                // Mode 2: Explosion - deal burst damage to ALL nearby enemies
-                TryVoidContagionExplosion(killerPlayer, netherDots, totalSpreadTargets);
+                TryVoidContagionExplosion(killerPlayer, netherDots);
+                return;
             }
-            else
-            {
-                // Mode 1 (default): Spread DoTs to nearby targets
-                TryVoidContagionSpread(killerPlayer, netherDots, totalSpreadTargets);
-            }
+
+            TryVoidContagionSpread(killerPlayer, netherDots);
         }
 
         /// <summary>
-        /// CONQUEST: Void Contagion Mode 1 - Spreads DoTs at 50% duration to up to (totalSpreadTargets) nearby enemies
+        /// CONQUEST: Void Contagion spread path — copies each nether DoT to up to 2 closest valid enemies within 10m at 50% of the spell's original duration.
         /// </summary>
-        private void TryVoidContagionSpread(Player killerPlayer, List<ACE.Entity.Models.PropertiesEnchantmentRegistry> netherDots, int totalSpreadTargets)
+        private void TryVoidContagionSpread(Player killerPlayer, List<ACE.Entity.Models.PropertiesEnchantmentRegistry> netherDots)
         {
-            // Find nearby valid targets to spread DoTs to (limited to totalSpreadTargets)
-            var spreadTargets = FindVoidContagionTargets(killerPlayer, totalSpreadTargets);
+            // Closest valid enemies within range (may be fewer than 2 if none are nearby)
+            var spreadTargets = FindVoidContagionTargets(killerPlayer, VoidContagionSpreadTargets);
 
             if (spreadTargets.Count == 0)
                 return;
@@ -1197,56 +1193,35 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// CONQUEST: Void Contagion Mode 2 - Dying creature explodes, dealing % of total DoT damage to ALL nearby enemies
-        /// Damage scales with perk level: +1 = 20%, +2 = 40%, +3 = 60%
+        /// CONQUEST: Void Contagion explosion path — deals nether damage equal to 20% of this creature's max HP per active dot (capped at 3 dots)
+        /// to every valid enemy within 10m. Does not spread DoTs.
         /// </summary>
-        private void TryVoidContagionExplosion(Player killerPlayer, List<ACE.Entity.Models.PropertiesEnchantmentRegistry> netherDots, int totalSpreadTargets)
+        private void TryVoidContagionExplosion(Player killerPlayer, List<ACE.Entity.Models.PropertiesEnchantmentRegistry> netherDots)
         {
-            // Calculate total DoT damage from all active nether dots
-            float totalDotDamage = 0;
-            foreach (var dotEnchantment in netherDots)
-            {
-                var spell = new Server.Entity.Spell(dotEnchantment.SpellId);
-                if (spell == null || spell.NotFound)
-                    continue;
-
-                // Calculate remaining damage: damage per tick * remaining ticks
-                // StatModValue is damage per tick, Duration is total duration, StartTime tracks elapsed time
-                var remainingDuration = dotEnchantment.Duration + dotEnchantment.StartTime; // StartTime is negative
-                if (remainingDuration <= 0)
-                    continue;
-
-                var tickInterval = 5.0; // DoTs tick every 5 seconds
-                var remainingTicks = (int)Math.Ceiling(remainingDuration / tickInterval);
-                var damagePerTick = Math.Abs(dotEnchantment.StatModValue);
-                totalDotDamage += damagePerTick * remainingTicks;
-            }
-
-            if (totalDotDamage <= 0)
+            var dotCount = Math.Min(netherDots.Count, VoidContagionMaxDotsForExplosion);
+            if (dotCount <= 0)
                 return;
 
-            // Calculate explosion damage: 20% per perk level (capped at 3 = 60%)
-            var damageMultiplier = Math.Min(totalSpreadTargets, 3) * 0.20f;
-            var explosionDamage = totalDotDamage * damageMultiplier;
+            // Damage based on dying creature max HP, not remaining DoT damage
+            var explosionDamage = (int)(Health.MaxValue * VoidContagionExplosionHealthPercent * dotCount);
+            if (explosionDamage <= 0)
+                return;
 
-            // Find ALL nearby valid targets (no limit)
+            // All valid enemies within range (no target cap)
             var explosionTargets = FindVoidContagionTargets(killerPlayer, int.MaxValue);
 
             if (explosionTargets.Count == 0)
                 return;
 
-            // Play explosion visual effect on dying creature
+            // Void burst visual on the dying creature
             EnqueueBroadcast(new GameMessageScript(Guid, PlayScript.HealthDownVoid));
 
-            // Deal nether damage to all targets
+            // Nether damage to each target (after resistance); same base damage per target
             foreach (var target in explosionTargets)
             {
-                // Apply nether damage
-                var damage = (int)explosionDamage;
-
                 // Factor in target's nether resistance
                 var resistMod = target.GetResistanceMod(DamageType.Nether, killerPlayer, null);
-                var finalDamage = (int)(damage * resistMod);
+                var finalDamage = (int)(explosionDamage * resistMod);
 
                 if (finalDamage > 0)
                 {
@@ -1264,10 +1239,11 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// CONQUEST: Finds valid targets for Void Contagion (returns up to maxTargets closest valid targets)
-        /// Used by both spread mode and explosion mode
+        /// CONQUEST: Finds valid Void Contagion targets within 10m of the dying creature.
+        /// Returns up to maxTargets closest matches. Pass int.MaxValue for explosion (no cap).
+        /// Excludes the dying creature, the killer player, and all players.
         /// </summary>
-        private const float VoidContagionRange = 10.0f;  // Range to find targets (meters)
+        private const float VoidContagionRange = 10.0f;
 
         private List<Creature> FindVoidContagionTargets(Player caster, int maxTargets)
         {
@@ -1293,15 +1269,15 @@ namespace ACE.Server.WorldObjects
                 if (!(obj is Creature creature) || !creature.IsAlive)
                     continue;
 
-                // Skip this dying creature and the caster
+                // Skip the dying creature and the killer player
                 if (creature == this || creature == caster)
                     continue;
 
-                // Never spread to players (PvP protection)
+                // PvP protection — never spread or explode onto players
                 if (creature is Player)
                     continue;
 
-                // Check if caster can damage this target
+                // Must be a valid PvE damage target for the killer
                 if (!caster.CanDamage(creature))
                     continue;
 
@@ -1330,8 +1306,8 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// CONQUEST: Applies a spread DoT enchantment to a target creature
-        /// Copies the exact enchantment properties from the original to ensure proper DoT ticking
+        /// CONQUEST: Applies a spread DoT to a target — re-adds the spell via EnchantmentManager, then overrides duration (50% of original)
+        /// and copies the per-tick damage from the dying creature's enchantment.
         /// </summary>
         private void ApplySpreadDot(Player caster, Creature target, Server.Entity.Spell spell, double spreadDuration, ACE.Entity.Models.PropertiesEnchantmentRegistry originalEnchantment)
         {

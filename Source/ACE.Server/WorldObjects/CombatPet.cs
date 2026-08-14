@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Models;
+using ACE.Server.Entity;
 
 namespace ACE.Server.WorldObjects
 {
@@ -58,6 +59,11 @@ namespace ACE.Server.WorldObjects
 
             // doing this the easiest way for the code here, and just removing during appraisal
             Faction1Bits = player.Faction1Bits;
+
+            // CONQUEST: Apply combat pet landblock property overrides on summon
+            var landblock = player.CurrentLandblock != null ? (ushort)player.CurrentLandblock.Id.Landblock : (ushort)Location.Landblock;
+            var variation = player.Location.Variation ?? player.CurrentLandblock?.VariationId ?? Location.Variation ?? 0;
+            SummonRestrictedLandblocks.ApplyCombatPetRestrictions(this, landblock, variation);
 
             return true;
         }

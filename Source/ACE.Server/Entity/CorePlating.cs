@@ -7,6 +7,8 @@ using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Managers;
+using ACE.Server.Network.GameEvent.Events;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
 
 namespace ACE.Server.Entity
@@ -289,7 +291,10 @@ namespace ACE.Server.Entity
         {
             player.SendMessage("Your deintegrator restores the original form of this piece of gear.");
 
-            player.UpdateProperty(target, PropertyInt.HeritageSpecificArmor, null);
+            target.RemoveProperty(PropertyInt.HeritageSpecificArmor);
+            if (target.GetProperty(PropertyInt.HeritageSpecificArmor).HasValue)
+                log.Warn($"Deintegrate failed to remove HeritageSpecificArmor from {target.Name} ({target.Guid})");
+
             if (target.IconOverlayId == CorePlatingGearOverlay)
                 player.UpdateProperty(target, PropertyDataId.IconOverlay, target.IconOverlaySecondary ?? null);
             player.UpdateProperty(target, PropertyString.GearPlatingName, null);
@@ -309,6 +314,9 @@ namespace ACE.Server.Entity
 
             if (target.IconOverlaySecondary != null)
                 target.IconOverlaySecondary = null;
+
+            player.Session.Network.EnqueueSend(new GameMessageUpdateObject(target));
+            player.Session.Network.EnqueueSend(new GameEventIdentifyObjectResponse(player.Session, target, true));
 
             target.SaveBiotaToDatabase();
 

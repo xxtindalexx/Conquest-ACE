@@ -347,7 +347,7 @@ namespace ACE.Server.WorldObjects
         /// <summary>
         /// Notifies the damage over time (DoT) source player of the tick damage amount
         /// </summary>
-        public void TakeDamageOverTime_NotifySource(Player source, DamageType damageType, float amount, bool aetheria = false)
+        public void TakeDamageOverTime_NotifySource(Player source, DamageType damageType, float amount, bool aetheria = false, string fadingSpellName = null)
         {
             if (!PropertyManager.GetBool("show_dot_messages"))
                 return;
@@ -367,6 +367,8 @@ namespace ACE.Server.WorldObjects
             if (damageType == DamageType.Nether)
             {
                 msg = $"You {verb} {Name} for {iAmount} points of periodic nether damage!";
+                if (fadingSpellName != null)
+                    msg += $" You feel the magical energies of {fadingSpellName} surrounding {Name} begin to fade.";
                 type = ChatMessageType.Magic;
             }
             else if (aetheria)
@@ -496,6 +498,7 @@ namespace ACE.Server.WorldObjects
 
         public void Enrage()
         {
+            if (IsMirrorImageClone) return;
             if (IsEnraged) return; // Avoid multiple enrages
             IsEnraged = true;
 
@@ -630,7 +633,7 @@ namespace ACE.Server.WorldObjects
 
             try
             {
-                while (IsEnraged && IsAlive && !ct.IsCancellationRequested)
+                while (IsEnraged && IsAlive && !IsDestroyed && !ct.IsCancellationRequested)
                 {
                     var playersInRange = GetPlayersInRange(250.0f);
                     if (playersInRange.Count > 1)
@@ -677,7 +680,7 @@ namespace ACE.Server.WorldObjects
 
             try
             {
-                while (IsEnraged && IsAlive && CanAOE && !ct.IsCancellationRequested)
+                while (IsEnraged && IsAlive && !IsDestroyed && CanAOE && !ct.IsCancellationRequested)
                 {
                     var playersInRange = GetPlayersInRange(250.0f);
                     if (playersInRange.Count > 0)
@@ -690,7 +693,9 @@ namespace ACE.Server.WorldObjects
                         }
 
                         lastHotspotTarget = targetPlayer;
-                        SpawnObjectAtPlayer(targetPlayer);
+
+                        if (IsAlive && !IsDestroyed && !ct.IsCancellationRequested)
+                            SpawnObjectAtPlayer(targetPlayer);
                     }
 
                     int nextHotspotTime = random.Next(10000, 15000);
@@ -733,36 +738,58 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// Retrieves all players within a specified range of the current creature.
+        /// Retrieves all players within a specified range of the current creature,
+        /// scoped to this landblock (dungeon) or landblock group (outdoor).
         /// </summary>
         /// <param name="range">The range to search for players.</param>
         /// <returns>A list of players within the specified range.</returns>
         private List<Player> GetPlayersInRange(double range)
         {
             var playersInRange = new List<Player>();
+
+            var mobLandblock = CurrentLandblock;
+            if (mobLandblock == null || !IsAlive || IsDestroyed)
+                return playersInRange;
+
             var mobPosition = new Position(Location);
+            var rangeSq = range * range;
 
             foreach (var player in PlayerManager.GetAllOnline())
             {
                 if (player == null || !player.IsAlive)
                     continue;
 
+                if (!IsPlayerInEnrageScope(player, mobLandblock))
+                    continue;
+
                 var playerPosition = new Position(player.Location);
-                if (mobPosition.SquaredDistanceTo(playerPosition) <= range * range)
-                {
+                if (mobPosition.SquaredDistanceTo(playerPosition) <= rangeSq)
                     playersInRange.Add(player);
-                }
             }
 
             return playersInRange;
         }
 
+        private bool IsPlayerInEnrageScope(Player player, Landblock mobLandblock)
+        {
+            var playerLandblock = player.CurrentLandblock;
+            if (playerLandblock == null)
+                return false;
+
+            if (mobLandblock.IsDungeon)
+                return playerLandblock == mobLandblock;
+
+            var group = mobLandblock.CurrentLandblockGroup;
+            if (group == null)
+                return playerLandblock == mobLandblock;
+
+            return playerLandblock.CurrentLandblockGroup == group;
+        }
+
         private void SpawnObjectAtPlayer(Player targetPlayer)
         {
-            if (targetPlayer == null)
-            {
+            if (targetPlayer == null || !CanRunEnrageAction)
                 return;
-            }
 
             // Define items and their respective messages
             var spawnOptions = new List<(int? DamageObjectId, int VisualObjectId, string Message)>
@@ -776,11 +803,34 @@ namespace ACE.Server.WorldObjects
                 (null, 13370037, "An iron cage falls from the sky, dodge it or be trapped!")
             };
 
-            // Select a random object set
+            // If the weenie specifies explicit hotspot WCIDs, use them instead of a random pick.
+            var hotspotPrimaryWCID = GetProperty(PropertyInt.EnrageHotSpotPrimary);
+            var hotspotSecondaryWCID = GetProperty(PropertyInt.EnrageHotSpotSecondary);
+
+            int? damageObjectId;
+            int visualObjectId;
+            string message;
+
             var random = new Random();
-            var (damageObjectId, visualObjectId, message) = spawnOptions[random.Next(0, spawnOptions.Count)];
+            if (hotspotPrimaryWCID.HasValue || hotspotSecondaryWCID.HasValue)
+            {
+                damageObjectId = hotspotPrimaryWCID;
+                // When primary is set but secondary is not, spawn no secondary object.
+                visualObjectId = hotspotSecondaryWCID ?? 0;
+                message = GetProperty(PropertyString.EnrageHotSpotMessage) ?? "Beware the incoming attack!";
+            }
+            else
+            {
+                // Select a random object set
+                (damageObjectId, visualObjectId, message) = spawnOptions[random.Next(0, spawnOptions.Count)];
+
+                var customMessage = GetProperty(PropertyString.EnrageHotSpotMessage);
+                if (!string.IsNullOrWhiteSpace(customMessage))
+                    message = customMessage;
+            }
 
             WorldObject damageObj = null;
+            var spawnerEnragedHotspot = GetProperty(PropertyBool.EnragedHotspot) ?? false;
 
             // **Create Damage Object if it's not null**
             if (damageObjectId.HasValue)
@@ -791,12 +841,24 @@ namespace ACE.Server.WorldObjects
                     damageObj = WorldObjectFactory.CreateNewWorldObject(damageWeenie);
                     if (damageObj != null)
                     {
+                        // Apply per-spawner damage override if set on this creature's weenie.
+                        var damageOverride = GetProperty(PropertyInt.EnrageHotspotDamageOverride);
+                        if (damageOverride.HasValue)
+                            damageObj.SetProperty(PropertyInt.Damage, damageOverride.Value);
+
+                        if (spawnerEnragedHotspot)
+                            damageObj.SetProperty(PropertyBool.EnragedHotspot, true);
+
                         damageObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
                         damageObj.Location.LandblockId = new LandblockId(damageObj.Location.GetCell());
                         // Thread-safe EnterWorld
                         var damageObjToSpawn = damageObj;
+                        var spawner = this;
                         WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
                         {
+                            if (!spawner.IsAlive || spawner.IsDestroyed)
+                                return;
+
                             if (!damageObjToSpawn.EnterWorld())
                             {
                                 log.Warn($"Failed to spawn enrage hotspot damage object {damageObjToSpawn.Name} at {damageObjToSpawn.Location}");
@@ -806,24 +868,37 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
-            // **Create Visual Effect Object**
-            var visualWeenie = DatabaseManager.World.GetCachedWeenie((uint)visualObjectId);
-            if (visualWeenie == null) return;
-
-            var visualObj = WorldObjectFactory.CreateNewWorldObject(visualWeenie);
-            if (visualObj == null) return;
-
-            visualObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
-            visualObj.Location.LandblockId = new LandblockId(visualObj.Location.GetCell());
-            // Thread-safe EnterWorld
-            var visualObjToSpawn = visualObj;
-            WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
+            // **Create Visual Effect Object** (skipped when no visual WCID is configured)
+            WorldObject visualObj = null;
+            if (visualObjectId > 0)
             {
-                if (!visualObjToSpawn.EnterWorld())
+                var visualWeenie = DatabaseManager.World.GetCachedWeenie((uint)visualObjectId);
+                if (visualWeenie != null)
                 {
-                    log.Warn($"Failed to spawn enrage hotspot visual {visualObjToSpawn.Name} at {visualObjToSpawn.Location}");
+                    visualObj = WorldObjectFactory.CreateNewWorldObject(visualWeenie);
+                    if (visualObj != null)
+                    {
+                        if (spawnerEnragedHotspot)
+                            visualObj.SetProperty(PropertyBool.EnragedHotspot, true);
+
+                        visualObj.Location = targetPlayer.Location.InFrontOf(0.01f, true);
+                        visualObj.Location.LandblockId = new LandblockId(visualObj.Location.GetCell());
+                        // Thread-safe EnterWorld
+                        var visualObjToSpawn = visualObj;
+                        var spawner = this;
+                        WorldManager.EnqueueAction(new ActionEventDelegate(ActionType.MonsterCombat_SpawnHotspot, () =>
+                        {
+                            if (!spawner.IsAlive || spawner.IsDestroyed)
+                                return;
+
+                            if (!visualObjToSpawn.EnterWorld())
+                            {
+                                log.Warn($"Failed to spawn enrage hotspot visual {visualObjToSpawn.Name} at {visualObjToSpawn.Location}");
+                            }
+                        }));
+                    }
                 }
-            }));
+            }
 
             // Broadcast warning
             BroadcastMessage($"The enraged mob targets {targetPlayer.Name}! {message}", 250.0f);
@@ -842,9 +917,12 @@ namespace ACE.Server.WorldObjects
                     damageObj, new ActionEventDelegate(ActionType.MonsterCombat_DeleteObjectAfterDelay, () => damageObj.DeleteObject())
                 ));
             }
-            actionChain.AddAction(new ActionChain.ChainElement(
-                visualObj, new ActionEventDelegate(ActionType.MonsterCombat_DeleteObjectAfterDelay, () => visualObj.DeleteObject())
-            ));
+            if (visualObj != null)
+            {
+                actionChain.AddAction(new ActionChain.ChainElement(
+                    visualObj, new ActionEventDelegate(ActionType.MonsterCombat_DeleteObjectAfterDelay, () => visualObj.DeleteObject())
+                ));
+            }
             actionChain.EnqueueChain();
         }
 
@@ -889,7 +967,7 @@ namespace ACE.Server.WorldObjects
         {
             try
             {
-                while (IsEnraged && IsAlive && !ct.IsCancellationRequested)
+                while (IsEnraged && IsAlive && !IsDestroyed && !ct.IsCancellationRequested)
                 {
                     var interval = GetProperty(PropertyFloat.EnrageLeapInterval) ?? 25.0f;
 
@@ -936,7 +1014,7 @@ namespace ACE.Server.WorldObjects
 
             try
             {
-                while (IsEnraged && IsAlive && !ct.IsCancellationRequested)
+                while (IsEnraged && IsAlive && !IsDestroyed && !ct.IsCancellationRequested)
                 {
                     var interval = GetProperty(PropertyFloat.EnrageMirrorImageInterval) ?? 45.0f;
                     var chance = GetProperty(PropertyFloat.EnrageMirrorImageChance) ?? 0.35f;
@@ -944,7 +1022,7 @@ namespace ACE.Server.WorldObjects
                     // Wait for interval
                     await Task.Delay(TimeSpan.FromSeconds(interval), ct);
 
-                    if (ct.IsCancellationRequested || !IsAlive) break;
+                    if (ct.IsCancellationRequested || !CanRunEnrageAction) break;
 
                     // Check if mirror hasn't triggered yet and random chance passes
                     if (!EnrageMirrorImageTriggered && random.NextDouble() <= chance)
@@ -959,7 +1037,7 @@ namespace ACE.Server.WorldObjects
                         var actionChain = new ActionChain();
                         actionChain.AddAction(this, ActionType.MonsterCombat_SpawnHotspot, () =>
                         {
-                            if (!IsAlive || EnrageMirrorImageClones == null) return;
+                            if (!CanRunEnrageAction || EnrageMirrorImageClones == null) return;
 
                             // Remove dead clones from list
                             EnrageMirrorImageClones.RemoveAll(c => c == null || c.IsDead || c.IsDestroyed);
@@ -974,7 +1052,7 @@ namespace ACE.Server.WorldObjects
                                 var players = GetPlayersInRange(250.0f);
                                 foreach (var player in players)
                                 {
-                                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
+                                    player.Session?.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Broadcast));
                                 }
                             }
                         });
@@ -989,6 +1067,23 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// Returns true if deferred enrage actions can safely run on this creature.
+        /// </summary>
+        private bool CanRunEnrageAction =>
+            IsAlive && !IsDestroyed && CurrentLandblock != null;
+
+        /// <summary>
+        /// Returns true if any enrage async loop cancellation token is still active.
+        /// </summary>
+        public bool HasActiveEnrageLoops()
+        {
+            return (hotspotLoopCTS != null && !hotspotLoopCTS.IsCancellationRequested)
+                || (grappleLoopCTS != null && !grappleLoopCTS.IsCancellationRequested)
+                || (leapLoopCTS != null && !leapLoopCTS.IsCancellationRequested)
+                || (mirrorLoopCTS != null && !mirrorLoopCTS.IsCancellationRequested);
+        }
+
+        /// <summary>
         /// Cancels all enrage-related async loops to prevent thread conflicts on death
         /// </summary>
         public void CancelEnrageLoops()
@@ -997,6 +1092,23 @@ namespace ACE.Server.WorldObjects
             grappleLoopCTS?.Cancel();
             leapLoopCTS?.Cancel();
             mirrorLoopCTS?.Cancel();
+
+            IsEnraged = false;
+
+            // Destroy tracked mirror clones when the parent boss is removed
+            if (!IsMirrorImageClone && EnrageMirrorImageClones != null && EnrageMirrorImageClones.Count > 0)
+            {
+                foreach (var clone in EnrageMirrorImageClones.ToList())
+                {
+                    if (clone == null || clone.IsDestroyed)
+                        continue;
+
+                    if (clone.IsAlive)
+                        clone.UpdateVital(clone.Health, 0);
+
+                    clone.Destroy();
+                }
+            }
 
             // Clear any pending mirror image state
             EnrageMirrorImageImmune = false;

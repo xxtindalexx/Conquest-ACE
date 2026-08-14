@@ -106,5 +106,9 @@ namespace ACE.Entity.Enum.Properties
         PKDungeonLogoutCount = 9059,          // Number of logouts in current 1-hour window
         PKDungeonLogoutLockoutTime = 9060,    // Unix timestamp when logout lockout was applied
         PKDungeonLogoutLockoutLocation = 9061, // Packed landblock+variant for logout lockout
+
+        // CONQUEST: Luminance Lottery
+        LotteryTickets = 9062,    // Number of lottery tickets purchased for the current week (0 = not entered)
+        LotteryWeekNumber = 9063, // Week identifier (yyyyWW) when tickets were purchased; used to expire old entries
     }
 }

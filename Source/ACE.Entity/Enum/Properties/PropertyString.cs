@@ -98,6 +98,7 @@ namespace ACE.Entity.Enum.Properties
         IPQuest                        = 9008,
         ArenaRewardsByOpponent = 9009,
         PKQuestInfo = 9010,
+        EnrageHotSpotMessage = 9212,
         CurrentRareEnchantmentIds = 52029,
     }
 }

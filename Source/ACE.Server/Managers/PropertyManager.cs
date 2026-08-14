@@ -581,6 +581,8 @@ namespace ACE.Server.Managers
                 ("pet_stow_replace", new Property<bool>(false, "pet stowing for different pet devices becomes a stow and replace. defaults to retail value of false")),
                 ("pet_rating_bonuses_disabled_in_pvp", new Property<bool>(true, "if TRUE, pet rating bonuses (Rare/Legendary/Mythic) are disabled during PvP combat")),
                 ("pet_speed_match_owner", new Property<bool>(true, "CONQUEST: if TRUE, pets move 20% faster than their owner to ensure they always keep up and never fall behind.")),
+                ("summon_combat_pet_block_in_restricted_landblocks", new Property<bool>(false, "CONQUEST: if TRUE, combat pet summoning is blocked entirely on landblocks in summon_restricted_landblocks")),
+                ("summon_combat_pet_ethereal", new Property<bool>(false, "CONQUEST: Ethereal override for combat pets in summon_restricted_landblocks when block prop is false")),
                 ("player_config_command", new Property<bool>(false, "If enabled, players can use /config to change their settings via text commands")),
                 ("player_receive_immediate_save", new Property<bool>(false, "if enabled, when the player receives items from an NPC, they will be saved immediately")),
                 ("pk_server", new Property<bool>(false, "set this to TRUE for darktide servers")),
@@ -593,6 +595,7 @@ namespace ACE.Server.Managers
                 ("pvp_disable_ignore_all_armor", new Property<bool>(true, "PvP: Disable IgnoreAllArmor imbue (Phantom weapons) in PvP")),
                 ("dispel_rares_pvp", new Property<bool>(false, "CONQUEST: if TRUE, rare gem spell buffs are automatically dispelled when PvP combat begins, and rare gems cannot be used while PK timer is active.")),
                 ("enable_vpn_detection", new Property<bool>(true, "CONQUEST: if TRUE, enables VPN/proxy detection using proxycheck.io API. Requires proxycheck_api_key to be set. Logs detected VPNs and their ISP information.")),
+                ("lottery_enabled", new Property<bool>(true, "CONQUEST: if TRUE, the weekly luminance lottery is open for entries and draws will run automatically.")),
                 ("pkl_server", new Property<bool>(false, "set this to TRUE for pink servers")),
                 ("quest_info_enabled", new Property<bool>(false, "toggles the /myquests player command")),
                 ("rares_real_time", new Property<bool>(true, "allow for second chance roll based on an rng seeded timestamp for a rare on rare eligible kills that do not generate a rare, rares_max_seconds_between defines maximum seconds before second chance kicks in")),
@@ -628,8 +631,7 @@ namespace ACE.Server.Managers
                 ("arena_allow_observers", new Property<bool>(true, "enable this to allow players to watch arena matches as invisible observers")),
                 ("use_wield_requirements", new Property<bool>(true, "disable this to bypass wield requirements. mostly for dev debugging")),
                 ("version_info_enabled", new Property<bool>(false, "toggles the /aceversion player command")),
-                ("void_contagion_enabled", new Property<bool>(false, "CONQUEST: Master toggle for Void Contagion system. Set to TRUE to enable the Void DoT spread/explosion perk.")),
-                ("void_contagion_explosion_mode", new Property<bool>(false, "CONQUEST: Void Contagion mode toggle (requires void_contagion_enabled). FALSE (default) = DoTs spread to nearby targets at 50% duration. TRUE = Dying mob explodes dealing % of DoT damage to ALL nearby enemies (20%/40%/60% based on perk level).")),
+                ("void_contagion_enabled", new Property<bool>(false, "CONQUEST: Master toggle for Void Contagion. Requires ENL combat trophy aug (EnlightenmentVoidDotSpreadBonus). Dotted mobs spread DoTs to 2 nearby enemies on death, or (20% chance) explode for 20% of their max HP per DoT (up to 3) to all nearby enemies within 10m.")),
                 ("vendor_shop_uses_generator", new Property<bool>(false, "enables or disables vendors using generator system in addition to createlist to create artificial scarcity")),
                 ("world_closed", new Property<bool>(false, "enable this to startup world as a closed to players world"))
                 );
@@ -664,6 +666,7 @@ namespace ACE.Server.Managers
                 ("max_chars_per_account", new Property<long>(11, "retail defaults to 11, client supports up to 20")),
                 ("monster_tick_throttle_limit", new Property<long>(75, "Maximum number of monsters to process per tick per landblock. Higher = faster AI reactions but larger spikes during mass spawns. Adjust based on Discord alerts.")),
                 ("pk_timer", new Property<long>(20, "the number of seconds where a player cannot perform certain actions (ie. teleporting) after becoming involved in a PK battle")),
+                ("pk_command_cooldown", new Property<long>(7200, "PkCommandCooldown: the number of seconds a player must wait after /pk on before /pk off, and after a PK vs PK death before /pk on again. Default 7200 (2 hours). Set to 0 to disable.")),
                 ("pet_mythic_heal_spell_level", new Property<long>(1, "the spell level (1-7) of Heal Other that Mythic pets cast on their owner. 1 = level I, 2 = level II, etc.")),
                 ("pet_mythic_stamina_spell_level", new Property<long>(1, "the spell level (1-5) of Stamina to Health Other that Mythic pets cast on their owner. 1 = level I, 2 = level II, etc.")),
                 ("pet_mythic_spell_cooldown", new Property<long>(15, "the number of seconds Mythic pets must wait between casting healing/stamina spells on their owner")),
@@ -676,7 +679,13 @@ namespace ACE.Server.Managers
 
                 // CONQUEST: Mystery Egg Drop System
                 ("mystery_egg_min_mob_level", new Property<long>(50, "Minimum mob level required to drop mystery eggs. Mobs below this level will never drop eggs.")),
-                ("mystery_egg_wcid", new Property<long>(801502, "The weenie class ID (WCID) of the mystery egg item to create when dropped."))
+                ("mystery_egg_wcid", new Property<long>(801502, "The weenie class ID (WCID) of the mystery egg item to create when dropped.")),
+
+                // CONQUEST: Luminance Lottery
+                ("lottery_ticket_cost_lum", new Property<long>(1000000, "CONQUEST: Luminance cost per lottery ticket. Default 1,000,000.")),
+                ("lottery_max_tickets", new Property<long>(5, "CONQUEST: Maximum number of lottery tickets a single player may purchase per week.")),
+                ("lottery_draw_day_of_week", new Property<long>(0, "CONQUEST: Day of week the draw runs (0=Sunday … 6=Saturday). Default 0 (Sunday).")),
+                ("lottery_draw_hour_est", new Property<long>(18, "CONQUEST: Hour (EST, 24h) at which the weekly lottery draw fires. Default 18 (6 PM EST)."))
                 );
 
         public static readonly ReadOnlyDictionary<string, Property<double>> DefaultDoubleProperties =
@@ -708,6 +717,7 @@ namespace ACE.Server.Managers
                 ("luminance_modifier", new Property<double>(1.0, "Scales the amount of luminance received by players")),
                 ("melee_max_angle", new Property<double>(0.0, "for melee players, the maximum angle before a TurnTo is required. retail appeared to have required a TurnTo even for the smallest of angle offsets.")),
                 ("mob_awareness_range", new Property<double>(1.0, "Scales the distance the monsters become alerted and aggro the players")),
+                ("summon_combat_pet_visual_awareness_range", new Property<double>(5, "CONQUEST: VisualAwarenessRange override for combat pets in summon_restricted_landblocks")),
                 ("pk_new_character_grace_period", new Property<double>(300, "the number of seconds, in addition to pk_respite_timer, that a player killer is set to non-player killer status after first exiting training academy")),
                 ("pk_respite_timer", new Property<double>(300, "the number of seconds that a player killer is set to non-player killer status after dying to another player killer")),
                 ("pvp_custom_aug_timeout", new Property<double>(30, "CONQUEST: the number of seconds without PvP combat before custom augmentations are restored. During PvP combat, all custom augmentations are temporarily set to 0 for balanced fights.")),
@@ -723,11 +733,14 @@ namespace ACE.Server.Managers
                 ("vitae_penalty_max", new Property<double>(0.40, "the maximum vitae penalty a player can have")),
                 ("void_pvp_modifier", new Property<double>(0.5, "Scales the amount of damage players take from Void Magic. Defaults to 0.5, as per retail. For earlier content where DRR isn't as readily available, this can be adjusted for balance.")),
                 ("pvp_void_dot_damage_scale", new Property<double>(0.0, "CONQUEST: Scales Void/Nether DoT damage in PvP. 1.0 = full damage, 0.5 = half, 0 = disabled. The debuff (damage reduction) still applies. Default 0 (disabled).")),
+                ("lottery_pot_share", new Property<double>(0.5, "CONQUEST: Fraction of total lottery lum collected that becomes prize money. The remainder is a permanent lum sink. Default 0.5 (50%).")),
+                ("lottery_first_place_share", new Property<double>(0.5, "CONQUEST: Fraction of the lottery prize pool awarded to 1st place. 2nd and 3rd split the remainder equally. Default 0.5.")),
                 ("pvp_max_2h_damage", new Property<double>(0, "CONQUEST: Maximum two-handed melee damage a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
                 ("pvp_max_melee_damage", new Property<double>(0, "CONQUEST: Maximum melee damage (non-2H) a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
                 ("pvp_max_bow_damage", new Property<double>(0, "CONQUEST: Maximum bow damage a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
                 ("pvp_max_xbow_damage", new Property<double>(0, "CONQUEST: Maximum crossbow damage a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
                 ("pvp_max_magic_damage", new Property<double>(0, "CONQUEST: Maximum magic damage (war/void) a player can deal in PvP. 0 = no cap (default). Helps prevent 1-shot kills from crits.")),
+                ("pvp_weapon_proc_spell_dmg_mod", new Property<double>(0.25, "CONQUEST: Damage multiplier for damaging spells cast by weapons/items in PvP: ProcSpell procs (cast on strike) and built-in SpellDID casts (e.g. Chimeric Eye Evisceration, Focusing Stone). 0.25 = 75% damage reduction (default).")),
                 ("xp_modifier", new Property<double>(1.0, "scales the amount of xp received by players")),
                 ("melee/missile_aug_crit_modifier", new Property<double>(0.002, "the maximum crit damage bonus from melee and missile augs")),
                 ("finesse_attribute_multiplier", new Property<double>(1.5, "the multiplier applied to coordination for calculating finesse weapons attribute damage modifiers")),
@@ -768,6 +781,12 @@ namespace ACE.Server.Managers
                 ("pvp_max_critical_strike", new Property<double>(0, "PvP: Max Critical Strike crit chance (0 = no cap, e.g. 0.25 = 25%)")),
                 ("pvp_max_armor_rend", new Property<double>(0, "PvP: Max Armor Rending penetration multiplier (0 = no cap, e.g. 2.0)")),
                 ("pvp_max_armor_cleaving", new Property<double>(0, "PvP: Max Armor Cleaving reduction (0 = no cap, e.g. 0.5 = 50% armor ignored)")),
+                ("armor_cleaving_mod_override", new Property<double>(0, "Max armor cleave fraction for weapons with IgnoreArmor. 0 = no cap (spell formula). 0.25 = weapons cannot ignore more than 25% armor; lower cleave values are unchanged.")),
+
+                ("shield_max_critical_block_chance", new Property<double>(0.20, "CONQUEST: Max CriticalBlock proc chance at 433 base shield skill (Bulwark; e.g. 0.20 = 20%)")),
+                ("shield_max_glancing_blow_chance", new Property<double>(0.30, "CONQUEST: Max GlancingBlow proc chance at 433 base shield skill (Tactical; e.g. 0.30 = 30%)")),
+                ("shield_max_balanced_critical_block_chance", new Property<double>(0.10, "CONQUEST: Max CriticalBlock proc chance for Balanced shields (both CB + GB; e.g. 0.10 = 10%)")),
+                ("shield_max_balanced_glancing_blow_chance", new Property<double>(0.15, "CONQUEST: Max GlancingBlow proc chance for Balanced shields (both CB + GB; e.g. 0.15 = 15%)")),
 
                 // Global Imbue Modifiers
                 ("pvp_dmg_mod_ar", new Property<double>(1.0, "PvP: Global Armor Rending damage modifier")),
@@ -1148,6 +1167,7 @@ namespace ACE.Server.Managers
                 ("popup_motd", new Property<string>("", "Popup message of the day")),
                 ("server_motd", new Property<string>("", "Server message of the day")),
                 ("proxycheck_api_key", new Property<string>("", "API key for proxycheck.io VPN detection service. Get a free key at https://proxycheck.io/")),
+                ("summon_restricted_landblocks", new Property<string>("", "CONQUEST: Comma-separated restricted landblocks for combat pet overrides (e.g. 0x0066:Conquest Arena,0x0066@2:Arena v2). Omit @variant for all variants.")),
                 ("town_control_alleglist", new Property<string>("", "Comma-separated list of monarch IDs whitelisted for PK quest credit"))
                 );
     }

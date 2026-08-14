@@ -122,7 +122,10 @@ namespace ACE.Server.WorldObjects
 
                 case MagicSchool.ItemEnchantment:
 
-                    if (spell.HasItemCategory || spell.IsPortalSpell)
+                    // CONQUEST: Shield Defender / Heart Seeker cantrips bind to the shield item
+                    if (item.IsShield && IsShieldWeaponModCantrip(spell))
+                        HandleCastSpell(spell, item, item, item, equip: true);
+                    else if (spell.HasItemCategory || spell.IsPortalSpell)
                         HandleCastSpell(spell, this, item, item, equip: true);
                     else
                         HandleCastSpell(spell, item, item, item, equip: true);
@@ -151,7 +154,12 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            var target = spell.School == MagicSchool.ItemEnchantment && !spell.HasItemCategory ? item : this;
+            // CONQUEST: Shield Defender / Heart Seeker cantrips bind to the shield item
+            WorldObject target;
+            if (item.IsShield && IsShieldWeaponModCantrip(spell))
+                target = item;
+            else
+                target = spell.School == MagicSchool.ItemEnchantment && !spell.HasItemCategory ? item : this;
 
             // Retrieve enchantment on target and remove it, if present
             var propertiesEnchantmentRegistry = target.EnchantmentManager.GetEnchantment(spellId, item.Guid.Full);
@@ -163,6 +171,12 @@ namespace ACE.Server.WorldObjects
                 else
                     target.EnchantmentManager.Dispel(propertiesEnchantmentRegistry);
             }
+        }
+
+        // CONQUEST: Shield weapon cantrips that apply to main-hand melee
+        private static bool IsShieldWeaponModCantrip(Spell spell)
+        {
+            return spell.Category == SpellCategory.AttackModRaising || spell.Category == SpellCategory.DefenseModRaising;
         }
 
         /// <summary>

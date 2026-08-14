@@ -118,6 +118,9 @@ namespace ACE.Server.Network.Structure
 
             var baseOffense = weapon.GetProperty(PropertyFloat.WeaponOffense) ?? 1.0f;
             var offenseMod = !weapon.IsRanged ? weapon.EnchantmentManager.GetAttackMod(): 0.0f;
+            // CONQUEST: Shield Heart Seeker cantrips apply to main-hand melee (best-only vs weapon)
+            if (!weapon.IsRanged && weapon.Wielder is Creature creature)
+                offenseMod = Math.Max(offenseMod, WorldObject.GetShieldWeaponOffenseEnchantMod(creature, weapon));
             var auraOffenseMod = weapon.Wielder != null && !weapon.IsRanged ? weapon.Wielder.EnchantmentManager.GetAttackMod() : 0.0f;
             Enchantment_WeaponOffense = weapon.IsEnchantable ? offenseMod + auraOffenseMod : offenseMod;
             return (float)(baseOffense + Enchantment_WeaponOffense);
@@ -140,6 +143,9 @@ namespace ACE.Server.Network.Structure
                 baseDefense += 1;
 
             var defenseMod = weapon.EnchantmentManager.GetDefenseMod();
+            // CONQUEST: Shield Defender cantrips apply to main-hand melee (best-only vs weapon)
+            if (weapon.Wielder is Creature creature)
+                defenseMod = Math.Max(defenseMod, WorldObject.GetShieldWeaponDefenseEnchantMod(creature, weapon));
             var auraDefenseMod = weapon.Wielder != null ? weapon.Wielder.EnchantmentManager.GetDefenseMod() : 0.0f;
             Enchantment_WeaponDefense = weapon.IsEnchantable ? defenseMod + auraDefenseMod : defenseMod;
             return (float)(baseDefense + Enchantment_WeaponDefense);

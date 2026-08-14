@@ -400,6 +400,18 @@ namespace ACE.Server.WorldObjects
                         return;
                     }
                 }
+
+                if (Landblock.npkDungeonLandblocks.Contains((destLandblock, destVariation)))
+                {
+                    // Destination is an NPK-only dungeon - check if player is NPK
+                    if (player.PlayerKillerStatus != PlayerKillerStatus.NPK)
+                    {
+                        player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                            "This dungeon is NPK-only. You must be a non-Player Killer to enter.",
+                            ChatMessageType.Broadcast));
+                        return;
+                    }
+                }
             }
 
 

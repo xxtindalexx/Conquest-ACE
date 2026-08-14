@@ -543,7 +543,7 @@ namespace ACE.Server.WorldObjects
                         return false;
                     }
                     success = TryApplyEnlightenmentPerk(player, PropertyInt.EnlightenmentVoidDotSpreadBonus, 1, 1, gemName,
-                        "Your void magic DoTs now spread to nearby enemies when your target dies!");
+                        "When your dotted enemies die, their DoTs spread to 2 nearby foes. There is a 20% chance they erupt instead, dealing 20% of their max health per DoT (up to 3) to all nearby enemies.");
                     break;
 
                 // Rating Gems (max 4 each)

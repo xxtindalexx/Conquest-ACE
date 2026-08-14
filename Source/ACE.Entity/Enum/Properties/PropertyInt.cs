@@ -673,6 +673,9 @@ namespace ACE.Entity.Enum.Properties
         EnrageLeapVisualEffect = 9206,
         EnrageGroundMarkerWCID = 9207,
         EnrageLeapKnockbackEffect = 9208,
+        EnrageHotSpotPrimary = 9209,
+        EnrageHotSpotSecondary = 9210,
+        EnrageHotspotDamageOverride = 9211,
         [AssessmentProperty]
         SplitArrowCount = 9031,
 
@@ -698,10 +701,10 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         SpellChainTargets = 9331,              // Base number of additional targets for spell chain
         SpellChainDamagePercent = 9332,        // Damage percentage dealt to chain targets (e.g., 30 = 30%)
-        // CONQUEST: Void DoT Spread Properties (Void Contagion - spreads DoTs on death)
+        // CONQUEST: Void Contagion (ENL combat trophy — spread/explosion on dotted mob death)
         [AssessmentProperty]
-        VoidDotSpreadTargets = 9333,           // Number of targets DoTs spread to on death (void magic)
-        EnlightenmentVoidDotSpreadBonus = 9334, // +1 void DoT spread target from enlightenment combat trophy
+        VoidDotSpreadTargets = 9333,           // Deprecated/unused - kept for saved biota compatibility
+        EnlightenmentVoidDotSpreadBonus = 9334, // ENL combat trophy: gates 2-target DoT spread + 20% max-HP explosion on death
                                                // CONQUEST: Champion Mutation System
         ChampionSpawnChance = 9400,            // Generator property - % chance (0-100)
         ChampionTier = 9401,                   // Creature property - tier (1-8)

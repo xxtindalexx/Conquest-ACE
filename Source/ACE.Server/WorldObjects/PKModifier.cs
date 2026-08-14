@@ -92,6 +92,18 @@ namespace ACE.Server.WorldObjects
                 return new ActivationResult(new GameEventWeenieError(player.Session, WeenieError.CannotChangePKStatusWhileRecovering));
             }
 
+            if (IsPKSwitch && player.CurrentLandblock != null && player.Location != null)
+            {
+                var landblockId = (ushort)player.CurrentLandblock.Id.Landblock;
+                var variation = player.Location.Variation ?? 0;
+
+                if (Landblock.npkDungeonLandblocks.Contains((landblockId, variation)))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot enable PK status while in an NPK-only dungeon. Leave the dungeon first.", ChatMessageType.Broadcast));
+                    return new ActivationResult(false);
+                }
+            }
+
             if (IsBusy)
             {
                 return new ActivationResult(new GameEventWeenieErrorWithString(player.Session, WeenieErrorWithString.The_IsCurrentlyInUse, Name));

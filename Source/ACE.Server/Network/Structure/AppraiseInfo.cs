@@ -411,9 +411,23 @@ namespace ACE.Server.Network.Structure
             if (PropertiesFloat.ContainsKey(PropertyFloat.WeaponDefense) && !(wo is Ammunition))
             {
                 var defenseMod = wo.EnchantmentManager.GetDefenseMod();
+                // CONQUEST: Shield Defender cantrips apply to main-hand melee (best-only vs weapon)
+                if (wo.Wielder is Creature creature)
+                    defenseMod = Math.Max(defenseMod, WorldObject.GetShieldWeaponDefenseEnchantMod(creature, wo));
                 var auraDefenseMod = wo.Wielder != null && wo.IsEnchantable ? wo.Wielder.EnchantmentManager.GetDefenseMod() : 0.0f;
 
                 PropertiesFloat[PropertyFloat.WeaponDefense] += defenseMod + auraDefenseMod;
+            }
+
+            if (PropertiesFloat.ContainsKey(PropertyFloat.WeaponOffense) && !(wo is Ammunition) && !wo.IsRanged)
+            {
+                var offenseMod = wo.EnchantmentManager.GetAttackMod();
+                // CONQUEST: Shield Heart Seeker cantrips apply to main-hand melee (best-only vs weapon)
+                if (wo.Wielder is Creature creature)
+                    offenseMod = Math.Max(offenseMod, WorldObject.GetShieldWeaponOffenseEnchantMod(creature, wo));
+                var auraOffenseMod = wo.Wielder != null && wo.IsEnchantable ? wo.Wielder.EnchantmentManager.GetAttackMod() : 0.0f;
+
+                PropertiesFloat[PropertyFloat.WeaponOffense] += offenseMod + auraOffenseMod;
             }
 
             if (PropertiesFloat.TryGetValue(PropertyFloat.ManaConversionMod, out var manaConvMod))
@@ -556,7 +570,46 @@ namespace ACE.Server.Network.Structure
             ArmorHighlight = ArmorMaskHelper.GetHighlightMask(wo);
             ArmorColor = ArmorMaskHelper.GetColorMask(wo);
 
+            if (wo.IsShield)
+                BuildShieldPropertyDescriptions(wo);
+
             AddEnchantments(wo);
+        }
+
+        private void BuildShieldPropertyDescriptions(WorldObject shield)
+        {
+            var descriptions = new List<string>();
+
+            if (shield.Sentinel)
+                descriptions.Add("- Sentinel: Blocks attacks from all directions");
+
+            var hasCriticalBlock = shield.CriticalBlock;
+            var hasGlancingBlow = shield.GlancingBlow;
+
+            if (hasCriticalBlock && hasGlancingBlow)
+                descriptions.Add("- Balanced: Bulwark and Tactical block effects");
+            else if (hasCriticalBlock)
+                descriptions.Add("- Bulwark: Chance to add shield skill to block strength");
+            else if (hasGlancingBlow)
+                descriptions.Add("- Tactical: Frequent partial shield skill bonus to block strength");
+
+            if (descriptions.Count == 0)
+                return;
+
+            AppendPropertyDescriptions(shield, descriptions);
+        }
+
+        private void AppendPropertyDescriptions(WorldObject wo, List<string> descriptions)
+        {
+            var existingUse = wo.GetProperty(PropertyString.Use) ?? "";
+            var separator = string.IsNullOrEmpty(existingUse) ? "" : "\n\n";
+            var header = "Property Details:";
+            var descriptionText = header + "\n" + string.Join("\n", descriptions);
+
+            if (PropertiesString.ContainsKey(PropertyString.Use))
+                PropertiesString[PropertyString.Use] = existingUse + separator + descriptionText;
+            else
+                PropertiesString[PropertyString.Use] = descriptionText;
         }
 
         private void BuildCreature(Creature creature)
@@ -750,11 +803,20 @@ namespace ACE.Server.Network.Structure
             }
 
             // Armor Cleaving
-            var armorCleaving = weapon.GetProperty(PropertyFloat.IgnoreArmor);
-            if (armorCleaving != null && armorCleaving > 0)
+            if (weapon.IgnoreArmor != null)
             {
-                var ignorePercent = armorCleaving.Value * 100;
-                descriptions.Add($"- Armor Cleaving: Ignores {ignorePercent:F0}% Armor");
+                var cleavingMod = weapon.GetArmorCleavingMod();
+                var ignorePercent = (1.0f - cleavingMod) * 100;
+                if (ignorePercent >= 1.0f)
+                    descriptions.Add($"- Armor Cleaving: Ignores {ignorePercent:F0}% Armor");
+            }
+
+            // Ignore Shield
+            var ignoreShield = weapon.GetProperty(PropertyFloat.IgnoreShield);
+            if (ignoreShield != null && ignoreShield > 0)
+            {
+                var ignoreShieldPercent = ignoreShield.Value * 100;
+                descriptions.Add($"- Ignore Shield: {ignoreShieldPercent:F0}% chance to bypass shield on hit");
             }
 
             // Split Arrows

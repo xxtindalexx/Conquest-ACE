@@ -505,6 +505,45 @@ namespace ACE.Server.Entity
             return $"You suffer {damage:N0} points of {severity} impact damage.";
         }
 
+        // CONQUEST: Shield/magic block feedback for defender combat messages
+        /// <summary>
+        /// Returns the blocked-damage suffix for combat messages, or empty if none.
+        /// </summary>
+        public static string FormatBlockedSuffix(uint blocked)
+        {
+            if (blocked == 0)
+                return "";
+
+            return $". ({blocked} blocked)";
+        }
+
+        /// <summary>
+        /// CONQUEST: Builds the defender combat message for physical hits when shield block feedback is shown.
+        /// </summary>
+        public static string GetDefenderDamageMessage(string attackerName, DamageType damageType, float percent, uint amount, AttackConditions attackConditions, bool crit, bool critDefended, uint shieldBlocked)
+        {
+            string verb = null, plural = null;
+            GetAttackVerb(damageType, percent, ref verb, ref plural);
+
+            var prefixes = "";
+            if (crit && !critDefended)
+                prefixes += "Critical hit! ";
+            if (attackConditions.HasFlag(AttackConditions.Overpower))
+                prefixes += "Overpower! ";
+            if (attackConditions.HasFlag(AttackConditions.SneakAttack))
+                prefixes += "Sneak Attack! ";
+            if (attackConditions.HasFlag(AttackConditions.Recklessness))
+                prefixes += "Recklessness! ";
+
+            var type = damageType.GetName().ToLower();
+            var msg = $"{prefixes}{attackerName} {plural} you for {amount} points of {type} damage{FormatBlockedSuffix(shieldBlocked)}";
+
+            if (critDefended)
+                msg += " Your augmentation allows you to avoid a critical hit!";
+
+            return msg;
+        }
+
         /// <summary>
         /// Returns a randomized death message based on damage type
         /// </summary>

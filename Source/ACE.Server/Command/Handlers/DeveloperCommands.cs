@@ -13,6 +13,7 @@ using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Factories;
+using ACE.Server.Factories.Entity;
 using ACE.Server.Factories.Enum;
 using ACE.Server.Managers;
 using ACE.Server.Network;
@@ -2644,6 +2645,40 @@ namespace ACE.Server.Command.Handlers
             var msg = spellRemoved ? "removed from" : "not found on";
 
             session.Network.EnqueueSend(new GameMessageSystemChat($"{spell.Name} ({spell.Id}) {msg} {obj.Name}", ChatMessageType.Broadcast));
+        }
+
+        [CommandHandler("debugitemspellbook", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 0, "Shows the spellbook for the last appraised item, including spell levels.")]
+        public static void HandleDebugItemSpellbook(Session session, params string[] parameters)
+        {
+            var obj = CommandHandlerHelper.GetLastAppraisedObject(session);
+            if (obj == null)
+                return;
+
+            if (obj.Biota.PropertiesSpellBook == null || obj.Biota.PropertiesSpellBook.Count == 0)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"No spellbook on {obj.Name} ({obj.Guid})");
+                return;
+            }
+
+            var lines = new List<string>();
+            lines.Add($"{obj.Name} ({obj.Guid}):");
+
+            foreach (var entry in obj.Biota.PropertiesSpellBook)
+            {
+                var spellId = entry.Key;
+                var probability = entry.Value;
+                var spell = new Spell(spellId);
+                var spellName = spell.NotFound ? "unknown" : spell.Name;
+                var spellLevel = SpellLevelCache.GetSpellLevel(spellId);
+                lines.Add($"  {(SpellId)spellId} ({spellId}) \"{spellName}\" level={spellLevel} prob={probability}");
+            }
+
+            lines.Add($"MaxSpellLevel: {obj.GetMaxSpellLevel()}");
+
+            if (obj.IgnoreArmor != null)
+                lines.Add($"IgnoreArmor: {obj.IgnoreArmor.Value} | GetArmorCleavingMod: {obj.GetArmorCleavingMod()}");
+
+            CommandHandlerHelper.WriteOutputInfo(session, string.Join('\n', lines));
         }
 
         [CommandHandler("pktimer", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, "Sets your PK timer to the current time")]

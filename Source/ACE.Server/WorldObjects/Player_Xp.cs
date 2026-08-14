@@ -29,9 +29,13 @@ namespace ACE.Server.WorldObjects
             //Console.WriteLine($"{Name}.EarnXP({amount}, {sharable}, {fixedAmount})");
 
             // CONQUEST: Mules cannot earn XP
-            if (IsMule)
-                return;
+            if (IsOlthoiPlayer || IsMule)
+            {
+                if (HasVitae)
+                    UpdateXpVitae(amount);
 
+                return;
+            }
             // apply xp modifiers.  Quest XP is multiplicative with general XP modification
             var questModifier = PropertyManager.GetDouble("quest_xp_modifier");
             var modifier = PropertyManager.GetDouble("xp_modifier");

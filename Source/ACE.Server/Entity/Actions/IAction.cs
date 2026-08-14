@@ -323,6 +323,12 @@ namespace ACE.Server.Entity.Actions
         // Pet Tailoring Kit
         PetTailoringKit_CaptureAppearance,
         PetTailoringKit_ApplyAppearance,
+
+        // Random Dye
+        RandomDye_ApplyDye,
+
+        // Imbue Strip Tool
+        ImbueStripTool_ApplyStrip,
     }
     public static class ActionTypeConverter
     {

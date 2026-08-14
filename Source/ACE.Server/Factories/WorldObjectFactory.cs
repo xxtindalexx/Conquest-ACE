@@ -29,6 +29,12 @@ namespace ACE.Server.Factories
             if (weenie == null)
                 return null;
 
+            // CONQUEST: WCID overrides — must work even if weenie type in DB is wrong
+            if (weenie.WeenieClassId == RandomDye.RandomDyeWcid)
+                return new RandomDye(weenie, guid);
+            if (weenie.WeenieClassId == ImbueStripTool.ImbueStripToolWcid)
+                return new ImbueStripTool(weenie, guid);
+
             var objWeenieType = weenie.WeenieType;
 
             switch (objWeenieType)
@@ -151,6 +157,11 @@ namespace ACE.Server.Factories
         /// </summary>
         public static WorldObject CreateWorldObject(ACE.Entity.Models.Biota biota)
         {
+            if (biota.WeenieClassId == RandomDye.RandomDyeWcid)
+                return new RandomDye(biota);
+            if (biota.WeenieClassId == ImbueStripTool.ImbueStripToolWcid)
+                return new ImbueStripTool(biota);
+
             switch (biota.WeenieType)
             {
                 case WeenieType.Undef:
