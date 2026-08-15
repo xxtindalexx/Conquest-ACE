@@ -2948,9 +2948,22 @@ namespace ACE.Server.Command.Handlers
                 ChatMessageType.Broadcast));
         }
 
+        private static readonly PropertyInt64[] WhoAugProps =
+        {
+            PropertyInt64.LumAugCreatureCount,
+            PropertyInt64.LumAugItemCount,
+            PropertyInt64.LumAugLifeCount,
+            PropertyInt64.LumAugWarCount,
+            PropertyInt64.LumAugVoidCount,
+            PropertyInt64.LumAugDurationCount,
+            PropertyInt64.LumAugSpecializeCount,
+            PropertyInt64.LumAugMeleeCount,
+            PropertyInt64.LumAugMissileCount,
+        };
+
         private static int GetPlayerAugmentationCount(IPlayer player)
         {
-            return AugmentationDevice.AugProps.Values.Sum(prop => player.GetProperty(prop) ?? 0);
+            return (int)WhoAugProps.Sum(prop => player.GetProperty(prop) ?? 0);
         }
 
         [CommandHandler("lhr", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows luminance you have received in the last 7 days")]
