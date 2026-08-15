@@ -175,9 +175,9 @@ namespace ACE.Server.Factories.Tables
             ( SpellId.CantripSneakAttackProwess1,          0.02f ),
             ( SpellId.CantripSummoningProwess1,            0.02f ),
 
-            // CONQUEST: weapon cantrips for main-hand melee (same weight as melee loot)
-            ( SpellId.CANTRIPHEARTTHIRST1,                 0.06f ),
-            ( SpellId.CANTRIPDEFENDER1,                    0.06f ),
+            // CONQUEST: weapon cantrips for main-hand melee (0.07 remainder split evenly)
+            ( SpellId.CANTRIPHEARTTHIRST1,                 0.095f ),
+            ( SpellId.CANTRIPDEFENDER1,                    0.095f ),
         };
 
         public static SpellId Roll()
