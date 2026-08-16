@@ -9433,6 +9433,7 @@ namespace ACE.Server.Command.Handlers
                     CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Lottery is now ENABLED. Players may enter with /lum lottery.");
                     PlayerManager.BroadcastToAuditChannel(session?.Player,
                         $"[LOTTERY] Lottery enabled by {session?.Player?.Name ?? "CONSOLE"}.");
+                    Managers.LotteryManager.AnnounceLotteryOpen();
                     break;
 
                 case "disable":

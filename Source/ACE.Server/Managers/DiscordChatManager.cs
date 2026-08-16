@@ -395,10 +395,22 @@ namespace ACE.Server.Managers
         /// </summary>
         public static void SendPvPMessage(string message)
         {
+            SendChannelMessage(ConfigManager.Config.Chat.PvPChannelId, message, "PvP");
+        }
+
+        /// <summary>
+        /// Sends a server event message (lottery, broadcasts, etc.) to the configured Events Discord channel.
+        /// </summary>
+        public static void SendEventsMessage(string message)
+        {
+            SendChannelMessage(ConfigManager.Config.Chat.EventsChannelId, message, "Events");
+        }
+
+        private static void SendChannelMessage(long channelId, string message, string label)
+        {
             if (!ConfigManager.Config.Chat.EnableDiscordConnection)
                 return;
 
-            var channelId = ConfigManager.Config.Chat.PvPChannelId;
             if (channelId == 0)
                 return;
 
@@ -419,7 +431,7 @@ namespace ACE.Server.Managers
             }
             catch (Exception ex)
             {
-                log.Error($"[DiscordRelay] Error sending PvP message: {ex.Message}");
+                log.Error($"[DiscordRelay] Error sending {label} message: {ex.Message}");
             }
         }
     }

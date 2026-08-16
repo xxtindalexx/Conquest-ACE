@@ -56,6 +56,8 @@ namespace ACE.Server.Managers
         // Guards against firing more than once per week even if the timer fires multiple times
         // in the same minute.  Tracks the ISO week+year string of the last completed draw.
         private static volatile string _lastDrawWeekKey = string.Empty;
+        // Guards against duplicate Discord "lottery open" announcements per round.
+        private static volatile string _lastOpenAnnounceWeekKey = string.Empty;
         private static readonly object _drawLock = new object();
 
         private static bool _isInitialized;
@@ -283,10 +285,12 @@ namespace ACE.Server.Managers
             {
                 var estNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone);
 
-                // Only run on the configured day (0 = Sunday) at the configured hour (within the same minute)
                 var drawDayOfWeek = (DayOfWeek)(int)Math.Max(0, Math.Min(6, PropertyManager.GetLong("lottery_draw_day_of_week")));
                 var drawHour = (int)Math.Max(0, Math.Min(23, PropertyManager.GetLong("lottery_draw_hour_est")));
 
+                CheckLotteryOpenAnnouncement(estNow, drawDayOfWeek, drawHour);
+
+                // Only run on the configured day (0 = Sunday) at the configured hour (within the same minute)
                 if (estNow.DayOfWeek != drawDayOfWeek || estNow.Hour != drawHour)
                     return;
 
@@ -326,7 +330,9 @@ namespace ACE.Server.Managers
 
             if (_entries.IsEmpty)
             {
-                BroadcastSystemMessage("[LOTTERY] This week's lottery draw has run — no tickets were sold. Better luck next week!");
+                var noTicketsMsg = "[LOTTERY] This week's lottery draw has run — no tickets were sold. Better luck next week!";
+                BroadcastSystemMessage(noTicketsMsg);
+                SendLotteryDiscordAnnouncement("🎰 **Weekly Luminance Lottery — Draw Complete**\nNo tickets were sold this week.");
                 log.Info("[LOTTERY] Draw ran with no participants.");
                 return;
             }
@@ -389,6 +395,7 @@ namespace ACE.Server.Managers
                 sb.AppendLine("  No winners were selected.");
 
             BroadcastSystemMessage(sb.ToString().TrimEnd());
+            SendLotteryDrawDiscordAnnouncement(totalTickets, totalCollected, prizePool, firstPrize, runnerUpPrize, winners);
 
             log.Info($"[LOTTERY] Draw complete. Tickets={totalTickets}, Collected={totalCollected:N0}, Pool={prizePool:N0}.");
             foreach (var (id, name, prize, place) in winners)
@@ -754,6 +761,85 @@ namespace ACE.Server.Managers
                 var trimmed = line.TrimEnd();
                 if (!string.IsNullOrEmpty(trimmed))
                     PlayerManager.BroadcastToAll(new GameMessageSystemChat(trimmed, ChatMessageType.WorldBroadcast));
+            }
+        }
+
+        /// <summary>
+        /// Announces on Discord (and in-game) that the lottery is open for the current round.
+        /// Called automatically when the round opens after draw, or manually via /lottery enable.
+        /// </summary>
+        public static void AnnounceLotteryOpen()
+        {
+            if (!PropertyManager.GetBool("lottery_enabled"))
+                return;
+
+            var maxTickets = (int)PropertyManager.GetLong("lottery_max_tickets");
+            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
+            var drawTime = NextDrawTime();
+            var estDraw = TimeZoneInfo.ConvertTimeFromUtc(drawTime, EstTimeZone);
+            var drawStr = estDraw.ToString("ddd MMM d 'at' h:mm tt 'EST'");
+
+            var inGameMsg = $"[LOTTERY] The weekly luminance lottery is now open! " +
+                            $"Buy up to {maxTickets} ticket(s) with /lum lottery <count> ({ticketCost:N0} lum each). Draw: {drawStr}.";
+            BroadcastSystemMessage(inGameMsg);
+
+            var discordMsg = $"🎰 **Weekly Luminance Lottery is now OPEN**\n" +
+                             $"Buy up to **{maxTickets}** ticket(s) with `/lum lottery <count>` ({ticketCost:N0} lum each)\n" +
+                             $"Next draw: **{drawStr}**";
+            SendLotteryDiscordAnnouncement(discordMsg);
+
+            _lastOpenAnnounceWeekKey = GetCurrentWeekKey();
+            log.Info("[LOTTERY] Announced lottery open for current round.");
+        }
+
+        private static void CheckLotteryOpenAnnouncement(DateTime estNow, DayOfWeek drawDayOfWeek, int drawHour)
+        {
+            if (!PropertyManager.GetBool("lottery_enabled"))
+                return;
+
+            // New round opens the hour after the draw (e.g. 7 PM Sunday when draw is 6 PM).
+            if (drawHour >= 23 || estNow.DayOfWeek != drawDayOfWeek || estNow.Hour != drawHour + 1)
+                return;
+
+            var weekKey = GetCurrentWeekKey();
+            if (_lastOpenAnnounceWeekKey == weekKey)
+                return;
+
+            AnnounceLotteryOpen();
+        }
+
+        private static void SendLotteryDrawDiscordAnnouncement(
+            long totalTickets, long totalCollected, long prizePool,
+            long firstPrize, long runnerUpPrize,
+            List<(uint id, string name, long prize, int place)> winners)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("🎰 **Weekly Luminance Lottery — Draw Complete**");
+            sb.AppendLine($"{totalTickets:N0} tickets sold · {totalCollected:N0} lum collected");
+            sb.AppendLine($"Prize pool: **{prizePool:N0}** lum");
+
+            foreach (var (_, name, prize, place) in winners)
+            {
+                var medal = place == 1 ? "🥇" : place == 2 ? "🥈" : "🥉";
+                var placeStr = place == 1 ? "1st" : place == 2 ? "2nd" : "3rd";
+                sb.AppendLine($"{medal} **{placeStr} place:** {name} — {prize:N0} lum");
+            }
+
+            SendLotteryDiscordAnnouncement(sb.ToString().TrimEnd());
+        }
+
+        private static void SendLotteryDiscordAnnouncement(string message)
+        {
+            if (!ConfigManager.Config.Chat.EnableDiscordConnection || ConfigManager.Config.Chat.EventsChannelId == 0)
+                return;
+
+            try
+            {
+                DiscordChatManager.SendEventsMessage(message);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[LOTTERY] Failed to send Discord announcement: {ex.Message}", ex);
             }
         }
     }
