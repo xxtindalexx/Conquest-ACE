@@ -144,6 +144,14 @@ namespace ACE.Server.Managers
                 return;
             }
 
+            if (HasCurrentRoundDrawCompleted())
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "[LOTTERY] This week's draw has already run. New entries will open shortly.",
+                    ChatMessageType.Broadcast));
+                return;
+            }
+
             var currentWeekNum = GetCurrentWeekNumber();
             var characterId = player.Guid.Full;
 
@@ -160,11 +168,8 @@ namespace ACE.Server.Managers
                 }
             }
 
-            // How many tickets does this player already hold for the current week?
-            var storedWeek = (int)(player.GetProperty(PropertyInt64.LotteryWeekNumber) ?? 0);
-            var alreadyHeld = storedWeek == currentWeekNum
-                ? (int)(player.GetProperty(PropertyInt64.LotteryTickets) ?? 0)
-                : 0;
+            // How many tickets does this player already hold for the current lottery round?
+            var alreadyHeld = GetPlayerTicketsForCurrentRound(player);
 
             var canBuy = maxTickets - alreadyHeld;
             if (canBuy <= 0)
@@ -233,11 +238,15 @@ namespace ACE.Server.Managers
             var potShare = PropertyManager.GetDouble("lottery_pot_share");
             var firstShare = PropertyManager.GetDouble("lottery_first_place_share");
 
-            var currentWeekNum = GetCurrentWeekNumber();
-            var storedWeek = (int)(player.GetProperty(PropertyInt64.LotteryWeekNumber) ?? 0);
-            var myTickets = storedWeek == currentWeekNum
-                ? (int)(player.GetProperty(PropertyInt64.LotteryTickets) ?? 0)
-                : 0;
+            if (HasCurrentRoundDrawCompleted())
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "[LOTTERY] This week's draw has already run. New entries will open shortly.",
+                    ChatMessageType.Broadcast));
+                return;
+            }
+
+            var myTickets = GetPlayerTicketsForCurrentRound(player);
 
             long totalTickets = _entries.Values.Sum(e => e.Tickets);
             long totalCollected = totalTickets * ticketCost;
@@ -427,7 +436,7 @@ namespace ACE.Server.Managers
         /// </summary>
         private static void MergeEntriesFromDb()
         {
-            var currentWeek = GetCurrentWeekNumber();
+            var roundWeeks = GetCurrentRoundWeekNumbers();
             var ticketType = (ushort)PropertyInt64.LotteryTickets;
             var weekType = (ushort)PropertyInt64.LotteryWeekNumber;
 
@@ -440,7 +449,7 @@ namespace ACE.Server.Managers
                     join w in context.BiotaPropertiesInt64 on t.ObjectId equals w.ObjectId
                     join c in context.Character on t.ObjectId equals c.Id
                     where t.Type == ticketType && t.Value > 0
-                       && w.Type == weekType && w.Value == currentWeek
+                       && w.Type == weekType && roundWeeks.Contains(w.Value)
                     select new { CharId = t.ObjectId, Name = c.Name, Tickets = (int)t.Value, AccountId = c.AccountId }
                 ).ToList();
 
@@ -464,15 +473,15 @@ namespace ACE.Server.Managers
         }
 
         /// <summary>
-        /// Loads all biota entries with LotteryTickets > 0 and LotteryWeekNumber == current week
-        /// into the in-memory dict, and rebuilds the IP → characterId map from account records.
+        /// Loads all biota entries with LotteryTickets > 0 and LotteryWeekNumber matching the
+        /// current lottery round into the in-memory dict, and rebuilds the IP → characterId map.
         /// </summary>
         private static void LoadCurrentWeekEntries()
         {
             _entries.Clear();
             _ipToCharId.Clear();
 
-            var currentWeek = GetCurrentWeekNumber();
+            var roundWeeks = GetCurrentRoundWeekNumbers();
             var ticketType = (ushort)PropertyInt64.LotteryTickets;
             var weekType = (ushort)PropertyInt64.LotteryWeekNumber;
 
@@ -485,7 +494,7 @@ namespace ACE.Server.Managers
                     join w in context.BiotaPropertiesInt64 on t.ObjectId equals w.ObjectId
                     join c in context.Character on t.ObjectId equals c.Id
                     where t.Type == ticketType && t.Value > 0
-                       && w.Type == weekType && w.Value == currentWeek
+                       && w.Type == weekType && roundWeeks.Contains(w.Value)
                     select new { CharId = t.ObjectId, Name = c.Name, Tickets = (int)t.Value, AccountId = (uint)c.AccountId }
                 ).ToList();
 
@@ -564,10 +573,33 @@ namespace ACE.Server.Managers
         // ──────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Returns the ISO week number in the form yyyyWW (e.g. 202625).
+        /// Returns the lottery-round week number in the form yyyyWW (e.g. 202632).
+        /// The round rolls after the configured draw hour, not at Sunday midnight, so
+        /// Saturday-night purchases stay valid through the Sunday draw.
         /// Used as the week identifier stored in PropertyInt64.LotteryWeekNumber.
         /// </summary>
         public static int GetCurrentWeekNumber()
+        {
+            var drawDayOfWeek = (DayOfWeek)(int)Math.Max(0, Math.Min(6, PropertyManager.GetLong("lottery_draw_day_of_week")));
+            var drawHour = (int)Math.Max(0, Math.Min(23, PropertyManager.GetLong("lottery_draw_hour_est")));
+
+            var estNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone);
+
+            int daysUntil = ((int)drawDayOfWeek - (int)estNow.DayOfWeek + 7) % 7;
+            if (daysUntil == 0 && estNow.Hour > drawHour)
+                daysUntil = 7;
+
+            // Identify the round by the day before the target draw (Saturday for a Sunday draw).
+            var referenceDate = estNow.Date.AddDays(daysUntil - 1);
+            int week = CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(referenceDate, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Sunday);
+            return referenceDate.Year * 100 + week;
+        }
+
+        /// <summary>
+        /// Returns the calendar ISO week number in EST (rolls at Sunday midnight).
+        /// Used to recognize tickets purchased under the old week key during the Sunday gap.
+        /// </summary>
+        public static int GetCalendarWeekNumber()
         {
             var estNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EstTimeZone);
             int week = CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(estNow, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Sunday);
@@ -581,6 +613,50 @@ namespace ACE.Server.Managers
         {
             var n = GetCurrentWeekNumber();
             return $"{n / 100}-W{n % 100:D2}";
+        }
+
+        /// <summary>
+        /// Week numbers that belong to the current open lottery round.
+        /// During the Sunday gap before draw, lottery week and calendar week may differ.
+        /// </summary>
+        private static HashSet<long> GetCurrentRoundWeekNumbers()
+        {
+            return new HashSet<long>
+            {
+                GetCurrentWeekNumber(),
+                GetCalendarWeekNumber()
+            };
+        }
+
+        /// <summary>
+        /// True when <paramref name="storedWeek"/> belongs to the current lottery round.
+        /// </summary>
+        private static bool IsCurrentRoundWeek(int storedWeek)
+        {
+            if (storedWeek == 0)
+                return false;
+
+            return GetCurrentRoundWeekNumbers().Contains(storedWeek);
+        }
+
+        /// <summary>
+        /// Returns how many tickets the player holds for the current lottery round.
+        /// </summary>
+        private static int GetPlayerTicketsForCurrentRound(Player player)
+        {
+            if (!IsCurrentRoundWeek((int)(player.GetProperty(PropertyInt64.LotteryWeekNumber) ?? 0)))
+                return 0;
+
+            return (int)(player.GetProperty(PropertyInt64.LotteryTickets) ?? 0);
+        }
+
+        /// <summary>
+        /// True after the weekly draw has run but before the lottery week rolls over
+        /// (e.g. Sunday 6–7 PM EST with a 6 PM draw).
+        /// </summary>
+        private static bool HasCurrentRoundDrawCompleted()
+        {
+            return _lastDrawWeekKey == GetCurrentWeekKey();
         }
 
         /// <summary>
