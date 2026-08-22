@@ -1744,6 +1744,8 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
+            AllegianceManager.LoadPlayer(player);
+
             if (bonus.HasValue)
             {
                 if (bonus.Value < 0)
@@ -1761,6 +1763,8 @@ namespace ACE.Server.Command.Handlers
 
                 if (player.Allegiance != null)
                     AllegianceManager.Rebuild(player.Allegiance);
+
+                AllegianceManager.LoadPlayer(player);
 
                 if (bonus.Value <= 0)
                     CommandHandlerHelper.WriteOutputInfo(session, $"Cleared allegiance rank bonus for {player.Name}.", ChatMessageType.Broadcast);
@@ -9502,6 +9506,7 @@ namespace ACE.Server.Command.Handlers
             {
                 case "enable":
                     PropertyManager.ModifyBool("lottery_enabled", true);
+                    Managers.LotteryManager.ClearDrawWeekGuard();
                     CommandHandlerHelper.WriteOutputInfo(session, "[LOTTERY] Lottery is now ENABLED. Players may enter with /lum lottery.");
                     PlayerManager.BroadcastToAuditChannel(session?.Player,
                         $"[LOTTERY] Lottery enabled by {session?.Player?.Name ?? "CONSOLE"}.");

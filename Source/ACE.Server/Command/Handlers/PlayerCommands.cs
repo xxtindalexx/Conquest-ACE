@@ -2755,13 +2755,14 @@ namespace ACE.Server.Command.Handlers
             // Sort alphabetically by quest name
             var sortedQuests = accountQuests.OrderBy(q => q.Quest, StringComparer.OrdinalIgnoreCase).ToList();
 
-            // Get the XP bonus
+            // QB count double-counts completed quests (stamp + completion); matches /bonus and /qb
+            var questCount = player.Account?.CachedQuestBonusCount ?? 0;
             var questBonus = player.GetQuestCountXPBonus();
             var questBonusPercent = ((questBonus - 1.0) * 100.0);
 
             // Display header
             session.Network.EnqueueSend(new GameMessageSystemChat(
-                $"---- Account Quests ({sortedQuests.Count}) | XP Bonus: {questBonusPercent:F1}% ----",
+                $"---- Account Quests ({sortedQuests.Count} unique, {questCount} QB) | XP Bonus: {questBonusPercent:F2}% ----",
                 ChatMessageType.Broadcast));
 
             foreach (var quest in sortedQuests)

@@ -650,6 +650,21 @@ namespace ACE.Server.Managers
             PersistStringProperty("lottery_last_open_week", weekKey);
         }
 
+        /// <summary>
+        /// Clears the draw-completed guard so players may enter again.
+        /// Called when an admin explicitly re-opens the lottery for the current round.
+        /// </summary>
+        public static void ClearDrawWeekGuard()
+        {
+            lock (_drawLock)
+            {
+                _lastDrawWeekKey = string.Empty;
+                PersistStringProperty("lottery_last_draw_week", string.Empty);
+            }
+
+            log.Info("[LOTTERY] Draw week guard cleared.");
+        }
+
         private static void PersistLongProperty(string key, long value)
         {
             PropertyManager.ModifyLong(key, value);
