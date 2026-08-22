@@ -21,12 +21,13 @@ using ACE.Server.WorldObjects;
 namespace ACE.Server.Managers
 {
     /// <summary>
-    /// CONQUEST: Server-wide weekly luminance lottery.
+    /// CONQUEST: Server-wide weekly luminance lottery with optional compounding jackpot.
     ///
     /// Players enter with /lum lottery [count] (1–lottery_max_tickets tickets, each costing lottery_ticket_cost_lum).
-    /// Every Sunday at lottery_draw_hour_est (EST) the server picks 3 weighted-random winners who share
-    /// lottery_pot_share of the total pot: 1st place gets lottery_first_place_share of the prize pool;
-    /// 2nd and 3rd split the rest equally.
+    /// Every week at lottery_draw_hour_est (EST) the server picks 3 weighted-random winners who share
+    /// lottery_pot_share of the full pot (base + rollover + ticket sales): 1st place gets lottery_first_place_share
+    /// of the payout; 2nd and 3rd split the remainder equally. When lottery_rollover is TRUE, the leftover
+    /// pot carries to the next week.
     ///
     /// Entries are persisted in biota_properties_int64 using PropertyInt64.LotteryTickets (9062) and
     /// PropertyInt64.LotteryWeekNumber (9063), so no new schema is required and entries survive restarts.
@@ -78,6 +79,18 @@ namespace ACE.Server.Managers
             public int Tickets;
         }
 
+        private struct LotteryPotSnapshot
+        {
+            public long BaseLum;
+            public long LeftoverLum;
+            public long TicketCollected;
+            public long FullPot;
+            public long PrizePaid;
+            public long FirstPrize;
+            public long RunnerUpPrize;
+            public long StartingPot;
+        }
+
         // ──────────────────────────────────────────────────────────────────
         // Lifecycle
         // ──────────────────────────────────────────────────────────────────
@@ -91,6 +104,9 @@ namespace ACE.Server.Managers
                 return;
 
             log.Info("[LOTTERY] Initializing Luminance Lottery Manager...");
+
+            _lastDrawWeekKey = PropertyManager.GetString("lottery_last_draw_week");
+            _lastOpenAnnounceWeekKey = PropertyManager.GetString("lottery_last_open_week");
 
             LoadCurrentWeekEntries();
 
@@ -237,8 +253,6 @@ namespace ACE.Server.Managers
 
             var maxTickets = (int)PropertyManager.GetLong("lottery_max_tickets");
             var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
-            var potShare = PropertyManager.GetDouble("lottery_pot_share");
-            var firstShare = PropertyManager.GetDouble("lottery_first_place_share");
 
             if (HasCurrentRoundDrawCompleted())
             {
@@ -251,10 +265,7 @@ namespace ACE.Server.Managers
             var myTickets = GetPlayerTicketsForCurrentRound(player);
 
             long totalTickets = _entries.Values.Sum(e => e.Tickets);
-            long totalCollected = totalTickets * ticketCost;
-            long prizePool = (long)(totalCollected * potShare);
-            long first = (long)(prizePool * firstShare);
-            long runnerUp = (long)(prizePool * (1.0 - firstShare) / 2.0);
+            var pot = GetPotSnapshot(totalTickets);
 
             var drawTime = NextDrawTime();
             var estDraw = TimeZoneInfo.ConvertTimeFromUtc(drawTime, EstTimeZone);
@@ -268,7 +279,8 @@ namespace ACE.Server.Managers
             sb.AppendLine($"Draw: {estDraw:ddd MMM d 'at' h:mm tt 'EST'} (in {timeStr})");
             sb.AppendLine($"Ticket cost: {ticketCost:N0} lum   Max: {maxTickets}/player");
             sb.AppendLine($"Participants: {_entries.Count}   Total tickets: {totalTickets:N0}");
-            sb.AppendLine($"Prize pool: {prizePool:N0} lum  (1st: {first:N0}  2nd/3rd: {runnerUp:N0} ea.)");
+            sb.AppendLine($"Pot: {pot.FullPot:N0} lum{FormatPotBreakdown(pot, includeTickets: true)}");
+            sb.AppendLine($"Payout this draw: {pot.PrizePaid:N0} lum  (1st: {pot.FirstPrize:N0}  2nd/3rd: {pot.RunnerUpPrize:N0} ea.)");
             sb.AppendLine($"Your tickets this week: {myTickets}/{maxTickets}");
 
             foreach (var line in sb.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries))
@@ -301,7 +313,7 @@ namespace ACE.Server.Managers
                     if (_lastDrawWeekKey == weekKey)
                         return;
 
-                    _lastDrawWeekKey = weekKey;
+                    CommitDrawWeekKey(weekKey);
                 }
 
                 TryRunWeeklyDraw();
@@ -337,15 +349,8 @@ namespace ACE.Server.Managers
                 return;
             }
 
-            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
-            var potShare = PropertyManager.GetDouble("lottery_pot_share");
-            var firstShare = PropertyManager.GetDouble("lottery_first_place_share");
-
             long totalTickets = _entries.Values.Sum(e => e.Tickets);
-            long totalCollected = totalTickets * ticketCost;
-            long prizePool = (long)(totalCollected * potShare);
-            long firstPrize = (long)(prizePool * firstShare);
-            long runnerUpPrize = (long)(prizePool * (1.0 - firstShare) / 2.0);
+            var pot = GetPotSnapshot(totalTickets);
 
             // Build weighted pool: one entry per ticket
             var pool = new List<uint>();
@@ -357,6 +362,7 @@ namespace ACE.Server.Managers
             var winners = new List<(uint id, string name, long prize, int place)>();
             var usedIds = new HashSet<uint>();
             int needed = Math.Min(3, _entries.Count);
+            long totalAwarded = 0;
 
             for (int i = 0; i < needed; i++)
             {
@@ -370,11 +376,12 @@ namespace ACE.Server.Managers
                 usedIds.Add(winnerId);
 
                 var winnerName = _entries.TryGetValue(winnerId, out var entry) ? entry.Name : $"0x{winnerId:X8}";
-                var prize = i == 0 ? firstPrize : runnerUpPrize;
+                var prize = i == 0 ? pot.FirstPrize : pot.RunnerUpPrize;
                 var place = i + 1;
 
                 winners.Add((winnerId, winnerName, prize, place));
                 AwardLuminance(winnerId, winnerName, prize);
+                totalAwarded += prize;
             }
 
             // Reset ticket counts for all participants so they can enter the next lottery
@@ -382,10 +389,18 @@ namespace ACE.Server.Managers
             ResetParticipantsAfterDraw(participantIds);
             _entries.Clear();
 
+            var nextPotLum = PropertyManager.GetBool("lottery_rollover")
+                ? Math.Max(0, pot.FullPot - totalAwarded)
+                : 0;
+            PersistLongProperty("lottery_pot_lum", nextPotLum);
+
             // Announce results
             var sb = new StringBuilder();
-            sb.AppendLine($"[LOTTERY] This week's draw is complete! {totalTickets:N0} tickets were sold, {totalCollected:N0} lum collected.");
-            sb.AppendLine($"Prize pool: {prizePool:N0} lum (1st: {firstPrize:N0}  2nd/3rd: {runnerUpPrize:N0} ea.)");
+            sb.AppendLine($"[LOTTERY] This week's draw is complete! {totalTickets:N0} tickets were sold, {pot.TicketCollected:N0} lum from tickets.");
+            sb.AppendLine($"Pot: {pot.FullPot:N0} lum{FormatPotBreakdown(pot)}");
+            sb.AppendLine($"Paid to winners: {totalAwarded:N0} lum  (1st: {pot.FirstPrize:N0}  2nd/3rd: {pot.RunnerUpPrize:N0} ea.)");
+            if (PropertyManager.GetBool("lottery_rollover"))
+                sb.AppendLine($"Carried to next week: {nextPotLum:N0} lum.");
             foreach (var (_, name, prize, place) in winners)
             {
                 var placeStr = place == 1 ? "1st" : place == 2 ? "2nd" : "3rd";
@@ -395,9 +410,9 @@ namespace ACE.Server.Managers
                 sb.AppendLine("  No winners were selected.");
 
             BroadcastSystemMessage(sb.ToString().TrimEnd());
-            SendLotteryDrawDiscordAnnouncement(totalTickets, totalCollected, prizePool, firstPrize, runnerUpPrize, winners);
+            SendLotteryDrawDiscordAnnouncement(totalTickets, pot, totalAwarded, nextPotLum, winners);
 
-            log.Info($"[LOTTERY] Draw complete. Tickets={totalTickets}, Collected={totalCollected:N0}, Pool={prizePool:N0}.");
+            log.Info($"[LOTTERY] Draw complete. Tickets={totalTickets}, FullPot={pot.FullPot:N0}, Awarded={totalAwarded:N0}, NextPot={nextPotLum:N0}.");
             foreach (var (id, name, prize, place) in winners)
                 log.Info($"[LOTTERY]   {place}{(place == 1 ? "st" : place == 2 ? "nd" : "rd")} place: {name} (0x{id:X8}) — {prize:N0} lum");
         }
@@ -579,6 +594,98 @@ namespace ACE.Server.Managers
         // Helpers
         // ──────────────────────────────────────────────────────────────────
 
+        private static LotteryPotSnapshot GetPotSnapshot(long totalTickets)
+        {
+            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
+            var potShare = PropertyManager.GetDouble("lottery_pot_share");
+            var firstShare = PropertyManager.GetDouble("lottery_first_place_share");
+            var baseLum = PropertyManager.GetLong("lottery_base_lum");
+            var rolloverEnabled = PropertyManager.GetBool("lottery_rollover");
+            var leftoverLum = rolloverEnabled ? PropertyManager.GetLong("lottery_pot_lum") : 0;
+
+            var ticketCollected = totalTickets * ticketCost;
+            var fullPot = baseLum + leftoverLum + ticketCollected;
+            var prizePaid = (long)(fullPot * potShare);
+            var firstPrize = (long)(prizePaid * firstShare);
+            var runnerUpPrize = (long)(prizePaid * (1.0 - firstShare) / 2.0);
+
+            return new LotteryPotSnapshot
+            {
+                BaseLum = baseLum,
+                LeftoverLum = leftoverLum,
+                TicketCollected = ticketCollected,
+                FullPot = fullPot,
+                PrizePaid = prizePaid,
+                FirstPrize = firstPrize,
+                RunnerUpPrize = runnerUpPrize,
+                StartingPot = baseLum + leftoverLum
+            };
+        }
+
+        private static string FormatPotBreakdown(LotteryPotSnapshot pot, bool includeTickets = false)
+        {
+            var parts = new List<string>();
+            if (pot.BaseLum > 0)
+                parts.Add($"base: {pot.BaseLum:N0}");
+            if (pot.LeftoverLum > 0)
+                parts.Add($"rollover: {pot.LeftoverLum:N0}");
+            if (includeTickets && pot.TicketCollected > 0)
+                parts.Add($"tickets: {pot.TicketCollected:N0}");
+
+            if (parts.Count == 0)
+                return string.Empty;
+
+            return "  (" + string.Join("  ", parts) + ")";
+        }
+
+        private static void CommitDrawWeekKey(string weekKey)
+        {
+            _lastDrawWeekKey = weekKey;
+            PersistStringProperty("lottery_last_draw_week", weekKey);
+        }
+
+        private static void CommitOpenWeekKey(string weekKey)
+        {
+            _lastOpenAnnounceWeekKey = weekKey;
+            PersistStringProperty("lottery_last_open_week", weekKey);
+        }
+
+        private static void PersistLongProperty(string key, long value)
+        {
+            PropertyManager.ModifyLong(key, value);
+
+            var description = DefaultPropertyManager.DefaultLongProperties[key].Description;
+            if (DatabaseManager.ShardConfig.LongExists(key))
+            {
+                DatabaseManager.ShardConfig.SaveLong(new ConfigPropertiesLong
+                {
+                    Key = key,
+                    Value = value,
+                    Description = description
+                });
+            }
+            else
+                DatabaseManager.ShardConfig.AddLong(key, value, description);
+        }
+
+        private static void PersistStringProperty(string key, string value)
+        {
+            PropertyManager.ModifyString(key, value);
+
+            var description = DefaultPropertyManager.DefaultStringProperties[key].Description;
+            if (DatabaseManager.ShardConfig.StringExists(key))
+            {
+                DatabaseManager.ShardConfig.SaveString(new ConfigPropertiesString
+                {
+                    Key = key,
+                    Value = value,
+                    Description = description
+                });
+            }
+            else
+                DatabaseManager.ShardConfig.AddString(key, value, description);
+        }
+
         /// <summary>
         /// Returns the lottery-round week number in the form yyyyWW (e.g. 202632).
         /// The round rolls after the configured draw hour, not at Sunday midnight, so
@@ -684,14 +791,12 @@ namespace ACE.Server.Managers
         }
 
         /// <summary>
-        /// Returns the current pot size in luminance (total collected × pot_share).
+        /// Returns the current full pot size in luminance (base + rollover + ticket sales).
         /// </summary>
         public static long GetCurrentPrizePool()
         {
-            var ticketCost = PropertyManager.GetLong("lottery_ticket_cost_lum");
-            var potShare = PropertyManager.GetDouble("lottery_pot_share");
             long totalTickets = _entries.Values.Sum(e => e.Tickets);
-            return (long)(totalTickets * ticketCost * potShare);
+            return GetPotSnapshot(totalTickets).FullPot;
         }
 
         /// <summary>
@@ -703,7 +808,7 @@ namespace ACE.Server.Managers
             var weekKey = GetCurrentWeekKey();
             lock (_drawLock)
             {
-                _lastDrawWeekKey = weekKey;
+                CommitDrawWeekKey(weekKey);
             }
 
             var adminName = adminSession?.Player?.Name ?? "CONSOLE";
@@ -778,18 +883,21 @@ namespace ACE.Server.Managers
             var drawTime = NextDrawTime();
             var estDraw = TimeZoneInfo.ConvertTimeFromUtc(drawTime, EstTimeZone);
             var drawStr = estDraw.ToString("ddd MMM d 'at' h:mm tt 'EST'");
+            var startingPot = GetPotSnapshot(0).StartingPot;
 
             var inGameMsg = $"[LOTTERY] The weekly luminance lottery is now open! " +
+                            $"Starting pot: {startingPot:N0} lum. " +
                             $"Buy up to {maxTickets} ticket(s) with /lum lottery <count> ({ticketCost:N0} lum each). Draw: {drawStr}.";
             BroadcastSystemMessage(inGameMsg);
 
             var discordMsg = $"🎰 **Weekly Luminance Lottery is now OPEN**\n" +
+                             $"Starting pot: **{startingPot:N0}** lum\n" +
                              $"Buy up to **{maxTickets}** ticket(s) with `/lum lottery <count>` ({ticketCost:N0} lum each)\n" +
                              $"Next draw: **{drawStr}**";
             SendLotteryDiscordAnnouncement(discordMsg);
 
-            _lastOpenAnnounceWeekKey = GetCurrentWeekKey();
-            log.Info("[LOTTERY] Announced lottery open for current round.");
+            CommitOpenWeekKey(GetCurrentWeekKey());
+            log.Info($"[LOTTERY] Announced lottery open for current round. Starting pot: {startingPot:N0} lum.");
         }
 
         private static void CheckLotteryOpenAnnouncement(DateTime estNow, DayOfWeek drawDayOfWeek, int drawHour)
@@ -809,14 +917,17 @@ namespace ACE.Server.Managers
         }
 
         private static void SendLotteryDrawDiscordAnnouncement(
-            long totalTickets, long totalCollected, long prizePool,
-            long firstPrize, long runnerUpPrize,
+            long totalTickets, LotteryPotSnapshot pot,
+            long totalAwarded, long nextPotLum,
             List<(uint id, string name, long prize, int place)> winners)
         {
             var sb = new StringBuilder();
             sb.AppendLine("🎰 **Weekly Luminance Lottery — Draw Complete**");
-            sb.AppendLine($"{totalTickets:N0} tickets sold · {totalCollected:N0} lum collected");
-            sb.AppendLine($"Prize pool: **{prizePool:N0}** lum");
+            sb.AppendLine($"{totalTickets:N0} tickets sold · {pot.TicketCollected:N0} lum from tickets");
+            sb.AppendLine($"Pot: **{pot.FullPot:N0}** lum{FormatPotBreakdown(pot)}");
+            sb.AppendLine($"Paid to winners: **{totalAwarded:N0}** lum");
+            if (PropertyManager.GetBool("lottery_rollover"))
+                sb.AppendLine($"Carried to next week: **{nextPotLum:N0}** lum");
 
             foreach (var (_, name, prize, place) in winners)
             {
