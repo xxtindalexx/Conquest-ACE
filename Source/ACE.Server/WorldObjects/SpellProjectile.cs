@@ -720,7 +720,8 @@ namespace ACE.Server.WorldObjects
             }
 
             // CONQUEST: Reduce damage from weapon/item proc spells and built-in SpellDID casts in PvP
-            if (isPVP && (FromProc || IsWeaponSpell))
+            // Cloak surge spells (Searing Disc, Clouded Soul, etc.) are excluded
+            if (isPVP && (FromProc || IsWeaponSpell) && (weapon == null || !Cloak.IsCloak(weapon)))
                 finalDamage *= (float)PropertyManager.GetDouble("pvp_weapon_proc_spell_dmg_mod");
 
             // CONQUEST: Display-only magic absorb block amount for defender combat chat

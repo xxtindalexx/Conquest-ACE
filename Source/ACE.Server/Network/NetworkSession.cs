@@ -802,7 +802,7 @@ namespace ACE.Server.Network
             var totalFragments = bundle.MessageCount;
             var fragments = new MessageFragment[totalFragments];
             for (int i = 0; i < totalFragments; i++)
-                fragments[i] = new MessageFragment(bundle.Dequeue(), ConnectionData.FragmentSequence++);
+                fragments[i] = new MessageFragment(bundle.Dequeue(), ConnectionData.FragmentSequence++, session.LoggingIdentifier);
 
             packetLog.DebugFormat("[{0}] Bundle Fragment Count: {1}", session.LoggingIdentifier, totalFragments);
 

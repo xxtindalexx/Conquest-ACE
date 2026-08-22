@@ -488,7 +488,17 @@ namespace ACE.Server.Managers
                 }
                 catch (Exception ex)
                 {
-                    log.Error("Exception in NetworkManager.DoSessionWork", ex);
+                    if (ex is AggregateException aggregateEx)
+                    {
+                        var flattened = aggregateEx.Flatten();
+                        log.Error($"Exception in NetworkManager.DoSessionWork ({flattened.InnerExceptions.Count} inner exception(s))", ex);
+                        foreach (var inner in flattened.InnerExceptions)
+                            log.Error("NetworkManager.DoSessionWork inner exception", inner);
+                    }
+                    else
+                    {
+                        log.Error("Exception in NetworkManager.DoSessionWork", ex);
+                    }
                 }
                 finally
                 {

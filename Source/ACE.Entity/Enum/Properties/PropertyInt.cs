@@ -729,6 +729,7 @@ namespace ACE.Entity.Enum.Properties
         EnlightenmentStaminaBenediction = 9349, // 1 if purchased stamina benediction
         EnlightenmentManaBenediction = 9350,    // 1 if purchased mana benediction
         EnlightenmentGemType = 9351,            // Identifies type of enlightenment gem (1-13, see EnlightenmentGemType enum)
+        AllegianceRankBonus = 9352,             // Permanent bonus added to calculated allegiance rank (capped at 10)
 
         // CONQUEST: Vendor Requirements
         VendorRequiredEnlightenment = 39000,    // Minimum enlightenment level required to use this vendor

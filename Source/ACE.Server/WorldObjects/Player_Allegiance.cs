@@ -69,6 +69,21 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// Permanent bonus added to calculated allegiance rank (capped at rank 10)
+        /// </summary>
+        public int? AllegianceRankBonus
+        {
+            get => GetProperty(PropertyInt.AllegianceRankBonus);
+            set
+            {
+                if (!value.HasValue || value.Value <= 0)
+                    RemoveProperty(PropertyInt.AllegianceRankBonus);
+                else
+                    SetProperty(PropertyInt.AllegianceRankBonus, value.Value);
+            }
+        }
+
+        /// <summary>
         /// This flag indicates if a player can pass up allegiance XP
         /// </summary>
         public bool ExistedBeforeAllegianceXpChanges

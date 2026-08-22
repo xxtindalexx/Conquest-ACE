@@ -95,6 +95,7 @@ namespace ACE.Server.Entity
                 Skill.MissileWeapons,
                 Skill.TwoHandedCombat,
                 Skill.WarMagic,
+                Skill.VoidMagic,
             };
 
             // Validate the target weapon
@@ -120,10 +121,12 @@ namespace ACE.Server.Entity
             }
 
             // Map weapon skills to their loot table matrices
+            var casterMatrix = (LootTables.CasterWeaponsMatrix, 8, true);                        // 8 elements including Nether
             var skillMatrixMap = new Dictionary<Skill, (int[][] Matrix, int RandomMax, bool SkipFirst)>
             {
                 { Skill.MissileWeapons, (LootTables.ElementalMissileWeaponsMatrix, 8, false) },  // 8 elements including Nether
-                { Skill.WarMagic, (LootTables.CasterWeaponsMatrix, 8, true) },                   // 8 elements including Nether
+                { Skill.WarMagic, casterMatrix },
+                { Skill.VoidMagic, casterMatrix },
                 { Skill.HeavyWeapons, (LootTables.HeavyWeaponsMatrix, 6, false) },               // 6 elements including Nether
                 { Skill.FinesseWeapons, (LootTables.FinesseWeaponsMatrix, 6, false) },           // 6 elements including Nether
                 { Skill.LightWeapons, (LootTables.LightWeaponsMatrix, 6, false) },               // 6 elements including Nether
@@ -248,6 +251,17 @@ namespace ACE.Server.Entity
             player.UpdateProperty(target, PropertyDataId.SoundTable, source.SoundTableId);
             player.UpdateProperty(target, PropertyInt.ResistanceModifierType, (int?)source.W_DamageType);
 
+            // Casters: nether requires Void Magic, every other element requires War Magic
+            if (target.ItemType == ItemType.Caster)
+            {
+                var newWieldSkill = source.W_DamageType == DamageType.Nether
+                    ? Skill.VoidMagic
+                    : Skill.WarMagic;
+
+                if (target.WieldSkillType != (int)newWieldSkill)
+                    player.UpdateProperty(target, PropertyInt.WieldSkillType, (int)newWieldSkill);
+            }
+
             // Update UiEffects (PropertyInt 18) for elemental glow
             player.UpdateProperty(target, PropertyInt.UiEffects, (int?)source.UiEffects);
 
@@ -345,6 +359,7 @@ namespace ACE.Server.Entity
                 Skill.TwoHandedCombat => LootTables.TwoHandedWeaponsMatrix,
                 Skill.MissileWeapons => LootTables.ElementalMissileWeaponsMatrix,
                 Skill.WarMagic => LootTables.CasterWeaponsMatrix,
+                Skill.VoidMagic => LootTables.CasterWeaponsMatrix,
                 _ => null
             };
 

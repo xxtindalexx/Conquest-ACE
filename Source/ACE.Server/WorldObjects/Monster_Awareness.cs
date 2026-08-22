@@ -233,6 +233,23 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// Returns FALSE if target physics are unavailable (e.g. mid-teleport teardown)
+        /// </summary>
+        private bool CanMeasureDistanceTo(Creature creature)
+        {
+            if (creature == null || creature.IsDead)
+                return false;
+
+            if (PhysicsObj?.Position == null)
+                return false;
+
+            if (creature.PhysicsObj?.Position == null)
+                return false;
+
+            return true;
+        }
+
+        /// <summary>
         /// Returns a list of attackable targets currently visible to this monster
         /// </summary>
         public List<Creature> GetAttackTargets()
@@ -241,6 +258,9 @@ namespace ACE.Server.WorldObjects
 
             foreach (var creature in PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature())
             {
+                if (!CanMeasureDistanceTo(creature))
+                    continue;
+
                 // ensure attackable
                 if (!creature.Attackable && creature.TargetingTactic == TargetingTactic.None || creature.Teleporting) continue;
 
@@ -284,8 +304,13 @@ namespace ACE.Server.WorldObjects
             var targetDistance = new List<TargetDistance>();
 
             foreach (var target in targets)
+            {
+                if (!CanMeasureDistanceTo(target))
+                    continue;
+
                 //targetDistance.Add(new TargetDistance(target, distSq ? Location.SquaredDistanceTo(target.Location) : Location.DistanceTo(target.Location)));
                 targetDistance.Add(new TargetDistance(target, distSq ? (float)PhysicsObj.get_distance_sq_to_object(target.PhysicsObj, true) : (float)PhysicsObj.get_distance_to_object(target.PhysicsObj, true)));
+            }
 
             return targetDistance.OrderBy(i => i.Distance).ToList();
         }
@@ -350,6 +375,9 @@ namespace ACE.Server.WorldObjects
 
             foreach (var creature in PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature())
             {
+                if (!CanMeasureDistanceTo(creature))
+                    continue;
+
                 if (creature is Player player && (!player.Attackable || player.Teleporting || (player.Hidden ?? false)))
                     continue;
 
@@ -523,12 +551,15 @@ namespace ACE.Server.WorldObjects
 
             foreach (var creature in creatures)
             {
+                if (!CanMeasureDistanceTo(creature))
+                    continue;
+
                 // ensure type isn't already handled elsewhere
                 if (creature is Player || creature is CombatPet)
                     continue;
 
                 // ensure attackable
-                if (creature.IsDead || !creature.Attackable && creature.TargetingTactic == TargetingTactic.None || creature.Teleporting)
+                if (!creature.Attackable && creature.TargetingTactic == TargetingTactic.None || creature.Teleporting)
                     continue;
 
                 // ensure another faction
