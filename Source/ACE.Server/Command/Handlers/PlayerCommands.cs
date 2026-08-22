@@ -2710,10 +2710,10 @@ namespace ACE.Server.Command.Handlers
         }
 
         /// <summary>
-        /// CONQUEST: Display all account-level quest completions with character info
-        /// Rate limited to once per 30 minutes per character
+        /// CONQUEST: Display all account-level quest completions
+        /// Rate limited to once per 60 seconds per character
         /// </summary>
-        private static readonly TimeSpan MyQstListCooldown = TimeSpan.FromMinutes(30);
+        private static readonly TimeSpan MyQstListCooldown = TimeSpan.FromSeconds(60);
         private static readonly ConcurrentDictionary<uint, DateTime> MyQstListLastUsed = new ConcurrentDictionary<uint, DateTime>();
 
         [CommandHandler("myqstlist", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows all quests completed on your account")]
@@ -2723,7 +2723,7 @@ namespace ACE.Server.Command.Handlers
             var characterId = player.Guid.Full;
             var accountId = player.Account.AccountId;
 
-            // Rate limit check (30 minutes per character)
+            // Rate limit check (60 seconds per character)
             var currentTime = DateTime.UtcNow;
             if (MyQstListLastUsed.TryGetValue(characterId, out var lastUsed))
             {
@@ -2732,7 +2732,7 @@ namespace ACE.Server.Command.Handlers
                 {
                     var remaining = MyQstListCooldown - elapsed;
                     session.Network.EnqueueSend(new GameMessageSystemChat(
-                        $"You can use /myqstlist again in {remaining.Minutes}m {remaining.Seconds}s.",
+                        $"You can use /myqstlist again in {remaining.Seconds}s.",
                         ChatMessageType.Broadcast));
                     return;
                 }
@@ -2752,38 +2752,6 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            // Get all characters on this account to map character stamps
-            var characters = DatabaseManager.Shard.BaseDatabase.GetCharacters(accountId, false);
-            var characterNames = characters?.ToDictionary(c => c.Id, c => c.Name) ?? new Dictionary<uint, string>();
-            var characterIds = characters?.Select(c => c.Id).ToList() ?? new List<uint>();
-
-            // Build a lookup of quest name -> list of character names that have the stamp
-            var questToCharacters = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-
-            if (characterIds.Count > 0)
-            {
-                using (var context = new ShardDbContext())
-                {
-                    var stamps = context.CharacterPropertiesQuestRegistry
-                        .Where(q => characterIds.Contains(q.CharacterId))
-                        .Select(q => new { q.QuestName, q.CharacterId })
-                        .ToList();
-
-                    foreach (var stamp in stamps)
-                    {
-                        var charName = characterNames.ContainsKey(stamp.CharacterId)
-                            ? characterNames[stamp.CharacterId]
-                            : "Unknown";
-
-                        if (!questToCharacters.ContainsKey(stamp.QuestName))
-                            questToCharacters[stamp.QuestName] = new List<string>();
-
-                        if (!questToCharacters[stamp.QuestName].Contains(charName))
-                            questToCharacters[stamp.QuestName].Add(charName);
-                    }
-                }
-            }
-
             // Sort alphabetically by quest name
             var sortedQuests = accountQuests.OrderBy(q => q.Quest, StringComparer.OrdinalIgnoreCase).ToList();
 
@@ -2796,20 +2764,11 @@ namespace ACE.Server.Command.Handlers
                 $"---- Account Quests ({sortedQuests.Count}) | XP Bonus: {questBonusPercent:F1}% ----",
                 ChatMessageType.Broadcast));
 
-            // Display each quest with character names
-            int index = 1;
             foreach (var quest in sortedQuests)
             {
-                string charInfo = "";
-                if (questToCharacters.TryGetValue(quest.Quest, out var charList) && charList.Count > 0)
-                {
-                    charInfo = $" ({string.Join(", ", charList)})";
-                }
-
                 session.Network.EnqueueSend(new GameMessageSystemChat(
                     $"{quest.Quest}",
                     ChatMessageType.Broadcast));
-                index++;
             }
 
             // Display footer
