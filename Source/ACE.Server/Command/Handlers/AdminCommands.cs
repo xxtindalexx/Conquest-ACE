@@ -1707,6 +1707,78 @@ namespace ACE.Server.Command.Handlers
             // TODO: output
         }
 
+        // setrankbonus <name> [bonus]
+        [CommandHandler("setrankbonus", AccessLevel.Admin, CommandHandlerFlag.None, 1,
+            "Sets or shows a character's permanent allegiance rank bonus.",
+            "<name> [bonus]\n" +
+            "Without a bonus, shows the character's natural rank, bonus, and effective rank.\n" +
+            "With a bonus, sets the permanent rank bonus (0 clears it). Character names may contain spaces.")]
+        public static void HandleSetRankBonus(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: @setrankbonus <name> [bonus]", ChatMessageType.Broadcast);
+                return;
+            }
+
+            string name;
+            int? bonus = null;
+            if (parameters.Length >= 2 && int.TryParse(parameters[^1], out var parsed))
+            {
+                bonus = parsed;
+                name = string.Join(" ", parameters.Take(parameters.Length - 1));
+            }
+            else
+                name = string.Join(" ", parameters);
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Usage: @setrankbonus <name> [bonus]", ChatMessageType.Broadcast);
+                return;
+            }
+
+            var player = PlayerManager.FindByName(name);
+            if (player == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Character \"{name}\" not found.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            if (bonus.HasValue)
+            {
+                if (bonus.Value < 0)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, "Rank bonus must be 0 or greater.", ChatMessageType.Broadcast);
+                    return;
+                }
+
+                if (bonus.Value <= 0)
+                    player.RemoveProperty(PropertyInt.AllegianceRankBonus);
+                else
+                    player.SetProperty(PropertyInt.AllegianceRankBonus, bonus.Value);
+
+                player.SaveBiotaToDatabase();
+
+                if (player.Allegiance != null)
+                    AllegianceManager.Rebuild(player.Allegiance);
+
+                if (bonus.Value <= 0)
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Cleared allegiance rank bonus for {player.Name}.", ChatMessageType.Broadcast);
+                else
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Set allegiance rank bonus for {player.Name} to +{bonus.Value}.", ChatMessageType.Broadcast);
+            }
+
+            var currentBonus = player.GetProperty(PropertyInt.AllegianceRankBonus) ?? 0;
+            if (player.AllegianceNode != null)
+            {
+                var natural = player.AllegianceNode.GetNaturalRank();
+                var effective = player.AllegianceNode.Rank;
+                CommandHandlerHelper.WriteOutputInfo(session, $"{player.Name}: natural rank {natural}, bonus +{currentBonus}, effective rank {effective}.", ChatMessageType.Broadcast);
+            }
+            else
+                CommandHandlerHelper.WriteOutputInfo(session, $"{player.Name}: rank bonus +{currentBonus} (not in an allegiance).", ChatMessageType.Broadcast);
+        }
+
         // finger [ [-a] character] [-m account]
         [CommandHandler("finger", AccessLevel.Sentinel, CommandHandlerFlag.None, 1,
             "Show the given character's account name or vice-versa.",

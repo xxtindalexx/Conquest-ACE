@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ACE.Entity;
+using ACE.Entity.Enum.Properties;
 using ACE.Server.Managers;
 using ACE.Server.WorldObjects;
 
@@ -68,6 +69,18 @@ namespace ACE.Server.Entity
 
         public void CalculateRank()
         {
+            var natural = CalculateNaturalRank();
+            var bonus = (uint)Math.Max(0, Player?.GetProperty(PropertyInt.AllegianceRankBonus) ?? 0);
+            Rank = Math.Min(10u, natural + bonus);
+        }
+
+        /// <summary>
+        /// Returns the calculated allegiance rank before this player's permanent rank bonus is applied.
+        /// </summary>
+        public uint GetNaturalRank() => CalculateNaturalRank();
+
+        private uint CalculateNaturalRank()
+        {
             // http://asheron.wikia.com/wiki/Rank
 
             // A player's allegiance rank is a function of the number of Vassals and how they are
@@ -85,7 +98,7 @@ namespace ACE.Server.Entity
             var higher = Math.Max(r1, r2);
 
             // CONQUEST: Set minimum rank to 3 for all players
-            Rank = Math.Min(10, Math.Max(3, Math.Max(lower + 1, higher)));
+            return Math.Min(10u, Math.Max(3u, Math.Max(lower + 1, higher)));
         }
 
         public void Walk(Action<AllegianceNode> action, bool self = true)
