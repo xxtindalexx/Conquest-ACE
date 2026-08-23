@@ -2060,6 +2060,10 @@ namespace ACE.Server.WorldObjects
                     if (target is Player)
                         damageRating += player.GetPKDamageRating();
                 }
+
+                if (!(player != null && target is Player))
+                    damageRating += creatureSource.GetPVEDamageRating();
+
                 damageRatingMod = Creature.GetPositiveRatingMod(damageRating);
             }
 

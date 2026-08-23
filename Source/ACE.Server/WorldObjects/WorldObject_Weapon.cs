@@ -353,10 +353,22 @@ namespace ACE.Server.WorldObjects
             }
 
             if (wielder != null)
+            {
                 critRate += wielder.GetCritRating() * 0.01f;
+
+                if (!isPvP)
+                    critRate += wielder.GetPVECritRating() * 0.01f;
+            }
 
             // mitigation
             var critResistRatingMod = Creature.GetNegativeRatingMod(target.GetCritResistRating());
+
+            if (!isPvP)
+            {
+                var pveCritResistMod = Creature.GetNegativeRatingMod(target.GetPVECritResistRating());
+                critResistRatingMod = Creature.AdditiveCombine(critResistRatingMod, pveCritResistMod);
+            }
+
             critRate *= critResistRatingMod;
 
             return critRate;
@@ -414,8 +426,18 @@ namespace ACE.Server.WorldObjects
 
             critRate += wielder.GetCritRating() * 0.01f;
 
+            if (!isPvP)
+                critRate += wielder.GetPVECritRating() * 0.01f;
+
             // mitigation
             var critResistRatingMod = Creature.GetNegativeRatingMod(target.GetCritResistRating());
+
+            if (!isPvP)
+            {
+                var pveCritResistMod = Creature.GetNegativeRatingMod(target.GetPVECritResistRating());
+                critResistRatingMod = Creature.AdditiveCombine(critResistRatingMod, pveCritResistMod);
+            }
+
             critRate *= critResistRatingMod;
 
             return critRate;

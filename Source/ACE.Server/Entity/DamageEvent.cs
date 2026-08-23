@@ -298,6 +298,11 @@ namespace ACE.Server.Entity
                 PkDamageMod = Creature.GetPositiveRatingMod(attacker.GetPKDamageRating());
                 DamageRatingMod = Creature.AdditiveCombine(DamageRatingMod, PkDamageMod);
             }
+            else
+            {
+                var pveDamageMod = Creature.GetPositiveRatingMod(attacker.GetPVEDamageRating());
+                DamageRatingMod = Creature.AdditiveCombine(DamageRatingMod, pveDamageMod);
+            }
 
             // damage before mitigation
             DamageBeforeMitigation = BaseDamage * AttributeMod * PowerMod * SlayerMod * DamageRatingMod;
@@ -375,6 +380,11 @@ namespace ACE.Server.Entity
 
                     if (pkBattle)
                         DamageRatingMod = Creature.AdditiveCombine(DamageRatingMod, PkDamageMod);
+                    else
+                    {
+                        var pveCritDamageMod = Creature.GetPositiveRatingMod(attacker.GetPVECritDamageRating());
+                        DamageRatingMod = Creature.AdditiveCombine(DamageRatingMod, pveCritDamageMod);
+                    }
 
                     DamageBeforeMitigation = BaseDamageMod.MaxDamage * AttributeMod * PowerMod * SlayerMod * DamageRatingMod * CriticalDamageMod;
                 }
@@ -566,6 +576,12 @@ namespace ACE.Server.Entity
                 CriticalDamageResistanceRatingMod = Creature.GetNegativeRatingMod(defender.GetCritDamageResistRating());
 
                 DamageResistanceRatingMod = Creature.AdditiveCombine(DamageResistanceRatingBaseMod, CriticalDamageResistanceRatingMod);
+
+                if (!pkBattle)
+                {
+                    var pveCritDamageResistMod = Creature.GetNegativeRatingMod(defender.GetPVECritDamageResistRating());
+                    DamageResistanceRatingMod = Creature.AdditiveCombine(DamageResistanceRatingMod, pveCritDamageResistMod);
+                }
             }
 
             if (pkBattle)
@@ -573,6 +589,11 @@ namespace ACE.Server.Entity
                 PkDamageResistanceMod = Creature.GetNegativeRatingMod(defender.GetPKDamageResistRating());
 
                 DamageResistanceRatingMod = Creature.AdditiveCombine(DamageResistanceRatingMod, PkDamageResistanceMod);
+            }
+            else
+            {
+                var pveDamageResistMod = Creature.GetNegativeRatingMod(defender.GetPVEDamageResistRating());
+                DamageResistanceRatingMod = Creature.AdditiveCombine(DamageResistanceRatingMod, pveDamageResistMod);
             }
 
             // get shield modifier

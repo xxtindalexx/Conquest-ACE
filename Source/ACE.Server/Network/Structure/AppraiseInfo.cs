@@ -674,6 +674,14 @@ namespace ACE.Server.Network.Structure
             var pkDamageRating = creature.GetPKDamageRating();
             var pkDamageResistRating = creature.GetPKDamageResistRating();
 
+            var pveDamageRating = creature.GetPVEDamageRating();
+            var pveDamageResistRating = creature.GetPVEDamageResistRating();
+            var pveCritRating = creature.GetPVECritRating();
+            var pveCritResistRating = creature.GetPVECritResistRating();
+            var pveCritDamageRating = creature.GetPVECritDamageRating();
+            var pveCritDamageResistRating = creature.GetPVECritDamageResistRating();
+            var pveNetherResistRating = creature.GetPVENetherResistRating();
+
             if (damageRating != 0)
                 PropertiesInt[PropertyInt.DamageRating] = damageRating;
             if (damageResistRating != 0)
@@ -705,6 +713,21 @@ namespace ACE.Server.Network.Structure
                 PropertiesInt[PropertyInt.PKDamageRating] = pkDamageRating;
             if (pkDamageResistRating != 0)
                 PropertiesInt[PropertyInt.PKDamageResistRating] = pkDamageResistRating;
+
+            if (pveDamageRating != 0)
+                PropertiesInt[PropertyInt.PVEDamageRating] = pveDamageRating;
+            if (pveDamageResistRating != 0)
+                PropertiesInt[PropertyInt.PVEDamageResistRating] = pveDamageResistRating;
+            if (pveCritRating != 0)
+                PropertiesInt[PropertyInt.PVECritRating] = pveCritRating;
+            if (pveCritResistRating != 0)
+                PropertiesInt[PropertyInt.PVECritResistRating] = pveCritResistRating;
+            if (pveCritDamageRating != 0)
+                PropertiesInt[PropertyInt.PVECritDamageRating] = pveCritDamageRating;
+            if (pveCritDamageResistRating != 0)
+                PropertiesInt[PropertyInt.PVECritDamageResistRating] = pveCritDamageResistRating;
+            if (pveNetherResistRating != 0)
+                PropertiesInt[PropertyInt.PVENetherResistRating] = pveNetherResistRating;
 
             // add ratings from equipped items?
         }

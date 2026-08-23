@@ -3168,6 +3168,48 @@ namespace ACE.Server.WorldObjects
             set { if (!value.HasValue) RemoveProperty(PropertyInt.PKDamageResistRating); else SetProperty(PropertyInt.PKDamageResistRating, value.Value); }
         }
 
+        public int? PVEDamageRating
+        {
+            get => GetProperty(PropertyInt.PVEDamageRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PVEDamageRating); else SetProperty(PropertyInt.PVEDamageRating, value.Value); }
+        }
+
+        public int? PVEDamageResistRating
+        {
+            get => GetProperty(PropertyInt.PVEDamageResistRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PVEDamageResistRating); else SetProperty(PropertyInt.PVEDamageResistRating, value.Value); }
+        }
+
+        public int? PVECritRating
+        {
+            get => GetProperty(PropertyInt.PVECritRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PVECritRating); else SetProperty(PropertyInt.PVECritRating, value.Value); }
+        }
+
+        public int? PVECritResistRating
+        {
+            get => GetProperty(PropertyInt.PVECritResistRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PVECritResistRating); else SetProperty(PropertyInt.PVECritResistRating, value.Value); }
+        }
+
+        public int? PVECritDamageRating
+        {
+            get => GetProperty(PropertyInt.PVECritDamageRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PVECritDamageRating); else SetProperty(PropertyInt.PVECritDamageRating, value.Value); }
+        }
+
+        public int? PVECritDamageResistRating
+        {
+            get => GetProperty(PropertyInt.PVECritDamageResistRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PVECritDamageResistRating); else SetProperty(PropertyInt.PVECritDamageResistRating, value.Value); }
+        }
+
+        public int? PVENetherResistRating
+        {
+            get => GetProperty(PropertyInt.PVENetherResistRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PVENetherResistRating); else SetProperty(PropertyInt.PVENetherResistRating, value.Value); }
+        }
+
         public int? Lifespan
         {
             get => GetProperty(PropertyInt.Lifespan);
@@ -3365,6 +3407,48 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyInt.GearPKDamageResistRating);
             set { if (!value.HasValue) RemoveProperty(PropertyInt.GearPKDamageResistRating); else SetProperty(PropertyInt.GearPKDamageResistRating, value.Value); }
+        }
+
+        public int? GearPVEDamageRating
+        {
+            get => GetProperty(PropertyInt.GearPVEDamageRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.GearPVEDamageRating); else SetProperty(PropertyInt.GearPVEDamageRating, value.Value); }
+        }
+
+        public int? GearPVEDamageResistRating
+        {
+            get => GetProperty(PropertyInt.GearPVEDamageResistRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.GearPVEDamageResistRating); else SetProperty(PropertyInt.GearPVEDamageResistRating, value.Value); }
+        }
+
+        public int? GearPVECritRating
+        {
+            get => GetProperty(PropertyInt.GearPVECritRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.GearPVECritRating); else SetProperty(PropertyInt.GearPVECritRating, value.Value); }
+        }
+
+        public int? GearPVECritResistRating
+        {
+            get => GetProperty(PropertyInt.GearPVECritResistRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.GearPVECritResistRating); else SetProperty(PropertyInt.GearPVECritResistRating, value.Value); }
+        }
+
+        public int? GearPVECritDamageRating
+        {
+            get => GetProperty(PropertyInt.GearPVECritDamageRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.GearPVECritDamageRating); else SetProperty(PropertyInt.GearPVECritDamageRating, value.Value); }
+        }
+
+        public int? GearPVECritDamageResistRating
+        {
+            get => GetProperty(PropertyInt.GearPVECritDamageResistRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.GearPVECritDamageResistRating); else SetProperty(PropertyInt.GearPVECritDamageResistRating, value.Value); }
+        }
+
+        public int? GearPVENetherResistRating
+        {
+            get => GetProperty(PropertyInt.GearPVENetherResistRating);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.GearPVENetherResistRating); else SetProperty(PropertyInt.GearPVENetherResistRating, value.Value); }
         }
 
         public int? ResistItemAppraisal

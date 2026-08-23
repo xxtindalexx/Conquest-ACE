@@ -1662,6 +1662,11 @@ namespace ACE.Server.WorldObjects.Managers
 
                     damageResistRatingMod = Creature.AdditiveCombine(damageResistRatingMod, pkDamageResistRatingMod);
                 }
+                else
+                {
+                    var pveDamageResistRatingMod = Creature.GetNegativeRatingMod(creature.GetPVEDamageResistRating());
+                    damageResistRatingMod = Creature.AdditiveCombine(damageResistRatingMod, pveDamageResistRatingMod);
+                }
 
                 var dotResistRatingMod = Creature.GetNegativeRatingMod(creature.GetDotResistanceRating());  // should this be here, or somewhere else?
                                                                                                             // should this affect NetherDotDamageRating?
@@ -1671,6 +1676,12 @@ namespace ACE.Server.WorldObjects.Managers
                 //Console.WriteLine("NRR: " + Creature.NegativeModToRating(netherResistRatingMod));
 
                 tickAmount *= resistanceMod * damageResistRatingMod * dotResistRatingMod;
+
+                if (damageType == DamageType.Nether && !(sourcePlayer != null && targetPlayer != null))
+                {
+                    var pveNetherResistMod = Creature.GetNegativeRatingMod(creature.GetPVENetherResistRating());
+                    tickAmount *= pveNetherResistMod;
+                }
 
                 // make sure the target's current health is not exceeded
                 if (tickAmountTotal + tickAmount >= creature.Health.Current)
