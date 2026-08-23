@@ -17,24 +17,15 @@ namespace ACE.Server.WorldObjects
     {
         // CONQUEST: Mystery Dye
         public const uint RandomDyeWcid = 13370549;
-        private const uint RandomDyeIcon = 0x06005FA0;
 
         public RandomDye(Weenie weenie, ObjectGuid guid) : base(weenie, guid)
         {
-            SetDyeIcon();
             SetEphemeralValues();
         }
 
         public RandomDye(Biota biota) : base(biota)
         {
-            SetDyeIcon();
             SetEphemeralValues();
-        }
-
-        private void SetDyeIcon()
-        {
-            if (WeenieClassId == RandomDyeWcid)
-                IconId = RandomDyeIcon;
         }
 
         private void SetEphemeralValues()
