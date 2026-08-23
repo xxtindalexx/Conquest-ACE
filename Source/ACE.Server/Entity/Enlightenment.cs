@@ -191,24 +191,20 @@ namespace ACE.Server.Entity
             // CONQUEST: Tiered currency requirement for Conquest Coins
             // Base: 100 coins per level, with multipliers at ENL 25/50/75
             // ENL 1-24: 1x, ENL 25-49: 2.5x, ENL 50-74: 5x, ENL 75+: 7.5x
-            long coinsRequired = CalculateEnlightenmentCoinCost(targetEnlightenment);
+            var cost = GetEnlightenmentCost(targetEnlightenment);
             var bankedCoins = player.GetProperty(PropertyInt64.ConquestCoins) ?? 0;
-            if (bankedCoins < coinsRequired)
+            if (bankedCoins < cost.Coins)
             {
-                var multiplier = GetEnlightenmentCostMultiplier(targetEnlightenment);
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {coinsRequired:N0} Conquest Coins to reach enlightenment level {targetEnlightenment} ({multiplier}x multiplier). You have {bankedCoins:N0} coins in your bank.", ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {cost.Coins:N0} Conquest Coins to reach enlightenment level {targetEnlightenment} ({cost.Multiplier}x multiplier). You have {bankedCoins:N0} coins in your bank.", ChatMessageType.Broadcast));
                 return false;
             }
 
             // CONQUEST: Tiered luminance cost
             // Base: 1M lum per level, with multipliers at ENL 25/50/75
             // ENL 1-24: 1x, ENL 25-49: 2.5x, ENL 50-74: 5x, ENL 75+: 7.5x
-            long reqLum = CalculateEnlightenmentLuminanceCost(targetEnlightenment);
-
-            if (!VerifyLuminance(player, reqLum))
+            if (!VerifyLuminance(player, cost.Luminance))
             {
-                var multiplier = GetEnlightenmentCostMultiplier(targetEnlightenment);
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {reqLum:N0} banked luminance to enlighten to level {targetEnlightenment} ({multiplier}x multiplier). You have {player.BankedLuminance:N0}.", ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat($"You need {cost.Luminance:N0} banked luminance to enlighten to level {targetEnlightenment} ({cost.Multiplier}x multiplier). You have {player.BankedLuminance:N0}.", ChatMessageType.Broadcast));
                 return false;
             }
 
@@ -240,28 +236,64 @@ namespace ACE.Server.Entity
                 return 1.0;
         }
 
+        public readonly struct EnlightenmentCost
+        {
+            public EnlightenmentCost(int targetLevel, long coins, long luminance, double multiplier)
+            {
+                TargetLevel = targetLevel;
+                Coins = coins;
+                Luminance = luminance;
+                Multiplier = multiplier;
+            }
+
+            public int TargetLevel { get; }
+            public long Coins { get; }
+            public long Luminance { get; }
+            public double Multiplier { get; }
+        }
+
+        /// <summary>
+        /// Single source of truth for enlightenment costs at a given target level.
+        /// All display, validation, and charging must go through this.
+        /// </summary>
+        public static EnlightenmentCost GetEnlightenmentCost(int targetEnlightenment)
+        {
+            var multiplier = GetEnlightenmentCostMultiplier(targetEnlightenment);
+            return new EnlightenmentCost(
+                targetEnlightenment,
+                (long)(targetEnlightenment * 100L * multiplier),
+                (long)(targetEnlightenment * 1_000_000L * multiplier),
+                multiplier);
+        }
+
+        /// <summary>
+        /// Builds the /enl confirmation dialog text from the unified cost helper.
+        /// </summary>
+        public static string FormatConfirmationMessage(int targetEnlightenment)
+        {
+            var cost = GetEnlightenmentCost(targetEnlightenment);
+            var multiplierSuffix = cost.Multiplier > 1.0
+                ? $" ({cost.Multiplier}x multiplier)"
+                : "";
+            return $"Enlightening to level {cost.TargetLevel} will cost{multiplierSuffix}:\n" +
+                   $"- {cost.Luminance:N0} Luminance\n" +
+                   $"- {cost.Coins:N0} Conquest Coins\n\n" +
+                   $"Are you sure you want to enlighten?";
+        }
+
         /// <summary>
         /// CONQUEST: Calculates the coin cost for a specific enlightenment level
         /// Base formula: level * 100 coins, then multiplied by tier multiplier
         /// </summary>
         public static long CalculateEnlightenmentCoinCost(int targetEnlightenment)
-        {
-            long baseCost = targetEnlightenment * 100;
-            double multiplier = GetEnlightenmentCostMultiplier(targetEnlightenment);
-            return (long)(baseCost * multiplier);
-        }
+            => GetEnlightenmentCost(targetEnlightenment).Coins;
 
         /// <summary>
         /// CONQUEST: Calculates the luminance cost for a specific enlightenment level
         /// Base formula: level * 1M luminance, then multiplied by tier multiplier
         /// </summary>
         public static long CalculateEnlightenmentLuminanceCost(int targetEnlightenment)
-        {
-            long baseLumCost = 1_000_000;  // 1M luminance base cost per level
-            long baseCost = targetEnlightenment * baseLumCost;
-            double multiplier = GetEnlightenmentCostMultiplier(targetEnlightenment);
-            return (long)(baseCost * multiplier);
-        }
+            => GetEnlightenmentCost(targetEnlightenment).Luminance;
 
         public static bool VerifySocietyMaster(Player player)
         {

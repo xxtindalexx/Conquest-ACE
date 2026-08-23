@@ -848,17 +848,8 @@ namespace ACE.Server.Command.Handlers
 
             var player = session.Player;
 
-            // Calculate costs for confirmation message
             var targetEnlightenment = player.Enlightenment + 1;
-            long baseLumCost = 1_000_000;
-            long reqLum = targetEnlightenment * baseLumCost;
-            long coinsRequired = targetEnlightenment * 100;
-
-            // Build confirmation message
-            var confirmMessage = $"Enlightening to level {targetEnlightenment} will cost:\n" +
-                                 $"- {reqLum:N0} Luminance\n" +
-                                 $"- {coinsRequired:N0} Conquest Coins\n\n" +
-                                 $"Are you sure you want to enlighten?";
+            var confirmMessage = Entity.Enlightenment.FormatConfirmationMessage(targetEnlightenment);
 
             // Show confirmation dialog
             if (!player.ConfirmationManager.EnqueueSend(
