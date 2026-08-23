@@ -787,6 +787,10 @@ namespace ACE.Server.Network.Structure
         private void BuildWeaponPropertyDescriptions(WorldObject weapon)
         {
             var descriptions = new List<string>();
+            var imbuedEffect = (ImbuedEffectType)(weapon.GetProperty(PropertyInt.ImbuedEffect) ?? 0);
+            var maxCritChancePercent = WorldObject.MaxCriticalStrikeMod * 100;
+            var maxCritDmgMultiplier = 1.0 + WorldObject.MaxCripplingBlowMod;
+            var maxRendingVulnPercent = (WorldObject.MaxRendingMod - 1.0) * 100;
 
             // Slayer bonus
             var slayerCreatureType = weapon.SlayerCreatureType;
@@ -797,19 +801,30 @@ namespace ACE.Server.Network.Structure
                 descriptions.Add($"- {creatureName} Slayer: {slayerDamageBonus.Value:G}x Dmg");
             }
 
-            // Biting Strike (critical frequency bonus)
+            // Biting Strike (critical frequency)
             var critFrequency = weapon.GetProperty(PropertyFloat.CriticalFrequency);
             if (critFrequency != null && critFrequency > 0)
             {
-                var critPercent = critFrequency.Value * 100;
-                descriptions.Add($"- Biting Strike: +{critPercent:F0}% Crit Chance");
+                if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
+                    descriptions.Add("- Biting Strike: Surpassed by Critical Strike");
+                else
+                {
+                    var critPercent = critFrequency.Value * 100;
+                    descriptions.Add($"- Biting Strike: {critPercent:F0}% Crit Chance");
+                }
             }
 
             // Crushing Blow (critical damage multiplier)
             var critDamageMod = weapon.GetProperty(PropertyFloat.CriticalMultiplier);
             if (critDamageMod != null && critDamageMod > 1.0)
             {
-                descriptions.Add($"- Crushing Blow: {critDamageMod:G}x Crit Dmg");
+                if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
+                    descriptions.Add("- Crushing Blow: Surpassed by Crippling Blow");
+                else
+                {
+                    var totalCritDmgMultiplier = 1.0 + critDamageMod.Value;
+                    descriptions.Add($"- Crushing Blow: {totalCritDmgMultiplier:G}x Crit Dmg");
+                }
             }
 
             // Resistance Cleaving (vulnerability)
@@ -862,15 +877,14 @@ namespace ACE.Server.Network.Structure
             }
 
             // Imbued effects
-            var imbuedEffect = (ImbuedEffectType)(weapon.GetProperty(PropertyInt.ImbuedEffect) ?? 0);
 
             // Critical Strike
             if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
-                descriptions.Add("- Critical Strike: +Crit Chance");
+                descriptions.Add($"- Critical Strike: Up to {maxCritChancePercent:F0}% crit chance (skill based)");
 
             // Crippling Blow
             if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
-                descriptions.Add("- Crippling Blow: +Crit Dmg");
+                descriptions.Add($"- Crippling Blow: Up to {maxCritDmgMultiplier:G}x crit dmg (skill based)");
 
             // Armor Rending
             if (imbuedEffect.HasFlag(ImbuedEffectType.ArmorRending))
@@ -878,21 +892,21 @@ namespace ACE.Server.Network.Structure
 
             // Elemental Rending effects
             if (imbuedEffect.HasFlag(ImbuedEffectType.SlashRending))
-                descriptions.Add("- Slash Rending: +Slash Dmg (vuln)");
+                descriptions.Add($"- Slash Rending: Up to +{maxRendingVulnPercent:F0}% Slash Dmg (vuln, skill based)");
             if (imbuedEffect.HasFlag(ImbuedEffectType.PierceRending))
-                descriptions.Add("- Pierce Rending: +Pierce Dmg (vuln)");
+                descriptions.Add($"- Pierce Rending: Up to +{maxRendingVulnPercent:F0}% Pierce Dmg (vuln, skill based)");
             if (imbuedEffect.HasFlag(ImbuedEffectType.BludgeonRending))
-                descriptions.Add("- Bludgeon Rending: +Bludgeon Dmg (vuln)");
+                descriptions.Add($"- Bludgeon Rending: Up to +{maxRendingVulnPercent:F0}% Bludgeon Dmg (vuln, skill based)");
             if (imbuedEffect.HasFlag(ImbuedEffectType.AcidRending))
-                descriptions.Add("- Acid Rending: +Acid Dmg (vuln)");
+                descriptions.Add($"- Acid Rending: Up to +{maxRendingVulnPercent:F0}% Acid Dmg (vuln, skill based)");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ColdRending))
-                descriptions.Add("- Cold Rending: +Cold Dmg (vuln)");
+                descriptions.Add($"- Cold Rending: Up to +{maxRendingVulnPercent:F0}% Cold Dmg (vuln, skill based)");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ElectricRending))
-                descriptions.Add("- Lightning Rending: +Lightning Dmg (vuln)");
+                descriptions.Add($"- Lightning Rending: Up to +{maxRendingVulnPercent:F0}% Lightning Dmg (vuln, skill based)");
             if (imbuedEffect.HasFlag(ImbuedEffectType.FireRending))
-                descriptions.Add("- Fire Rending: +Fire Dmg (vuln)");
+                descriptions.Add($"- Fire Rending: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based)");
             if (imbuedEffect.HasFlag(ImbuedEffectType.NetherRending))
-                descriptions.Add("- Void Rending: +Void Dmg (vuln)");
+                descriptions.Add($"- Void Rending: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based)");
 
             // Always Critical
             if (imbuedEffect.HasFlag(ImbuedEffectType.AlwaysCritical))
