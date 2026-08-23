@@ -874,7 +874,7 @@ namespace ACE.Server.Network.Structure
 
             // Armor Rending
             if (imbuedEffect.HasFlag(ImbuedEffectType.ArmorRending))
-                descriptions.Add("- Armor Rending: Crits ignore armor");
+                descriptions.Add("- Armor Rending: Ignores up to 60% armor (skill based)");
 
             // Elemental Rending effects
             if (imbuedEffect.HasFlag(ImbuedEffectType.SlashRending))
