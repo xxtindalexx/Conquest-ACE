@@ -41,7 +41,7 @@ namespace ACE.Server.Entity
 
         // You keep:
         // - All augmentations obtained through Augmentation Gems.
-        // - Skill credits from luminance auras, Aun Ralirea, and Chasing Oswald quests.
+        // - Skill credits from luminance auras, Aun Ralirea, Chasing Oswald, and Shadow Queen spike quests.
         // - All quest flags with the exception of aetheria and luminance.
 
         // You gain:
@@ -524,6 +524,7 @@ namespace ACE.Server.Entity
             availableSkillCredits += player.QuestManager.GetCurrentSolves("ArantahKill1");       // additional quest skill credit
             availableSkillCredits += player.QuestManager.GetCurrentSolves("OswaldManualCompleted");  // additional quest skill credit
             availableSkillCredits += player.QuestManager.GetCurrentSolves("LumAugSkillQuest");   // additional quest skill credits
+            availableSkillCredits += player.QuestManager.GetCurrentSolves("ShadowQueensSpikeFirstTurnIn");  // additional quest skill credit
 
             // CONQUEST: Add back skill credits purchased from enlightenment vendor (max 5)
             var purchasedCredits = player.GetProperty(PropertyInt.EnlightenmentSkillCreditsPurchased) ?? 0;
