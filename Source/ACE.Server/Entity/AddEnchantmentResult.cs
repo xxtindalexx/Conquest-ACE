@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using ACE.Entity.Enum;
 using ACE.Entity.Models;
 using ACE.Server.WorldObjects;
 using ACE.Server.WorldObjects.Managers;
@@ -68,28 +69,39 @@ namespace ACE.Server.Entity
             long augmentLevel = 0;
             if (caster is Creature creature)
             {
-                switch (spell.School)
+                switch (spell.Category)
                 {
-                    case ACE.Entity.Enum.MagicSchool.WarMagic:
-                        augmentLevel = creature.LuminanceAugmentWarCount ?? 0;
-                        break;
-                    case ACE.Entity.Enum.MagicSchool.LifeMagic:
-                        augmentLevel = creature.LuminanceAugmentLifeCount ?? 0;
-                        break;
-                    case ACE.Entity.Enum.MagicSchool.ItemEnchantment:
-                        augmentLevel = creature.LuminanceAugmentItemCount ?? 0;
-                        break;
-                    case ACE.Entity.Enum.MagicSchool.CreatureEnchantment:
-                        augmentLevel = creature.LuminanceAugmentCreatureCount ?? 0;
-                        break;
-                    case ACE.Entity.Enum.MagicSchool.VoidMagic:
-                        augmentLevel = creature.LuminanceAugmentVoidCount ?? 0;
-                        break;
-                    case ACE.Entity.Enum.MagicSchool.None:
-                    default:
+                    case SpellCategory.DFHealingDebuff:
+                    case SpellCategory.DFBleedDamage:
+                        augmentLevel = Math.Max(creature.LuminanceAugmentMeleeCount ?? 0,
+                            creature.LuminanceAugmentMissileCount ?? 0);
                         break;
                 }
 
+                if (augmentLevel == 0)
+                {
+                    switch (spell.School)
+                    {
+                        case ACE.Entity.Enum.MagicSchool.WarMagic:
+                            augmentLevel = creature.LuminanceAugmentWarCount ?? 0;
+                            break;
+                        case ACE.Entity.Enum.MagicSchool.LifeMagic:
+                            augmentLevel = creature.LuminanceAugmentLifeCount ?? 0;
+                            break;
+                        case ACE.Entity.Enum.MagicSchool.ItemEnchantment:
+                            augmentLevel = creature.LuminanceAugmentItemCount ?? 0;
+                            break;
+                        case ACE.Entity.Enum.MagicSchool.CreatureEnchantment:
+                            augmentLevel = creature.LuminanceAugmentCreatureCount ?? 0;
+                            break;
+                        case ACE.Entity.Enum.MagicSchool.VoidMagic:
+                            augmentLevel = creature.LuminanceAugmentVoidCount ?? 0;
+                            break;
+                        case ACE.Entity.Enum.MagicSchool.None:
+                        default:
+                            break;
+                    }
+                }
             }
 
             var powerLevel = spell.Power;

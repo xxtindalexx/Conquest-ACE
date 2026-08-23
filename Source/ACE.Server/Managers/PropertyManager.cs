@@ -1101,6 +1101,9 @@ namespace ACE.Server.Managers
                 ("pve_void_dot_damage_mod", new Property<double>(1.0, "PvE: Void DoT damage dealt to mobs modifier")),
                 ("pve_void_dot_drr_mod", new Property<double>(1.0, "PvE: Void DoT Damage Resistance Reduction effectiveness on mobs. Scales how much extra damage mobs take when they have Void DoTs applied (the DRR debuff portion).")),
 
+                // Dirty Fighting
+                ("dirty_fighting_breaching_armor_debuff", new Property<double>(25.0, "AL reduction applied while Dirty Fighting low-attack (Unbalancing) debuff is active (Breaching Blow/Assault).")),
+
                 // ===================================================================================
                 // PvP Synthetic Nether Protection - Simulates missing nether protection spells/wards
                 // ===================================================================================

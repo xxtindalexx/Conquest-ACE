@@ -375,6 +375,21 @@ namespace ACE.Server.WorldObjects.Managers
                     }
                     entry.AugmentationLevelWhenCast = creatureCaster.LuminanceAugmentLifeCount ?? 0;
                 }
+
+                var meleeMissileAug = Math.Max(creatureCaster.LuminanceAugmentMeleeCount ?? 0,
+                    creatureCaster.LuminanceAugmentMissileCount ?? 0);
+
+                switch (spell.Category)
+                {
+                    case SpellCategory.DFHealingDebuff:
+                        entry.StatModValue -= meleeMissileAug;
+                        entry.AugmentationLevelWhenCast = meleeMissileAug;
+                        break;
+                    case SpellCategory.DFBleedDamage:
+                        entry.StatModValue += meleeMissileAug;
+                        entry.AugmentationLevelWhenCast = meleeMissileAug;
+                        break;
+                }
             }
             else
             {
@@ -1144,7 +1159,13 @@ namespace ACE.Server.WorldObjects.Managers
         /// </summary>
         public virtual int GetBodyArmorMod()
         {
-            return GetModifier(EnchantmentTypeFlags.BodyArmorValue);
+            var mod = GetModifier(EnchantmentTypeFlags.BodyArmorValue);
+
+            // CONQUEST: Breaching Blow / Assault — -25 AL while DF low-attack (Unbalancing) debuff is active
+            if (GetEnchantments(SpellCategory.DFDefenseSkillDebuff).Count > 0)
+                mod -= (int)PropertyManager.GetDouble("dirty_fighting_breaching_armor_debuff", 25.0);
+
+            return mod;
         }
 
         /// <summary>
