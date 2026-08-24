@@ -98,7 +98,7 @@ namespace ACE.Server.Network
 
         public DateTime LastClapCommandTime { get; set; }
 
-        public DateTime LastQBCommandTime { get; set; }
+        public Dictionary<string, DateTime> LastTopCommandTimes { get; } = new Dictionary<string, DateTime>();
 
         public DateTime LastRerollTreasureMapCommandTime { get; set; }
 

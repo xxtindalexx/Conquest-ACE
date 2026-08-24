@@ -24,6 +24,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -881,28 +882,33 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            // Rate limit check for /top qb command
-            if (parameters[0]?.ToLower() == "qb")
+            var category = parameters[0]?.ToLower();
+            var cooldownKey = NormalizeTopCategory(category);
+            if (cooldownKey == null)
             {
-                var qbCommandLimit = PropertyManager.GetLong("qb_command_limit");
-                var timeSinceLastCommand = DateTime.UtcNow - session.LastQBCommandTime;
-                if (timeSinceLastCommand.TotalSeconds < qbCommandLimit)
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[TOP] Unknown leaderboard '{category}'. Use: qb, level, enl, bank, lum, augs, deaths, or titles", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var topCommandLimit = PropertyManager.GetLong("top_command_limit");
+            if (session.LastTopCommandTimes.TryGetValue(cooldownKey, out var lastUsed))
+            {
+                var elapsed = DateTime.UtcNow - lastUsed;
+                if (elapsed.TotalSeconds < topCommandLimit)
                 {
-                    var remainingTime = (int)(qbCommandLimit - timeSinceLastCommand.TotalSeconds);
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {remainingTime} more second(s) before using /top qb again.", ChatMessageType.Broadcast));
+                    var remainingTime = (int)(topCommandLimit - elapsed.TotalSeconds);
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {remainingTime} more second(s) before using /top {category} again.", ChatMessageType.Broadcast));
                     return;
                 }
-                session.LastQBCommandTime = DateTime.UtcNow;
             }
+            session.LastTopCommandTimes[cooldownKey] = DateTime.UtcNow;
 
             List<Database.Models.Auth.Leaderboard> list = new List<Database.Models.Auth.Leaderboard>();
             var cache = Database.Models.Auth.LeaderboardCache.Instance;
 
             using (var context = new Database.Models.Auth.AuthDbContext())
             {
-                var category = parameters[0]?.ToLower();
-
-                switch (category)
+                switch (cooldownKey)
                 {
                     case "qb":
                         list = await cache.GetTopQBAsync(context);
@@ -921,7 +927,6 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "enl":
-                    case "enlightenment":
                         list = await cache.GetTopEnlAsync(context);
                         if (list.Count > 0)
                         {
@@ -938,7 +943,6 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "lum":
-                    case "luminance":
                         list = await cache.GetTopLumAsync(context);
                         if (list.Count > 0)
                         {
@@ -947,8 +951,6 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "augs":
-                    case "aug":
-                    case "augmentations":
                         list = await cache.GetTopAugsAsync(context);
                         if (list.Count > 0)
                         {
@@ -957,7 +959,6 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "deaths":
-                    case "death":
                         list = await cache.GetTopDeathsAsync(context);
                         if (list.Count > 0)
                         {
@@ -966,17 +967,12 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "titles":
-                    case "title":
                         list = await cache.GetTopTitlesAsync(context);
                         if (list.Count > 0)
                         {
                             session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Title Count:", ChatMessageType.Broadcast));
                         }
                         break;
-
-                    default:
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[TOP] Unknown leaderboard '{category}'. Use: qb, level, enl, bank, or lum", ChatMessageType.Broadcast));
-                        return;
                 }
 
                 // Display the leaderboard
@@ -989,6 +985,63 @@ namespace ACE.Server.Command.Handlers
                 {
                     session.Network.EnqueueSend(new GameMessageSystemChat("[TOP] No data available for this leaderboard yet.", ChatMessageType.Broadcast));
                 }
+                else if (session.Player != null && !session.Player.ExcludeFromLeaderboards)
+                {
+                    var playerName = session.Player.Name;
+                    var onList = list.Any(x => string.Equals(x.Character, playerName, StringComparison.OrdinalIgnoreCase));
+
+                    if (!onList)
+                    {
+                        var placement = await GetTopPlacementAsync(session.Player, cooldownKey);
+                        if (placement != null)
+                        {
+                            session.Network.EnqueueSend(new GameMessageSystemChat(
+                                $"[TOP] Your rank: #{placement.Rank:N0} - {placement.Score:N0}",
+                                ChatMessageType.Broadcast));
+                        }
+                    }
+                }
+            }
+        }
+
+        private static string NormalizeTopCategory(string category)
+        {
+            return category switch
+            {
+                "qb" => "qb",
+                "level" => "level",
+                "enl" or "enlightenment" => "enl",
+                "bank" => "bank",
+                "lum" or "luminance" => "lum",
+                "augs" or "aug" or "augmentations" => "augs",
+                "deaths" or "death" => "deaths",
+                "titles" or "title" => "titles",
+                _ => null
+            };
+        }
+
+        private static async Task<Database.Models.Auth.LeaderboardPlacement> GetTopPlacementAsync(Player player, string cooldownKey)
+        {
+            switch (cooldownKey)
+            {
+                case "qb":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("qb", player.Account?.CachedQuestBonusCount ?? 0);
+                case "level":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("level", player.Level ?? 1, player.Enlightenment);
+                case "enl":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("enl", player.Enlightenment, tieBreakFloat: player.GetProperty(PropertyFloat.EnlightenmentTimestamp) ?? double.MaxValue);
+                case "bank":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("bank", player.GetProperty(PropertyInt64.BankedPyreals) ?? 0);
+                case "lum":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("lum", player.GetProperty(PropertyInt64.BankedLuminance) ?? 0);
+                case "augs":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("augs", GetPlayerAugmentationCount(player));
+                case "deaths":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("deaths", player.NumDeaths);
+                case "titles":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("titles", player.NumCharacterTitles ?? 0);
+                default:
+                    return null;
             }
         }
 

@@ -672,7 +672,7 @@ namespace ACE.Server.Managers
                 ("pet_mythic_stamina_spell_level", new Property<long>(1, "the spell level (1-5) of Stamina to Health Other that Mythic pets cast on their owner. 1 = level I, 2 = level II, etc.")),
                 ("pet_mythic_spell_cooldown", new Property<long>(15, "the number of seconds Mythic pets must wait between casting healing/stamina spells on their owner")),
                 ("player_save_interval", new Property<long>(300, "the number of seconds between automatic player saves")),
-                ("qb_command_limit", new Property<long>(60, "The number of seconds a player must wait between using the qb list command")),
+                ("top_command_limit", new Property<long>(60, "The number of seconds a player must wait before reusing the same /top category")),
                 ("rares_max_days_between", new Property<long>(45, "for rares_real_time_v2: the maximum number of days a player can go before a rare is generated on rare eligible creature kills")),
                 ("rares_max_seconds_between", new Property<long>(5256000, "for rares_real_time: the maximum number of seconds a player can go before a second chance at a rare is allowed on rare eligible creature kills that did not generate a rare")),
                 ("summoning_killtask_multicredit_cap", new Property<long>(2, "if allow_summoning_killtask_multicredit is enabled, the maximum # of killtask credits a player can receive from 1 kill")),
