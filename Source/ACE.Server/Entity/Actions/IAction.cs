@@ -327,6 +327,9 @@ namespace ACE.Server.Entity.Actions
         // Random Dye
         RandomDye_ApplyDye,
 
+        // Dye Mixture
+        DyeMixture_AddVial,
+
         // Imbue Strip Tool
         ImbueStripTool_ApplyStrip,
     }

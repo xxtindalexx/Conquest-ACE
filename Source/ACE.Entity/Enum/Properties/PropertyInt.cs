@@ -761,6 +761,9 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         GearPVENetherResistRating = 9366,
 
+        // CONQUEST: Dye Mixture — tracks which vials have been added (9-bit mask, max 511)
+        DyeMixtureVialsBitfield = 9367,
+
         // CONQUEST: Vendor Requirements
         VendorRequiredEnlightenment = 39000,    // Minimum enlightenment level required to use this vendor
     }
