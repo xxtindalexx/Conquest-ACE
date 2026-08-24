@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using log4net;
+
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -15,6 +17,8 @@ namespace ACE.Server.WorldObjects
 {
     public class DyeMixture : CraftTool
     {
+        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+
         public const uint DyeMixtureWcid = 13370669;
         public const int CompleteMask = 511;
 
@@ -46,7 +50,7 @@ namespace ACE.Server.WorldObjects
 
             var current = mixture.GetProperty(PropertyInt.DyeMixtureVialsBitfield) ?? 0;
 
-            if ((current & bit) != 0)
+            if ((current & bit) != 0 && current != CompleteMask)
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat("That vial has already been added to the mixture.", ChatMessageType.Craft));
                 player.SendUseDoneEvent();
@@ -87,6 +91,13 @@ namespace ACE.Server.WorldObjects
 
                     var bits = mixture.GetProperty(PropertyInt.DyeMixtureVialsBitfield) ?? 0;
 
+                    // Mixture already complete — retry granting Mystery Dye (e.g. after a prior failed handoff)
+                    if (bits == CompleteMask)
+                    {
+                        TryGrantMysteryDye(player, mixture);
+                        return;
+                    }
+
                     if ((bits & bit) != 0)
                     {
                         player.Session.Network.EnqueueSend(new GameMessageSystemChat("That vial has already been added to the mixture.", ChatMessageType.Craft));
@@ -101,27 +112,14 @@ namespace ACE.Server.WorldObjects
 
                     var newBits = bits | bit;
 
-                    if (newBits == CompleteMask)
-                    {
-                        if (!player.TryConsumeFromInventoryWithNetworking(mixture, 1))
-                        {
-                            player.Session.Network.EnqueueSend(new GameMessageSystemChat("The dye mixture could not be consumed.", ChatMessageType.Craft));
-                            return;
-                        }
-
-                        var mysteryDye = WorldObjectFactory.CreateNewWorldObject(RandomDye.RandomDyeWcid);
-                        if (mysteryDye == null || !player.TryCreateInInventoryWithNetworking(mysteryDye))
-                        {
-                            player.Session.Network.EnqueueSend(new GameMessageSystemChat("The dye mixture finishes brewing, but there is no room for the Mystery Dye.", ChatMessageType.Craft));
-                            return;
-                        }
-
-                        player.SendMessage("The dye mixture finishes brewing and becomes a Mystery Dye!", ChatMessageType.Craft);
-                        return;
-                    }
-
                     player.UpdateProperty(mixture, PropertyInt.DyeMixtureVialsBitfield, newBits);
                     mixture.SaveBiotaToDatabase();
+
+                    if (newBits == CompleteMask)
+                    {
+                        TryGrantMysteryDye(player, mixture);
+                        return;
+                    }
 
                     var count = CountBits(newBits);
                     player.SendMessage($"You add the {vial.Name} to the dye mixture. ({count}/9)", ChatMessageType.Craft);
@@ -160,6 +158,39 @@ namespace ACE.Server.WorldObjects
             }
 
             return false;
+        }
+
+        private static void TryGrantMysteryDye(Player player, WorldObject mixture)
+        {
+            var mysteryDye = WorldObjectFactory.CreateNewWorldObject(RandomDye.RandomDyeWcid);
+            if (mysteryDye == null)
+            {
+                log.Warn($"DyeMixture.TryGrantMysteryDye({player.Name}): Mystery Dye weenie {RandomDye.RandomDyeWcid} not found in world database.");
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "The dye mixture is ready, but Mystery Dye could not be created. Weenie 13370549 may be missing from the world database.",
+                    ChatMessageType.Craft));
+                return;
+            }
+
+            if (!player.TryCreateInInventoryWithNetworking(mysteryDye))
+            {
+                mysteryDye.Destroy();
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "The dye mixture is ready, but you do not have enough pack space for the Mystery Dye. Free up space and use any vial on the mixture again.",
+                    ChatMessageType.Craft));
+                return;
+            }
+
+            if (!player.TryConsumeFromInventoryWithNetworking(mixture, 1))
+            {
+                log.Warn($"DyeMixture.TryGrantMysteryDye({player.Name}): granted Mystery Dye but failed to consume mixture.");
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "You receive a Mystery Dye, but the dye mixture could not be removed from your inventory.",
+                    ChatMessageType.Craft));
+                return;
+            }
+
+            player.SendMessage("The dye mixture finishes brewing and becomes a Mystery Dye!", ChatMessageType.Craft);
         }
 
         private static int CountBits(int value)
