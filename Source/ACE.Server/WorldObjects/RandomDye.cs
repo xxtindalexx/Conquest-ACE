@@ -119,7 +119,8 @@ namespace ACE.Server.WorldObjects
                     }
 
                     var icon = clothingTable.GetIcon((uint)randomPalette);
-                    target.SetProperty(PropertyDataId.Icon, icon);
+                    if (icon > 0)
+                        target.SetProperty(PropertyDataId.Icon, icon);
                     target.SetProperty(PropertyInt.PaletteTemplate, randomPalette);
                     target.SetProperty(PropertyFloat.Shade, randomShade);
 
