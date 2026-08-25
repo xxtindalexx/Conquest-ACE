@@ -35,12 +35,26 @@ namespace ACE.Server.WorldObjects
             { 11470,  256 },   // Dark Blue
         };
 
+        private static readonly uint?[] IconOverlayByVialCount =
+        {
+            null,           // 0
+            0x0600109E,     // 1
+            0x0600109F,     // 2
+            0x060010A0,     // 3
+            0x060010A1,     // 4
+            0x060010A2,     // 5
+            0x060010A3,     // 6
+            0x060010A4,     // 7
+            0x060010A5,     // 8
+        };
+
         public DyeMixture(Weenie weenie, ObjectGuid guid) : base(weenie, guid)
         {
         }
 
         public DyeMixture(Biota biota) : base(biota)
         {
+            SyncIconOverlayFromBitfield();
         }
 
         public static bool TryAddVial(Player player, WorldObject source, WorldObject target)
@@ -112,16 +126,18 @@ namespace ACE.Server.WorldObjects
 
                     var newBits = bits | bit;
 
-                    player.UpdateProperty(mixture, PropertyInt.DyeMixtureVialsBitfield, newBits);
-                    mixture.SaveBiotaToDatabase();
-
                     if (newBits == CompleteMask)
                     {
+                        player.UpdateProperty(mixture, PropertyInt.DyeMixtureVialsBitfield, newBits);
+                        mixture.SaveBiotaToDatabase();
                         TryGrantMysteryDye(player, mixture);
                         return;
                     }
 
                     var count = CountBits(newBits);
+                    UpdateIconOverlay(player, mixture, count);
+                    player.UpdateProperty(mixture, PropertyInt.DyeMixtureVialsBitfield, newBits);
+                    mixture.SaveBiotaToDatabase();
                     player.SendMessage($"You add the {vial.Name} to the dye mixture. ({count}/9)", ChatMessageType.Craft);
                 }
                 finally
@@ -202,6 +218,32 @@ namespace ACE.Server.WorldObjects
                 value >>= 1;
             }
             return count;
+        }
+
+        private static uint? GetIconOverlayForVialCount(int count)
+        {
+            if (count < 0 || count >= IconOverlayByVialCount.Length)
+                return null;
+
+            return IconOverlayByVialCount[count];
+        }
+
+        private void SyncIconOverlayFromBitfield()
+        {
+            var bits = GetProperty(PropertyInt.DyeMixtureVialsBitfield) ?? 0;
+            if (bits == CompleteMask)
+                return;
+
+            var overlay = GetIconOverlayForVialCount(CountBits(bits));
+            if (overlay.HasValue)
+                IconOverlayId = overlay.Value;
+            else
+                RemoveProperty(PropertyDataId.IconOverlay);
+        }
+
+        private static void UpdateIconOverlay(Player player, WorldObject mixture, int vialCount)
+        {
+            player.UpdateProperty(mixture, PropertyDataId.IconOverlay, GetIconOverlayForVialCount(vialCount));
         }
     }
 }
