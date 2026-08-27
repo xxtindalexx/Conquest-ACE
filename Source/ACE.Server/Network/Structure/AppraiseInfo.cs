@@ -113,7 +113,7 @@ namespace ACE.Server.Network.Structure
                 BuildCreature(creature);
 
             if (wo.Damage != null && !(wo is Clothing) || wo is MeleeWeapon || wo is Missile || wo is MissileLauncher || wo is Ammunition || wo is Caster)
-                BuildWeapon(wo);
+                BuildWeapon(wo, examiner);
 
             // CONQUEST: Build pet device property descriptions
             if (wo is PetDevice petDevice)
@@ -732,7 +732,7 @@ namespace ACE.Server.Network.Structure
             // add ratings from equipped items?
         }
 
-        private void BuildWeapon(WorldObject weapon)
+        private void BuildWeapon(WorldObject weapon, Player examiner)
         {
             if (!Success)
                 return;
@@ -774,7 +774,7 @@ namespace ACE.Server.Network.Structure
             }
 
             // Build detailed weapon property descriptions
-            BuildWeaponPropertyDescriptions(weapon);
+            BuildWeaponPropertyDescriptions(weapon, examiner);
 
             // item enchantments can also be on wielder currently
             AddEnchantments(weapon);
@@ -784,13 +784,21 @@ namespace ACE.Server.Network.Structure
         /// Builds detailed human-readable descriptions of weapon special properties
         /// Appends to the Use property string for display in appraisal panel
         /// </summary>
-        private void BuildWeaponPropertyDescriptions(WorldObject weapon)
+        private void BuildWeaponPropertyDescriptions(WorldObject weapon, Player examiner)
         {
             var descriptions = new List<string>();
             var imbuedEffect = (ImbuedEffectType)(weapon.GetProperty(PropertyInt.ImbuedEffect) ?? 0);
             var maxCritChancePercent = WorldObject.MaxCriticalStrikeMod * 100;
             var maxCritDmgMultiplier = 1.0 + WorldObject.MaxCripplingBlowMod;
             var maxRendingVulnPercent = (WorldObject.MaxRendingMod - 1.0) * 100;
+
+            var rendSuffix = "";
+            var lifeAugBonus = WorldObject.GetRendingLifeAugBonus(examiner);
+            if (lifeAugBonus > 0)
+            {
+                var withAugsPercent = (WorldObject.MaxRendingMod + lifeAugBonus - 1.0) * 100;
+                rendSuffix = $" (life augs: +{withAugsPercent:F0}%)";
+            }
 
             // Slayer bonus
             var slayerCreatureType = weapon.SlayerCreatureType;
@@ -892,21 +900,21 @@ namespace ACE.Server.Network.Structure
 
             // Elemental Rending effects
             if (imbuedEffect.HasFlag(ImbuedEffectType.SlashRending))
-                descriptions.Add($"- Slash Rending: Up to +{maxRendingVulnPercent:F0}% Slash Dmg (vuln, skill based)");
+                descriptions.Add($"- Slash Rending: Up to +{maxRendingVulnPercent:F0}% Slash Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.PierceRending))
-                descriptions.Add($"- Pierce Rending: Up to +{maxRendingVulnPercent:F0}% Pierce Dmg (vuln, skill based)");
+                descriptions.Add($"- Pierce Rending: Up to +{maxRendingVulnPercent:F0}% Pierce Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.BludgeonRending))
-                descriptions.Add($"- Bludgeon Rending: Up to +{maxRendingVulnPercent:F0}% Bludgeon Dmg (vuln, skill based)");
+                descriptions.Add($"- Bludgeon Rending: Up to +{maxRendingVulnPercent:F0}% Bludgeon Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.AcidRending))
-                descriptions.Add($"- Acid Rending: Up to +{maxRendingVulnPercent:F0}% Acid Dmg (vuln, skill based)");
+                descriptions.Add($"- Acid Rending: Up to +{maxRendingVulnPercent:F0}% Acid Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ColdRending))
-                descriptions.Add($"- Cold Rending: Up to +{maxRendingVulnPercent:F0}% Cold Dmg (vuln, skill based)");
+                descriptions.Add($"- Cold Rending: Up to +{maxRendingVulnPercent:F0}% Cold Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ElectricRending))
-                descriptions.Add($"- Lightning Rending: Up to +{maxRendingVulnPercent:F0}% Lightning Dmg (vuln, skill based)");
+                descriptions.Add($"- Lightning Rending: Up to +{maxRendingVulnPercent:F0}% Lightning Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.FireRending))
-                descriptions.Add($"- Fire Rending: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based)");
+                descriptions.Add($"- Fire Rending: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.NetherRending))
-                descriptions.Add($"- Void Rending: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based)");
+                descriptions.Add($"- Void Rending: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based){rendSuffix}");
 
             // Always Critical
             if (imbuedEffect.HasFlag(ImbuedEffectType.AlwaysCritical))
