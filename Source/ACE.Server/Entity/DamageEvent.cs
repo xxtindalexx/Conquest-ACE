@@ -125,6 +125,7 @@ namespace ACE.Server.Entity
 
         public bool Overpower;
 
+        public bool IsCleave;
 
         // player defender
         public BodyPart BodyPart;
@@ -155,11 +156,12 @@ namespace ACE.Server.Entity
             40301,  // Verdant Moar
         };
 
-        public static DamageEvent CalculateDamage(Creature attacker, Creature defender, WorldObject damageSource, MotionCommand? attackMotion = null, AttackHook attackHook = null)
+        public static DamageEvent CalculateDamage(Creature attacker, Creature defender, WorldObject damageSource, MotionCommand? attackMotion = null, AttackHook attackHook = null, bool isCleave = false)
         {
             var damageEvent = new DamageEvent();
             damageEvent.AttackMotion = attackMotion;
             damageEvent.AttackHook = attackHook;
+            damageEvent.IsCleave = isCleave;
             if (damageSource == null)
                 damageSource = attacker;
 
@@ -659,6 +661,17 @@ namespace ACE.Server.Entity
                 var splitMultiplier = (float)(DamageSource.ProjectileLauncher?.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ??
                                              DefaultSplitArrowDamageMultiplier);
                 Damage *= splitMultiplier;
+            }
+
+            // CONQUEST: Extra-target cleave is 75% unless this is a two-handed slash-attack weapon
+            if (IsCleave)
+            {
+                var fullCleave = Weapon != null
+                    && Weapon.IsTwoHanded
+                    && (Weapon.W_AttackType & AttackType.Slashes) != 0;
+
+                if (!fullCleave)
+                    Damage *= Creature.CleaveDamageMultiplier;
             }
 
             // Apply enrage damage reduction to the final output damage if the defender is a mob and enraged

@@ -115,7 +115,7 @@ namespace ACE.Server.WorldObjects
                 return CombatType.Missile;
         }
 
-        public DamageEvent DamageTarget(Creature target, WorldObject damageSource)
+        public DamageEvent DamageTarget(Creature target, WorldObject damageSource, bool isCleave = false)
         {
             if (target.Health.Current <= 0)
                 return null;
@@ -139,7 +139,7 @@ namespace ACE.Server.WorldObjects
                 targetPlayer.EnterPvPMode();
             }
 
-            var damageEvent = DamageEvent.CalculateDamage(this, target, damageSource);
+            var damageEvent = DamageEvent.CalculateDamage(this, target, damageSource, isCleave: isCleave);
 
             if (damageEvent.HasDamage)
             {

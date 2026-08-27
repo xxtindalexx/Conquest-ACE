@@ -814,11 +814,11 @@ namespace ACE.Server.Network.Structure
             if (critFrequency != null && critFrequency > 0)
             {
                 if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
-                    descriptions.Add("- Biting Strike: Surpassed by Critical Strike");
+                    descriptions.Add("- Biting Strike (Secondary): Surpassed by Critical Strike");
                 else
                 {
                     var critPercent = critFrequency.Value * 100;
-                    descriptions.Add($"- Biting Strike: {critPercent:F0}% Crit Chance");
+                    descriptions.Add($"- Biting Strike (Secondary): {critPercent:F0}% Crit Chance");
                 }
             }
 
@@ -827,12 +827,22 @@ namespace ACE.Server.Network.Structure
             if (critDamageMod != null && critDamageMod > 1.0)
             {
                 if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
-                    descriptions.Add("- Crushing Blow: Surpassed by Crippling Blow");
+                    descriptions.Add("- Crushing Blow (Secondary): Surpassed by Crippling Blow");
                 else
                 {
                     var totalCritDmgMultiplier = 1.0 + critDamageMod.Value;
-                    descriptions.Add($"- Crushing Blow: {totalCritDmgMultiplier:G}x Crit Dmg");
+                    descriptions.Add($"- Crushing Blow (Secondary): {totalCritDmgMultiplier:G}x Crit Dmg");
                 }
+            }
+
+            // Cleave additional targets (two-handed / cleaving weapons)
+            if (weapon.CleaveTargets > 0)
+            {
+                var fullCleave = weapon.IsTwoHanded && (weapon.W_AttackType & AttackType.Slashes) != 0;
+                if (fullCleave)
+                    descriptions.Add($"- Cleave (Secondary): +{weapon.CleaveTargets} additional targets");
+                else
+                    descriptions.Add($"- Cleave (Secondary): +{weapon.CleaveTargets} additional targets ({Creature.CleaveDamageMultiplier * 100:F0}% damage)");
             }
 
             // Resistance Cleaving (vulnerability)
@@ -888,33 +898,33 @@ namespace ACE.Server.Network.Structure
 
             // Critical Strike
             if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
-                descriptions.Add($"- Critical Strike: Up to {maxCritChancePercent:F0}% crit chance (skill based)");
+                descriptions.Add($"- Critical Strike{ImbueSlotTag(ImbuedEffectType.CriticalStrike)}: Up to {maxCritChancePercent:F0}% crit chance (skill based)");
 
             // Crippling Blow
             if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
-                descriptions.Add($"- Crippling Blow: Up to {maxCritDmgMultiplier:G}x crit dmg (skill based)");
+                descriptions.Add($"- Crippling Blow{ImbueSlotTag(ImbuedEffectType.CripplingBlow)}: Up to {maxCritDmgMultiplier:G}x crit dmg (skill based)");
 
             // Armor Rending
             if (imbuedEffect.HasFlag(ImbuedEffectType.ArmorRending))
-                descriptions.Add("- Armor Rending: Ignores up to 60% armor (skill based)");
+                descriptions.Add($"- Armor Rending{ImbueSlotTag(ImbuedEffectType.ArmorRending)}: Ignores up to 60% armor (skill based)");
 
             // Elemental Rending effects
             if (imbuedEffect.HasFlag(ImbuedEffectType.SlashRending))
-                descriptions.Add($"- Slash Rending: Up to +{maxRendingVulnPercent:F0}% Slash Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Slash Rending{ImbueSlotTag(ImbuedEffectType.SlashRending)}: Up to +{maxRendingVulnPercent:F0}% Slash Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.PierceRending))
-                descriptions.Add($"- Pierce Rending: Up to +{maxRendingVulnPercent:F0}% Pierce Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Pierce Rending{ImbueSlotTag(ImbuedEffectType.PierceRending)}: Up to +{maxRendingVulnPercent:F0}% Pierce Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.BludgeonRending))
-                descriptions.Add($"- Bludgeon Rending: Up to +{maxRendingVulnPercent:F0}% Bludgeon Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Bludgeon Rending{ImbueSlotTag(ImbuedEffectType.BludgeonRending)}: Up to +{maxRendingVulnPercent:F0}% Bludgeon Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.AcidRending))
-                descriptions.Add($"- Acid Rending: Up to +{maxRendingVulnPercent:F0}% Acid Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Acid Rending{ImbueSlotTag(ImbuedEffectType.AcidRending)}: Up to +{maxRendingVulnPercent:F0}% Acid Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ColdRending))
-                descriptions.Add($"- Cold Rending: Up to +{maxRendingVulnPercent:F0}% Cold Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Cold Rending{ImbueSlotTag(ImbuedEffectType.ColdRending)}: Up to +{maxRendingVulnPercent:F0}% Cold Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ElectricRending))
-                descriptions.Add($"- Lightning Rending: Up to +{maxRendingVulnPercent:F0}% Lightning Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Lightning Rending{ImbueSlotTag(ImbuedEffectType.ElectricRending)}: Up to +{maxRendingVulnPercent:F0}% Lightning Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.FireRending))
-                descriptions.Add($"- Fire Rending: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Fire Rending{ImbueSlotTag(ImbuedEffectType.FireRending)}: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.NetherRending))
-                descriptions.Add($"- Void Rending: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Void Rending{ImbueSlotTag(ImbuedEffectType.NetherRending)}: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based){rendSuffix}");
 
             // Always Critical
             if (imbuedEffect.HasFlag(ImbuedEffectType.AlwaysCritical))
@@ -937,6 +947,19 @@ namespace ACE.Server.Network.Structure
                 else
                     PropertiesString[PropertyString.Use] = descriptionText + "\n";
             }
+        }
+
+        /// <summary>
+        /// CONQUEST: Labels weapon-tinker imbues as Primary.
+        /// Matches ImbueStripTool.PrimaryImbueMask (CS, CB, AR, elemental rends).
+        /// Secondaries (Biting Strike, Crushing Blow, Cleave) are labeled at their description lines.
+        /// </summary>
+        private static string ImbueSlotTag(ImbuedEffectType type)
+        {
+            if (type != ImbuedEffectType.Undef && (ImbueStripTool.PrimaryImbueMask & type) == type)
+                return " (Primary)";
+
+            return "";
         }
 
         /// <summary>

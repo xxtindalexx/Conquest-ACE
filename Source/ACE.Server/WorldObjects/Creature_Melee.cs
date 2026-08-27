@@ -107,6 +107,12 @@ namespace ACE.Server.WorldObjects
         public const float CleaveCylRange = 2.0f;
 
         /// <summary>
+        /// Extra-target cleave damage for weapons that are not two-handed slash-attack.
+        /// Slash-attack 2Hs (greataxe, mace, nodachi, including elemental) keep 100%.
+        /// </summary>
+        public const float CleaveDamageMultiplier = 0.75f;
+
+        /// <summary>
         /// Performs a cleaving attack for two-handed weapons
         /// </summary>
         /// <returns>The list of cleave targets to hit with this attack</returns>

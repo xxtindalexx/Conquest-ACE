@@ -356,7 +356,7 @@ namespace ACE.Server.WorldObjects
                         foreach (var cleaveHit in cleave)
                         {
                             // target procs don't happen for cleaving
-                            DamageTarget(cleaveHit, weapon);
+                            DamageTarget(cleaveHit, weapon, isCleave: true);
                         }
                     }
                 });
