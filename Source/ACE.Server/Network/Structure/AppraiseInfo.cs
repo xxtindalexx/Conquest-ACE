@@ -835,14 +835,17 @@ namespace ACE.Server.Network.Structure
                 }
             }
 
-            // Cleave additional targets (two-handed / cleaving weapons)
-            if (weapon.CleaveTargets > 0)
+            // Cleave additional targets (two-handed / cleaving weapons, plus ENL melee bonus)
+            var extraTargets = weapon.CleaveTargets;
+            if (examiner != null && weapon.WeenieType == WeenieType.MeleeWeapon)
+                extraTargets += examiner.GetProperty(PropertyInt.EnlightenmentCleaveBonus) ?? 0;
+
+            if (extraTargets > 0)
             {
-                var fullCleave = weapon.IsTwoHanded && (weapon.W_AttackType & AttackType.Slashes) != 0;
-                if (fullCleave)
-                    descriptions.Add($"- Cleave (Secondary): +{weapon.CleaveTargets} additional targets");
+                if (weapon.IsTwoHandedSlashAttack)
+                    descriptions.Add($"- Cleave (Secondary): +{extraTargets} additional targets ({(Creature.CleaveSlashWidthMultiplier - 1.0f) * 100:F0}% wider)");
                 else
-                    descriptions.Add($"- Cleave (Secondary): +{weapon.CleaveTargets} additional targets ({Creature.CleaveDamageMultiplier * 100:F0}% damage)");
+                    descriptions.Add($"- Cleave (Secondary): +{extraTargets} additional targets ({Creature.CleaveDamageMultiplier * 100:F0}% damage)");
             }
 
             // Resistance Cleaving (vulnerability)

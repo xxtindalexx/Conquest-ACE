@@ -663,12 +663,10 @@ namespace ACE.Server.Entity
                 Damage *= splitMultiplier;
             }
 
-            // CONQUEST: Extra-target cleave is 75% unless this is a two-handed slash-attack weapon
+            // CONQUEST: Extra-target cleave uses cleave_damage_multiplier unless this is a two-handed slash-attack weapon
             if (IsCleave)
             {
-                var fullCleave = Weapon != null
-                    && Weapon.IsTwoHanded
-                    && (Weapon.W_AttackType & AttackType.Slashes) != 0;
+                var fullCleave = Weapon != null && Weapon.IsTwoHandedSlashAttack;
 
                 if (!fullCleave)
                     Damage *= Creature.CleaveDamageMultiplier;

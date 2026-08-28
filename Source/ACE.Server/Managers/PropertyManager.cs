@@ -735,6 +735,7 @@ namespace ACE.Server.Managers
                 ("vitae_penalty", new Property<double>(0.05, "the amount of vitae penalty a player gets per death")),
                 ("vitae_penalty_max", new Property<double>(0.40, "the maximum vitae penalty a player can have")),
                 ("void_pvp_modifier", new Property<double>(0.5, "Scales the amount of damage players take from Void Magic. Defaults to 0.5, as per retail. For earlier content where DRR isn't as readily available, this can be adjusted for balance.")),
+                ("cleave_damage_multiplier", new Property<double>(0.75, "CONQUEST: Extra-target melee cleave damage for weapons that are not two-handed slash-attack. 0.75 = 75% damage (default). Slash-attack 2Hs always deal 100%.")),
                 ("pvp_void_dot_damage_scale", new Property<double>(0.0, "CONQUEST: Scales Void/Nether DoT damage in PvP. 1.0 = full damage, 0.5 = half, 0 = disabled. The debuff (damage reduction) still applies. Default 0 (disabled).")),
                 ("lottery_pot_share", new Property<double>(0.5, "CONQUEST: Fraction of the full lottery pot (base + rollover + ticket sales) paid to winners at draw. When lottery_rollover is TRUE, the remainder carries to next week; otherwise it is destroyed. Default 0.5 (50%).")),
                 ("lottery_first_place_share", new Property<double>(0.5, "CONQUEST: Fraction of the lottery prize pool awarded to 1st place. 2nd and 3rd split the remainder equally. Default 0.5.")),
