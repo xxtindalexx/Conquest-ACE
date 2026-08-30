@@ -262,8 +262,6 @@ namespace ACE.Server.WorldObjects
             ServerPerformanceMonitor.AddToCumulativeEvent(ServerPerformanceMonitor.CumulativeEventHistoryType.Monster_Navigation_UpdatePosition_PUO, stopwatch.Elapsed.TotalSeconds);
             UpdatePosition_SyncLocation();
 
-            CheckAffectsAiHotspots();
-
             if (netsend)
                 SendUpdatePosition();
 
@@ -326,27 +324,6 @@ namespace ACE.Server.WorldObjects
 
             if (DebugMove)
                 DebugDistance();
-        }
-
-        private void CheckAffectsAiHotspots()
-        {
-            if (!IsMonster || IsDead || PhysicsObj == null)
-                return;
-
-            var landblock = CurrentLandblock;
-            if (landblock == null || !landblock.HasAffectsAiHotspots)
-                return;
-
-            foreach (var hotspot in landblock.AffectsAiHotspots)
-            {
-                if (hotspot == null || hotspot.IsDestroyed)
-                    continue;
-
-                if (!hotspot.IsWithinOverlapRange(this))
-                    continue;
-
-                hotspot.OnCollideObject(this);
-            }
         }
 
         public void DebugDistance()

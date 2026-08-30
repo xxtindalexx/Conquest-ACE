@@ -14,9 +14,6 @@ namespace ACE.Server.WorldObjects
 {
     public class Hotspot : WorldObject
     {
-        private const float OverlapSlack = 0.1f;
-        private const float EnragedHotspotRadiusMultiplier = 7.0f;
-
         public Hotspot(Weenie weenie, ObjectGuid guid) : base(weenie, guid)
         {
             SetEphemeralValues();
@@ -76,6 +73,12 @@ namespace ACE.Server.WorldObjects
                 ActionLoop.AddDelaySeconds(CycleTimeNext);
                 ActionLoop.AddAction(this, ActionType.Hotspot_ActionLoop, () =>
                 {
+                    if (IsDestroyed || CurrentLandblock == null)
+                    {
+                        ActionLoop = null;
+                        return;
+                    }
+
                     if (Creatures != null && Creatures.Any())
                     {
                         //check if the hotspot is enraged
@@ -160,46 +163,6 @@ namespace ACE.Server.WorldObjects
             set { if (!value) RemoveProperty(PropertyBool.EnragedHotspot); else SetProperty(PropertyBool.EnragedHotspot, value); }
         }
 
-        public float GetOverlapRadius()
-        {
-            var radius = PhysicsObj?.GetRadius() ?? 0;
-
-            if (EnragedHotspot)
-                radius *= EnragedHotspotRadiusMultiplier;
-
-            return radius;
-        }
-
-        public bool IsWithinOverlapRange(Creature creature)
-        {
-            if (creature?.PhysicsObj == null || PhysicsObj == null)
-                return false;
-
-            var overlapRadius = GetOverlapRadius() + creature.PhysicsObj.GetRadius() + OverlapSlack;
-
-            return Location.SquaredDistanceTo(creature.Location) <= overlapRadius * overlapRadius;
-        }
-
-        /// <summary>
-        /// One-shot check when an AffectsAis hotspot enters the world so standing mobs are registered immediately.
-        /// </summary>
-        internal void CheckOverlappingCreaturesOnEnter()
-        {
-            if (!AffectsAis || CurrentLandblock == null || PhysicsObj == null)
-                return;
-
-            foreach (var wo in CurrentLandblock.GetWorldObjectsForPhysicsHandling())
-            {
-                if (wo is not Creature creature || creature is Player || creature.IsDead)
-                    continue;
-
-                if (!IsWithinOverlapRange(creature))
-                    continue;
-
-                OnCollideObject(creature);
-            }
-        }
-
         private void ActivateCommon(
             Func<PhysicsObj, bool> touchCheck,
             Action<Creature> activationAction)
@@ -213,7 +176,7 @@ namespace ACE.Server.WorldObjects
                 var creature = CurrentLandblock.GetObject(creatureGuid) as Creature;
 
                 // verify current state of collision here
-                if (creature == null || !touchCheck(creature.PhysicsObj))
+                if (creature == null || creature.PhysicsObj == null || !touchCheck(creature.PhysicsObj))
                 {
                     //Console.WriteLine($"{Name} ({Guid}).OnCollideObjectEnd({creature?.Name})");
                     Creatures.Remove(creatureGuid);
