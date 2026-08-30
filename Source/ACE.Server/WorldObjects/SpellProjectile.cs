@@ -960,10 +960,12 @@ namespace ACE.Server.WorldObjects
 
                 damage *= damageRatingMod * damageResistRatingMod;
 
-                if (!pkBattle && Spell.DamageType == DamageType.Nether)
+                if (Spell.DamageType == DamageType.Nether)
                 {
-                    var pveNetherResistMod = Creature.GetNegativeRatingMod(target.GetPVENetherResistRating());
-                    damage *= pveNetherResistMod;
+                    damage *= Creature.GetNegativeRatingMod(target.GetNetherResistRating());
+
+                    if (!pkBattle)
+                        damage *= Creature.GetNegativeRatingMod(target.GetPVENetherResistRating());
                 }
 
                 // CONQUEST: Apply PvP magic damage cap to prevent 1-shot kills from crits

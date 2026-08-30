@@ -605,6 +605,14 @@ namespace ACE.Server.Entity
             // calculate final output damage
             Damage = DamageBeforeMitigation * ArmorMod * ShieldMod * ResistanceMod * DamageResistanceRatingMod;
 
+            if (DamageType == DamageType.Nether)
+            {
+                Damage *= Creature.GetNegativeRatingMod(defender.GetNetherResistRating());
+
+                if (!pkBattle)
+                    Damage *= Creature.GetNegativeRatingMod(defender.GetPVENetherResistRating());
+            }
+
             // ===================================================================================
             // PvP Damage Configuration System - Apply granular PvP damage modifiers
             // ===================================================================================

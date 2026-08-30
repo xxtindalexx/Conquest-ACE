@@ -1698,10 +1698,12 @@ namespace ACE.Server.WorldObjects.Managers
 
                 tickAmount *= resistanceMod * damageResistRatingMod * dotResistRatingMod;
 
-                if (damageType == DamageType.Nether && !(sourcePlayer != null && targetPlayer != null))
+                if (damageType == DamageType.Nether)
                 {
-                    var pveNetherResistMod = Creature.GetNegativeRatingMod(creature.GetPVENetherResistRating());
-                    tickAmount *= pveNetherResistMod;
+                    tickAmount *= Creature.GetNegativeRatingMod(creature.GetNetherResistRating());
+
+                    if (!(sourcePlayer != null && targetPlayer != null))
+                        tickAmount *= Creature.GetNegativeRatingMod(creature.GetPVENetherResistRating());
                 }
 
                 // make sure the target's current health is not exceeded
