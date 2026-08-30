@@ -1456,43 +1456,32 @@ namespace ACE.Server.WorldObjects
         }
 
         // CONQUEST: PvP Custom Augmentation Mode System
-        /// <summary>
-        /// Enters PvP mode - stores aug counts, zeros them out, and silently re-buffs the player
-        /// Preserves vital percentages after rebuffing
-        /// </summary>
-        public void EnterPvPMode()
-        {
-            LastPvPCombatTime = Time.GetUnixTime();
 
-            // CONQUEST: Don't enter PvP mode if already in PK dungeon mode (augs already stripped)
-            if (InPKDungeonMode)
+        private bool IsCustomAugsDisabled => InPvPMode || InPKDungeonMode || InAugDisabledDungeonMode;
+
+        private bool IsAnyLandblockAugStripModeActive => InPKDungeonMode || InAugDisabledDungeonMode;
+
+        private bool HasStoredCustomAugs => StoredPvPCreatureAugs != null;
+
+        private void StoreCustomAugsIfNeeded()
+        {
+            if (StoredPvPCreatureAugs != null)
                 return;
 
-            if (InPvPMode)
-                return; // Already in PvP mode, just update timer
+            StoredPvPCreatureAugs = LuminanceAugmentCreatureCount ?? 0;
+            StoredPvPItemAugs = LuminanceAugmentItemCount ?? 0;
+            StoredPvPLifeAugs = LuminanceAugmentLifeCount ?? 0;
+            StoredPvPVoidAugs = LuminanceAugmentVoidCount ?? 0;
+            StoredPvPWarAugs = LuminanceAugmentWarCount ?? 0;
+            StoredPvPDurationAugs = LuminanceAugmentSpellDurationCount ?? 0;
+            StoredPvPSpecializeAugs = LuminanceAugmentSpecializeCount ?? 0;
+            StoredPvPSummonAugs = LuminanceAugmentSummonCount ?? 0;
+            StoredPvPMeleeAugs = LuminanceAugmentMeleeCount ?? 0;
+            StoredPvPMissileAugs = LuminanceAugmentMissileCount ?? 0;
+        }
 
-            // Store current vital percentages
-            var healthPercent = Health.Current / (float)Health.MaxValue;
-            var staminaPercent = Stamina.Current / (float)Stamina.MaxValue;
-            var manaPercent = Mana.Current / (float)Mana.MaxValue;
-
-            // Store current aug counts to database-backed properties (crash safe)
-            // CONQUEST: Only store if not already stored (null means not stored)
-            if (StoredPvPCreatureAugs == null)
-            {
-                StoredPvPCreatureAugs = LuminanceAugmentCreatureCount ?? 0;
-                StoredPvPItemAugs = LuminanceAugmentItemCount ?? 0;
-                StoredPvPLifeAugs = LuminanceAugmentLifeCount ?? 0;
-                StoredPvPVoidAugs = LuminanceAugmentVoidCount ?? 0;
-                StoredPvPWarAugs = LuminanceAugmentWarCount ?? 0;
-                StoredPvPDurationAugs = LuminanceAugmentSpellDurationCount ?? 0;
-                StoredPvPSpecializeAugs = LuminanceAugmentSpecializeCount ?? 0;
-                StoredPvPSummonAugs = LuminanceAugmentSummonCount ?? 0;
-                StoredPvPMeleeAugs = LuminanceAugmentMeleeCount ?? 0;
-                StoredPvPMissileAugs = LuminanceAugmentMissileCount ?? 0;
-            }
-
-            // Zero out all aug counts
+        private void ZeroCustomAugs()
+        {
             LuminanceAugmentCreatureCount = 0;
             LuminanceAugmentItemCount = 0;
             LuminanceAugmentLifeCount = 0;
@@ -1503,26 +1492,93 @@ namespace ACE.Server.WorldObjects
             LuminanceAugmentSummonCount = 0;
             LuminanceAugmentMeleeCount = 0;
             LuminanceAugmentMissileCount = 0;
+        }
 
-            // CONQUEST: Buff level based on player's magic skill
-            var buffLevel = GetPvPBuffLevel();
+        private void RestoreCustomAugsFromStorage()
+        {
+            LuminanceAugmentCreatureCount = StoredPvPCreatureAugs ?? 0;
+            LuminanceAugmentItemCount = StoredPvPItemAugs ?? 0;
+            LuminanceAugmentLifeCount = StoredPvPLifeAugs ?? 0;
+            LuminanceAugmentVoidCount = StoredPvPVoidAugs ?? 0;
+            LuminanceAugmentWarCount = StoredPvPWarAugs ?? 0;
+            LuminanceAugmentSpellDurationCount = StoredPvPDurationAugs ?? 0;
+            LuminanceAugmentSpecializeCount = StoredPvPSpecializeAugs ?? 0;
+            LuminanceAugmentSummonCount = StoredPvPSummonAugs ?? 0;
+            LuminanceAugmentMeleeCount = StoredPvPMeleeAugs ?? 0;
+            LuminanceAugmentMissileCount = StoredPvPMissileAugs ?? 0;
+            ClearStoredPvPAugs();
+        }
 
-            // Remove existing self-cast buffs so clean buffs without augs can be applied
+        private struct VitalPercentages
+        {
+            public float Health;
+            public float Stamina;
+            public float Mana;
+
+            public static VitalPercentages Capture(Player player)
+            {
+                return new VitalPercentages
+                {
+                    Health = player.Health.Current / (float)player.Health.MaxValue,
+                    Stamina = player.Stamina.Current / (float)player.Stamina.MaxValue,
+                    Mana = player.Mana.Current / (float)player.Mana.MaxValue
+                };
+            }
+
+            public void Apply(Player player)
+            {
+                player.Health.Current = (uint)(player.Health.MaxValue * Health);
+                player.Stamina.Current = (uint)(player.Stamina.MaxValue * Stamina);
+                player.Mana.Current = (uint)(player.Mana.MaxValue * Mana);
+            }
+
+            public void SendUpdates(Player player)
+            {
+                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Health));
+                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Stamina));
+                player.Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(player, player.Mana));
+            }
+        }
+
+        private void RebuffPreservingVitals(VitalPercentages vitals)
+        {
             RemoveSelfCastBuffsForRebuff();
+            BuffPlayersForPvPMode(new Player[] { this }, true, GetPvPBuffLevel(), suppressVisualEffects: true);
+            vitals.Apply(this);
+            vitals.SendUpdates(this);
+        }
 
-            // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
-            BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
+        private void StripCustomAugsAndRebuff()
+        {
+            var vitals = VitalPercentages.Capture(this);
+            StoreCustomAugsIfNeeded();
+            ZeroCustomAugs();
+            RebuffPreservingVitals(vitals);
+        }
 
-            // Restore vital percentages based on new max values
-            Health.Current = (uint)(Health.MaxValue * healthPercent);
-            Stamina.Current = (uint)(Stamina.MaxValue * staminaPercent);
-            Mana.Current = (uint)(Mana.MaxValue * manaPercent);
+        private void RestoreCustomAugsAndRebuff()
+        {
+            var vitals = VitalPercentages.Capture(this);
+            RestoreCustomAugsFromStorage();
+            RebuffPreservingVitals(vitals);
+        }
 
-            // Send updated vitals to client
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Health));
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Stamina));
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Mana));
+        /// <summary>
+        /// Enters PvP mode - stores aug counts, zeros them out, and silently re-buffs the player
+        /// Preserves vital percentages after rebuffing
+        /// </summary>
+        public void EnterPvPMode()
+        {
+            LastPvPCombatTime = Time.GetUnixTime();
 
+            // CONQUEST: Don't enter PvP mode if already in a landblock aug-strip mode (augs already stripped)
+            if (IsAnyLandblockAugStripModeActive)
+                return;
+
+            if (InPvPMode)
+                return; // Already in PvP mode, just update timer
+
+            StripCustomAugsAndRebuff();
             InPvPMode = true;
 
             Session.Network.EnqueueSend(new GameMessageSystemChat(
@@ -1537,18 +1593,14 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void EnterPKDungeonMode()
         {
-            //log.Info($"[PK DUNGEON DEBUG] {Name} - EnterPKDungeonMode() called. InPKDungeonMode: {InPKDungeonMode}, InPvPMode: {InPvPMode}");
             LastPKDungeonCombatTime = Time.GetUnixTime();
 
-                if (InPKDungeonMode)
-            {
-                //log.Info($"[PK DUNGEON DEBUG] {Name} - Already in PK dungeon mode, returning");
+            if (InPKDungeonMode)
                 return; // Already in PK dungeon mode, just update timer
-            }
-            // If already in regular PvP mode, just transfer to PK dungeon mode without restoring
+
+            // If already stripped by another mode, transfer without restoring
             if (InPvPMode)
             {
-                // Stored values already exist from PvP mode, just switch modes
                 InPvPMode = false;
                 InPKDungeonMode = true;
 
@@ -1558,67 +1610,61 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            // Store current vital percentages
-            var healthPercent = Health.Current / (float)Health.MaxValue;
-            var staminaPercent = Stamina.Current / (float)Stamina.MaxValue;
-            var manaPercent = Mana.Current / (float)Mana.MaxValue;
+            if (InAugDisabledDungeonMode)
+            {
+                InAugDisabledDungeonMode = false;
+                InPKDungeonMode = true;
 
-            // Store current aug counts to database-backed properties (crash safe)
-            // CONQUEST: Only store if not already stored (null means not stored)
-            if (StoredPvPCreatureAugs == null)
-            {
-                //log.Info($"[PK DUNGEON DEBUG] {Name} - Storing current aug values. Creature: {LuminanceAugmentCreatureCount}, Item: {LuminanceAugmentItemCount}, Life: {LuminanceAugmentLifeCount}");
-                StoredPvPCreatureAugs = LuminanceAugmentCreatureCount ?? 0;
-                StoredPvPItemAugs = LuminanceAugmentItemCount ?? 0;
-                StoredPvPLifeAugs = LuminanceAugmentLifeCount ?? 0;
-                StoredPvPVoidAugs = LuminanceAugmentVoidCount ?? 0;
-                StoredPvPWarAugs = LuminanceAugmentWarCount ?? 0;
-                StoredPvPDurationAugs = LuminanceAugmentSpellDurationCount ?? 0;
-                StoredPvPSpecializeAugs = LuminanceAugmentSpecializeCount ?? 0;
-                StoredPvPSummonAugs = LuminanceAugmentSummonCount ?? 0;
-                StoredPvPMeleeAugs = LuminanceAugmentMeleeCount ?? 0;
-                StoredPvPMissileAugs = LuminanceAugmentMissileCount ?? 0;
-            }
-            else
-            {
-                //log.Info($"[PK DUNGEON DEBUG] {Name} - StoredPvPCreatureAugs already set ({StoredPvPCreatureAugs}), not overwriting");
+                Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "You have entered a PK dungeon. Custom augmentations remain disabled.",
+                    ChatMessageType.Broadcast));
+                return;
             }
 
-                // Zero out all aug counts
-                LuminanceAugmentCreatureCount = 0;
-            LuminanceAugmentItemCount = 0;
-            LuminanceAugmentLifeCount = 0;
-            LuminanceAugmentVoidCount = 0;
-            LuminanceAugmentWarCount = 0;
-            LuminanceAugmentSpellDurationCount = 0;
-            LuminanceAugmentSpecializeCount = 0;
-            LuminanceAugmentSummonCount = 0;
-            LuminanceAugmentMeleeCount = 0;
-            LuminanceAugmentMissileCount = 0;
-
-            // CONQUEST: Buff level based on player's magic skill
-            var buffLevel = GetPvPBuffLevel();
-
-            // Remove existing self-cast buffs so clean buffs without augs can be applied
-            RemoveSelfCastBuffsForRebuff();
-
-            // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
-            BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
-
-            // Restore vital percentages based on new max values
-            Health.Current = (uint)(Health.MaxValue * healthPercent);
-            Stamina.Current = (uint)(Stamina.MaxValue * staminaPercent);
-            Mana.Current = (uint)(Mana.MaxValue * manaPercent);
-
-            // Send updated vitals to client
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Health));
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Stamina));
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Mana));
-
+            StripCustomAugsAndRebuff();
             InPKDungeonMode = true;
 
             Session.Network.EnqueueSend(new GameMessageSystemChat(
                 "You have entered a PK dungeon. Custom augmentations temporarily disabled for balanced combat.",
+                ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// CONQUEST: Enters aug-disabled landblock mode - strips augs for balanced raid encounters
+        /// </summary>
+        public void EnterAugDisabledDungeonMode()
+        {
+            if (InAugDisabledDungeonMode)
+                return;
+
+            // If already stripped by another mode, transfer without restoring
+            if (InPvPMode)
+            {
+                InPvPMode = false;
+                InAugDisabledDungeonMode = true;
+
+                Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "You have entered a balanced raid area. Custom augmentations remain disabled.",
+                    ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (InPKDungeonMode)
+            {
+                InPKDungeonMode = false;
+                InAugDisabledDungeonMode = true;
+
+                Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "You have entered a balanced raid area. Custom augmentations remain disabled.",
+                    ChatMessageType.Broadcast));
+                return;
+            }
+
+            StripCustomAugsAndRebuff();
+            InAugDisabledDungeonMode = true;
+
+            Session.Network.EnqueueSend(new GameMessageSystemChat(
+                "You have entered a balanced raid area. Custom augmentations temporarily disabled for balanced encounters.",
                 ChatMessageType.Broadcast));
         }
 
@@ -1628,67 +1674,38 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void ExitPKDungeonMode()
         {
-            //log.Info($"[PK DUNGEON DEBUG] {Name} - ExitPKDungeonMode() called. InPKDungeonMode: {InPKDungeonMode}, StoredCreatureAugs: {StoredPvPCreatureAugs}");
             if (!InPKDungeonMode)
-            {
-                //log.Info($"[PK DUNGEON DEBUG] {Name} - Not in PK dungeon mode, returning");
                 return;
-            }
-
-            // Store current vital percentages
-            var healthPercent = Health.Current / (float)Health.MaxValue;
-            var staminaPercent = Stamina.Current / (float)Stamina.MaxValue;
-            var manaPercent = Mana.Current / (float)Mana.MaxValue;
-
-            // Restore original aug counts from database-backed properties
-            //log.Info($"[PK DUNGEON DEBUG] {Name} - Restoring aug values from storage. Creature: {StoredPvPCreatureAugs}, Item: {StoredPvPItemAugs}, Life: {StoredPvPLifeAugs}");
-            LuminanceAugmentCreatureCount = StoredPvPCreatureAugs ?? 0;
-            LuminanceAugmentItemCount = StoredPvPItemAugs ?? 0;
-            LuminanceAugmentLifeCount = StoredPvPLifeAugs ?? 0;
-            LuminanceAugmentVoidCount = StoredPvPVoidAugs ?? 0;
-            LuminanceAugmentWarCount = StoredPvPWarAugs ?? 0;
-            LuminanceAugmentSpellDurationCount = StoredPvPDurationAugs ?? 0;
-            LuminanceAugmentSpecializeCount = StoredPvPSpecializeAugs ?? 0;
-            LuminanceAugmentSummonCount = StoredPvPSummonAugs ?? 0;
-            LuminanceAugmentMeleeCount = StoredPvPMeleeAugs ?? 0;
-            LuminanceAugmentMissileCount = StoredPvPMissileAugs ?? 0;
-
-            //log.Info($"[PK DUNGEON DEBUG] {Name} - After restoration, current aug values. Creature: {LuminanceAugmentCreatureCount}, Item: {LuminanceAugmentItemCount}, Life: {LuminanceAugmentLifeCount}");
-            // CRITICAL: Clear the stored properties to prevent them from being read again
-            StoredPvPCreatureAugs = null;
-            StoredPvPItemAugs = null;
-            StoredPvPLifeAugs = null;
-            StoredPvPVoidAugs = null;
-            StoredPvPWarAugs = null;
-            StoredPvPDurationAugs = null;
-            StoredPvPSpecializeAugs = null;
-            StoredPvPSummonAugs = null;
-            StoredPvPMeleeAugs = null;
-            StoredPvPMissileAugs = null;
-
-            // CONQUEST: Buff level based on player's magic skill
-            var buffLevel = GetPvPBuffLevel();
-
-            // Remove existing self-cast buffs so clean buffs without augs can be applied
-            RemoveSelfCastBuffsForRebuff();
-
-            // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
-            BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
-
-            // Restore vital percentages based on new max values
-            Health.Current = (uint)(Health.MaxValue * healthPercent);
-            Stamina.Current = (uint)(Stamina.MaxValue * staminaPercent);
-            Mana.Current = (uint)(Mana.MaxValue * manaPercent);
-
-            // Send updated vitals to client
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Health));
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Stamina));
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Mana));
 
             InPKDungeonMode = false;
 
+            if (IsCustomAugsDisabled)
+                return;
+
+            RestoreCustomAugsAndRebuff();
+
             Session.Network.EnqueueSend(new GameMessageSystemChat(
                 "You have left the PK dungeon. Custom augmentations restored.",
+                ChatMessageType.Broadcast));
+        }
+
+        /// <summary>
+        /// CONQUEST: Exits aug-disabled landblock mode - restores original aug counts and silently re-buffs
+        /// </summary>
+        public void ExitAugDisabledDungeonMode()
+        {
+            if (!InAugDisabledDungeonMode)
+                return;
+
+            InAugDisabledDungeonMode = false;
+
+            if (IsCustomAugsDisabled)
+                return;
+
+            RestoreCustomAugsAndRebuff();
+
+            Session.Network.EnqueueSend(new GameMessageSystemChat(
+                "You have left the balanced raid area. Custom augmentations restored.",
                 ChatMessageType.Broadcast));
         }
 
@@ -1698,65 +1715,18 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void ExitPvPMode()
         {
-
-            // CONQUEST: Don't exit PvP mode if in PK dungeon mode (augs should stay stripped)
-            if (InPKDungeonMode)
+            // CONQUEST: Don't exit PvP mode if in a landblock aug-strip mode (augs should stay stripped)
+            if (IsAnyLandblockAugStripModeActive)
             {
                 InPvPMode = false; // Just clear the flag but don't restore augs
                 return;
             }
+
             if (!InPvPMode)
                 return;
 
-            // Store current vital percentages
-            var healthPercent = Health.Current / (float)Health.MaxValue;
-            var staminaPercent = Stamina.Current / (float)Stamina.MaxValue;
-            var manaPercent = Mana.Current / (float)Mana.MaxValue;
-
-            // Restore original aug counts from database-backed properties
-            LuminanceAugmentCreatureCount = StoredPvPCreatureAugs ?? 0;
-            LuminanceAugmentItemCount = StoredPvPItemAugs ?? 0;
-            LuminanceAugmentLifeCount = StoredPvPLifeAugs ?? 0;
-            LuminanceAugmentVoidCount = StoredPvPVoidAugs ?? 0;
-            LuminanceAugmentWarCount = StoredPvPWarAugs ?? 0;
-            LuminanceAugmentSpellDurationCount = StoredPvPDurationAugs ?? 0;
-            LuminanceAugmentSpecializeCount = StoredPvPSpecializeAugs ?? 0;
-            LuminanceAugmentSummonCount = StoredPvPSummonAugs ?? 0;
-            LuminanceAugmentMeleeCount = StoredPvPMeleeAugs ?? 0;
-            LuminanceAugmentMissileCount = StoredPvPMissileAugs ?? 0;
-
-            // CRITICAL: Clear the stored properties to prevent them from being read again
-            StoredPvPCreatureAugs = null;
-            StoredPvPItemAugs = null;
-            StoredPvPLifeAugs = null;
-            StoredPvPVoidAugs = null;
-            StoredPvPWarAugs = null;
-            StoredPvPDurationAugs = null;
-            StoredPvPSpecializeAugs = null;
-            StoredPvPSummonAugs = null;
-            StoredPvPMeleeAugs = null;
-            StoredPvPMissileAugs = null;
-
-            // CONQUEST: Buff level based on player's magic skill
-            var buffLevel = GetPvPBuffLevel();
-
-            // Remove existing self-cast buffs so clean buffs without augs can be applied
-            RemoveSelfCastBuffsForRebuff();
-
-            // Silently re-buff with level-appropriate buffs (using buff system without Sentinel restriction)
-            BuffPlayersForPvPMode(new Player[] { this }, true, buffLevel, suppressVisualEffects: true);
-
-            // Restore vital percentages based on new max values
-            Health.Current = (uint)(Health.MaxValue * healthPercent);
-            Stamina.Current = (uint)(Stamina.MaxValue * staminaPercent);
-            Mana.Current = (uint)(Mana.MaxValue * manaPercent);
-
-            // Send updated vitals to client
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Health));
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Stamina));
-            Session.Network.EnqueueSend(new GameMessagePrivateUpdateVital(this, Mana));
-
             InPvPMode = false;
+            RestoreCustomAugsAndRebuff();
 
             Session.Network.EnqueueSend(new GameMessageSystemChat(
                 "You have exited PvP combat mode. Custom augmentations restored.",
@@ -1811,6 +1781,7 @@ namespace ACE.Server.WorldObjects
             // Ensure PvP modes are cleared
             InPvPMode = false;
             InPKDungeonMode = false;
+            InAugDisabledDungeonMode = false;
 
             // Save to database
             SaveBiotaToDatabase();

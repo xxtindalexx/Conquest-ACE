@@ -1175,6 +1175,7 @@ namespace ACE.Server.Managers
                 ("server_motd", new Property<string>("", "Server message of the day")),
                 ("proxycheck_api_key", new Property<string>("", "API key for proxycheck.io VPN detection service. Get a free key at https://proxycheck.io/")),
                 ("summon_restricted_landblocks", new Property<string>("", "CONQUEST: Comma-separated restricted landblocks for combat pet overrides (e.g. 0x0066:Conquest Arena,0x0066@2:Arena v2). Omit @variant for all variants.")),
+                ("aug_disabled_landblocks", new Property<string>("", "CONQUEST: Comma-separated landblocks where custom luminance augs are disabled for balanced raids (e.g. 0x1234:Raid Name,0x1234@2:Raid v2). Omit @variant for all variants.")),
                 ("town_control_alleglist", new Property<string>("", "Comma-separated list of monarch IDs whitelisted for PK quest credit")),
 
                 // CONQUEST: Luminance Lottery
