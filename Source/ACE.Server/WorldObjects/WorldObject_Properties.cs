@@ -3389,6 +3389,15 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// The Nether Resist Rating on a non-creature item (all content, including PvP)
+        /// </summary>
+        public int? GearNetherResist
+        {
+            get => GetProperty(PropertyInt.GearNetherResist);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.GearNetherResist); else SetProperty(PropertyInt.GearNetherResist, value.Value); }
+        }
+
+        /// <summary>
         /// The MaxHealth Boost Rating on a creature or item
         /// </summary>
         public int? GearMaxHealth
