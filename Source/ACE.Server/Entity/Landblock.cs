@@ -320,6 +320,31 @@ namespace ACE.Server.Entity
         private readonly LinkedList<WorldObject> sortedGeneratorsByNextGeneratorUpdate = new LinkedList<WorldObject>();
         private readonly LinkedList<WorldObject> sortedGeneratorsByNextRegeneration = new LinkedList<WorldObject>();
 
+        /// <summary>
+        /// Hotspots with AffectsAis on this landblock. Typically 0; used for cheap monster overlap checks.
+        /// </summary>
+        private readonly List<Hotspot> affectsAiHotspots = new List<Hotspot>();
+
+        public bool HasAffectsAiHotspots => affectsAiHotspots.Count > 0;
+
+        public IReadOnlyList<Hotspot> AffectsAiHotspots => affectsAiHotspots;
+
+        public void RegisterAffectsAiHotspot(Hotspot hotspot)
+        {
+            if (hotspot == null || affectsAiHotspots.Contains(hotspot))
+                return;
+
+            affectsAiHotspots.Add(hotspot);
+        }
+
+        public void UnregisterAffectsAiHotspot(Hotspot hotspot)
+        {
+            if (hotspot == null)
+                return;
+
+            affectsAiHotspots.Remove(hotspot);
+        }
+
         // Monster tick throttle monitoring
         private int monsterTickThrottleWarningCount = 0;
         private DateTime lastMonsterThrottleWarning = DateTime.MinValue;
@@ -1300,6 +1325,12 @@ namespace ACE.Server.Entity
                 }
             }
 
+            if (wo is Hotspot affectsAiHotspot && affectsAiHotspot.AffectsAis)
+            {
+                RegisterAffectsAiHotspot(affectsAiHotspot);
+                affectsAiHotspot.CheckOverlappingCreaturesOnEnter();
+            }
+
             return true;
         }
 
@@ -1348,6 +1379,9 @@ namespace ACE.Server.Entity
             }
 
             wo.CurrentLandblock = null;
+
+            if (wo is Hotspot affectsAiHotspot && affectsAiHotspot.AffectsAis)
+                UnregisterAffectsAiHotspot(affectsAiHotspot);
 
             // Weenies can come with a default of 0 (Instant Rot) or -1 (Never Rot). If they still have that value, we want to retain it.
             // We also want to make sure fromPickup is true so that we're not clearing out TimeToRot on server shutdown (unloads all landblocks and removed all objects).
