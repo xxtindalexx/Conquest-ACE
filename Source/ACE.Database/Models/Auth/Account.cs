@@ -88,7 +88,8 @@ public partial class Account
 
             // Filter out PKSoulLoot stamps - these are per-victim PvP cooldown trackers
             // and should not contribute to the Quest Bonus XP multiplier
-            var validQuests = QuestCountCache.Where(x => !x.Quest.StartsWith("PKSoulLoot_")).ToList();
+            // Filter out !-prefixed quests - hidden internal flags, not QB-eligible
+            var validQuests = QuestCountCache.Where(x => !x.Quest.StartsWith("PKSoulLoot_") && !x.Quest.StartsWith("!")).ToList();
 
             return validQuests.Count + validQuests.Where(x => x.NumTimesCompleted >= 1).Count();
         }

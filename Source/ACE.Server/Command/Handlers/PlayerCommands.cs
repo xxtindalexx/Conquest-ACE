@@ -472,6 +472,9 @@ namespace ACE.Server.Command.Handlers
             foreach (var playerQuest in quests)
             {
                 var questName = QuestManager.GetQuestName(playerQuest.QuestName);
+                if (QuestManager.IsNoQuestBonus(questName))
+                    continue;
+
                 var quest = DatabaseManager.World.GetCachedQuest(questName);
 
                 string text;
@@ -489,6 +492,12 @@ namespace ACE.Server.Command.Handlers
                     text = $"{playerQuest.QuestName.ToLower()} - {playerQuest.NumTimesCompleted} solves ({playerQuest.LastTimeCompleted})";
                 }
                 questMessages.Add(text);
+            }
+
+            if (questMessages.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Quest list is empty.", ChatMessageType.Broadcast));
+                return;
             }
 
             foreach (var message in questMessages)
@@ -2786,8 +2795,10 @@ namespace ACE.Server.Command.Handlers
             MyQstListLastUsed[characterId] = currentTime;
 
             // Get account-level quest completions, excluding PKSoulLoot_ stamps (PvP cooldown trackers)
+            // and !-prefixed hidden flags (not QB-eligible)
             var accountQuests = DatabaseManager.Authentication.GetAccountQuests(accountId)?
-                .Where(q => !q.Quest.StartsWith("PKSoulLoot_", StringComparison.OrdinalIgnoreCase))
+                .Where(q => !q.Quest.StartsWith("PKSoulLoot_", StringComparison.OrdinalIgnoreCase)
+                         && !q.Quest.StartsWith("!", StringComparison.Ordinal))
                 .ToList();
 
             if (accountQuests == null || accountQuests.Count == 0)

@@ -190,6 +190,7 @@ WHERE {CharacterEligibilityFilter}
       FROM `{authDatabase}`.account_quest aq
       WHERE aq.accountId = c.account_Id
         AND aq.quest NOT LIKE 'PKSoulLoot_%'
+        AND aq.quest NOT LIKE '!%'
   ) > {{0}}";
 
             return await ExecuteCountAsync(sql, score);

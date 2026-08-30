@@ -565,6 +565,16 @@ namespace ACE.Server.Managers
         }
 
         /// <summary>
+        /// Returns true if the quest should not contribute to Quest Bonus or show stamp messages.
+        /// Quests starting with ! are hidden internal flags (still stamped on character).
+        /// </summary>
+        public static bool IsNoQuestBonus(string questFormat)
+        {
+            var name = GetQuestName(questFormat);
+            return name.StartsWith("!", StringComparison.Ordinal);
+        }
+
+        /// <summary>
         /// Returns TRUE if player has solved this quest between min-max times
         /// </summary>
         public bool HasQuestSolves(string questFormat, int? _min, int? _max)
@@ -757,6 +767,13 @@ namespace ACE.Server.Managers
             stampedNew = false;
             stampedCompletion = false;
             if (player.IsMule)
+            {
+                return;
+            }
+
+            questName = GetQuestName(questName);
+
+            if (IsNoQuestBonus(questName))
             {
                 return;
             }
