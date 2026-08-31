@@ -182,7 +182,8 @@ namespace ACE.Server.WorldObjects
             var currentLandblock = (ushort)(Location.Cell >> 16);
             var currentVariation = Location.Variation ?? 0;
             var isInPKDungeon = ACE.Server.Entity.Landblock.pkDungeonLandblocks.Contains((currentLandblock, currentVariation));
-            var isInAugDisabledLandblock = ACE.Server.Entity.AugDisabledLandblocks.IsRestricted(currentLandblock, currentVariation);
+            var isInAugDisabledLandblock = ACE.Server.Entity.AugDisabledLandblocks.IsRestricted(currentLandblock, currentVariation)
+                && !LoggedOutFromAugDisabledLandblock;
 
             // CONQUEST: Login restoration safety check for PK dungeon / PvP aug stripping system
             // If player logged out or crashed with stored augs but mode flags were cleared,
