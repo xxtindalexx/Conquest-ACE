@@ -76,9 +76,6 @@ LEFT JOIN biota_properties_int64 lum_magic_def ON c.id = lum_magic_def.object_Id
 
         public static async Task<LeaderboardPlacement> GetPlacementAsync(string category, long score, long tieBreak = 0, double tieBreakFloat = double.MaxValue)
         {
-            if (score <= 0)
-                return null;
-
             try
             {
                 var rank = category switch

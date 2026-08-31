@@ -957,7 +957,7 @@ namespace ACE.Server.Command.Handlers
             HandleEnlighten(session, parameters);
         }
 
-        [CommandHandler("top", AccessLevel.Player, CommandHandlerFlag.None, "Show current leaderboards", "use /top qb, /top level, /top enl, /top bank, /top lum, /top augs, /top deaths, or /top titles")]
+        [CommandHandler("top", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Show current leaderboards", "use /top qb, /top level, /top enl, /top bank, /top lum, /top augs, /top deaths, or /top titles")]
         public static async void HandleTop(Session session, params string[] parameters)
         {
             if (parameters.Length < 1)
@@ -1059,30 +1059,41 @@ namespace ACE.Server.Command.Handlers
                         break;
                 }
 
+                var player = session.Player;
+                var showPersonalRank = player != null && !player.ExcludeFromLeaderboards;
+                var playerName = showPersonalRank ? player.Name : null;
+                var playerOnList = false;
+
                 // Display the leaderboard
                 for (int i = 0; i < list.Count; i++)
                 {
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"{i + 1}: {list[i].Score:N0} - {list[i].Character}", ChatMessageType.Broadcast));
+                    var isPlayer = showPersonalRank && string.Equals(list[i].Character, playerName, StringComparison.OrdinalIgnoreCase);
+                    if (isPlayer)
+                        playerOnList = true;
+
+                    var suffix = isPlayer ? " (You)" : "";
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"{i + 1}: {list[i].Score:N0} - {list[i].Character}{suffix}", ChatMessageType.Broadcast));
                 }
 
                 if (list.Count == 0)
                 {
                     session.Network.EnqueueSend(new GameMessageSystemChat("[TOP] No data available for this leaderboard yet.", ChatMessageType.Broadcast));
                 }
-                else if (session.Player != null && !session.Player.ExcludeFromLeaderboards)
+                else if (showPersonalRank && !playerOnList)
                 {
-                    var playerName = session.Player.Name;
-                    var onList = list.Any(x => string.Equals(x.Character, playerName, StringComparison.OrdinalIgnoreCase));
-
-                    if (!onList)
+                    var placement = await GetTopPlacementAsync(player, cooldownKey);
+                    if (placement != null)
                     {
-                        var placement = await GetTopPlacementAsync(session.Player, cooldownKey);
-                        if (placement != null)
-                        {
-                            session.Network.EnqueueSend(new GameMessageSystemChat(
-                                $"[TOP] Your rank: #{placement.Rank:N0} - {placement.Score:N0}",
-                                ChatMessageType.Broadcast));
-                        }
+                        session.Network.EnqueueSend(new GameMessageSystemChat("...", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"{placement.Rank}: {placement.Score:N0} - {playerName} (You)",
+                            ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat(
+                            "[TOP] Unable to determine your rank on this leaderboard.",
+                            ChatMessageType.Broadcast));
                     }
                 }
             }
