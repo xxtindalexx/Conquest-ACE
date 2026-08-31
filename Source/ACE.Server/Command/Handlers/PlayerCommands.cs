@@ -552,7 +552,6 @@ namespace ACE.Server.Command.Handlers
             var specCount = player.LuminanceAugmentSpecializeCount ?? 0;
             var meleeCount = player.LuminanceAugmentMeleeCount ?? 0;
             var missileCount = player.LuminanceAugmentMissileCount ?? 0;
-            var summonCount = player.LuminanceAugmentSummonCount ?? 0;
 
             var warPctPerLevel = PropertyManager.GetDouble("war_aug_dmg_per_level") * 100.0;
             var voidPctPerLevel = PropertyManager.GetDouble("void_aug_dmg_per_level") * 100.0;
@@ -575,11 +574,9 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat(
                 $"Specialization: {specCount:N0}  (spec credit cap {70 + specCount})", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat(
-                $"Melee: {meleeCount:N0}  (+{meleeCount:N0} flat damage, +{meleeCount * 1.5:F1}% crit damage, {meleeCount * 0.1:F1}% PvP evasion reduction)", ChatMessageType.Broadcast));
+                $"Melee: {meleeCount:N0}  (+{meleeCount:N0} flat damage, +{meleeCount * 1.5:F1}% crit damage)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat(
-                $"Missile: {missileCount:N0}  (+{missileCount:N0} flat damage, +{missileCount * 1.5:F1}% crit damage, {missileCount * 0.1:F1}% PvP evasion reduction)", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat(
-                $"Summon: {summonCount:N0}  (stored only — no combat bonus yet)", ChatMessageType.Broadcast));
+                $"Missile: {missileCount:N0}  (+{missileCount:N0} flat damage, +{missileCount * 1.5:F1}% crit damage)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat(
                 "Use /aug info for per-level effect details.", ChatMessageType.Broadcast));
         }
@@ -591,7 +588,6 @@ namespace ACE.Server.Command.Handlers
             var lifeProtMaxPct = PropertyManager.GetDouble("life_aug_prot_max_bonus") * 100.0;
             var lifeProtLinearPct = PropertyManager.GetDouble("life_aug_prot_linear_rate") * 100.0;
             var lifeProtLinearCap = PropertyManager.GetLong("life_aug_prot_linear_cap");
-            var pvpAugsDisabled = PropertyManager.GetBool("pvp_disable_custom_augs");
 
             var message =
                 "=== Luminance Augmentation Info ===\n" +
@@ -599,15 +595,12 @@ namespace ACE.Server.Command.Handlers
                 "Creature: +1 StatMod per level on self-targeted creature buffs; -1 on harmful creature debuffs.\n\n" +
                 "Item: Impen +1 AL per level; Brittlemail -1 AL per level; Blood Drinker +0.5 per level; Spirit Drinker +0.5% per level; Banes/Surges +1% per level; Heart Seeker/Defender diminishing (+1% each for first 100, then 0.75%, 0.5625%, down to 0.1%); Alacrity -1 weapon speed per level.\n\n" +
                 $"Life: Armor buff +1 AL per level; Protection buffs use hybrid scaling ({lifeProtLinearPct:F2}% per level for first {lifeProtLinearCap}, then diminishing toward {lifeProtMaxPct:F2}% max); other life buffs +0.10 per level; harmful life spells mirror these; Rending bonus approaches +100% with diminishing returns.\n\n" +
-                $"War: +{warPctPerLevel:F2}% war magic projectile damage per level" +
-                (pvpAugsDisabled ? " (disabled in PvP when pvp_disable_custom_augs is on)." : ".") + "\n\n" +
-                $"Void: +{voidPctPerLevel:F2}% void magic projectile damage per level" +
-                (pvpAugsDisabled ? " (disabled in PvP when pvp_disable_custom_augs is on)." : ".") + "\n\n" +
+                $"War: +{warPctPerLevel:F2}% war magic projectile damage per level.\n\n" +
+                $"Void: +{voidPctPerLevel:F2}% void magic projectile damage per level.\n\n" +
                 "Duration: +5% spell duration per level (stacks with Archmage's Endurance).\n\n" +
                 "Specialization: +1 specialized skill credit cap per level (base cap 70).\n\n" +
-                "Melee: +1 flat melee damage per level; +1.5% melee crit damage per level; Dual Fire bleed/heal-debuff uses max(Melee, Missile); 0.1% PvP evasion reduction per level (max 95%).\n\n" +
-                "Missile: +1 flat missile damage per level; +1.5% missile crit damage per level; 0.1% PvP evasion reduction per level (max 95%).\n\n" +
-                "Summon: count is stored; no combat bonus is applied yet.";
+                "Melee: +1 flat melee damage per level; +1.5% melee crit damage per level.\n\n" +
+                "Missile: +1 flat missile damage per level; +1.5% missile crit damage per level.";
 
             session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
         }
