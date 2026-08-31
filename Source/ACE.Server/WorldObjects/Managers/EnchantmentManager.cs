@@ -444,7 +444,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// Example progression: 200 augs ≈ 16%, 400 augs ≈ 24%, 600 augs ≈ 28%, 1000+ augs → 32% max
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float GetLifeAugProtectRating(long LifeAugAmt)
+        internal static float GetLifeAugProtectRating(long LifeAugAmt)
         {
             if (LifeAugAmt <= 0)
                 return 0f;
@@ -482,7 +482,7 @@ namespace ACE.Server.WorldObjects.Managers
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float GetItemAugPercentageRating(long itemAugAmt)
+        internal static float GetItemAugPercentageRating(long itemAugAmt)
         {
             float bonus = 0;
             for (int x = 0; x < itemAugAmt; x++)
