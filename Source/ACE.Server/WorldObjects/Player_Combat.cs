@@ -1734,61 +1734,49 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
-        /// CONQUEST: Recovers augmentations if the player crashed or logged out while in PvP mode
+        /// CONQUEST: Recovers augmentations if the player crashed or logged out while in PvP mode or an ADLB
         /// Called on first login to restore any stored PvP aug values
         /// </summary>
         public void RecoverPvPAugsAfterCrash()
         {
-            // Check if there are stored PvP augs (indicates player was in PvP mode when they logged out/crashed)
-            if (StoredPvPCreatureAugs == null)
-                return; // No stored augs, nothing to recover
+            var fromAdlb = LoggedOutFromAugDisabledLandblock;
 
-            // Check if current augs are lower than stored (indicates they weren't properly restored)
-            bool needsRecovery =
-                (LuminanceAugmentCreatureCount ?? 0) < (StoredPvPCreatureAugs ?? 0) ||
-                (LuminanceAugmentItemCount ?? 0) < (StoredPvPItemAugs ?? 0) ||
-                (LuminanceAugmentLifeCount ?? 0) < (StoredPvPLifeAugs ?? 0) ||
-                (LuminanceAugmentVoidCount ?? 0) < (StoredPvPVoidAugs ?? 0) ||
-                (LuminanceAugmentWarCount ?? 0) < (StoredPvPWarAugs ?? 0) ||
-                (LuminanceAugmentSpellDurationCount ?? 0) < (StoredPvPDurationAugs ?? 0) ||
-                (LuminanceAugmentSpecializeCount ?? 0) < (StoredPvPSpecializeAugs ?? 0) ||
-                (LuminanceAugmentSummonCount ?? 0) < (StoredPvPSummonAugs ?? 0) ||
-                (LuminanceAugmentMeleeCount ?? 0) < (StoredPvPMeleeAugs ?? 0) ||
-                (LuminanceAugmentMissileCount ?? 0) < (StoredPvPMissileAugs ?? 0);
+            var needsRecovery = HasStoredCustomAugs &&
+                ((LuminanceAugmentCreatureCount ?? 0) < (StoredPvPCreatureAugs ?? 0) ||
+                 (LuminanceAugmentItemCount ?? 0) < (StoredPvPItemAugs ?? 0) ||
+                 (LuminanceAugmentLifeCount ?? 0) < (StoredPvPLifeAugs ?? 0) ||
+                 (LuminanceAugmentVoidCount ?? 0) < (StoredPvPVoidAugs ?? 0) ||
+                 (LuminanceAugmentWarCount ?? 0) < (StoredPvPWarAugs ?? 0) ||
+                 (LuminanceAugmentSpellDurationCount ?? 0) < (StoredPvPDurationAugs ?? 0) ||
+                 (LuminanceAugmentSpecializeCount ?? 0) < (StoredPvPSpecializeAugs ?? 0) ||
+                 (LuminanceAugmentSummonCount ?? 0) < (StoredPvPSummonAugs ?? 0) ||
+                 (LuminanceAugmentMeleeCount ?? 0) < (StoredPvPMeleeAugs ?? 0) ||
+                 (LuminanceAugmentMissileCount ?? 0) < (StoredPvPMissileAugs ?? 0));
 
-            if (!needsRecovery)
+            if (needsRecovery)
             {
-                // Current augs are >= stored, just clear the stored values
+                RestoreCustomAugsFromStorage();
+                InPvPMode = false;
+                InPKDungeonMode = false;
+                InAugDisabledDungeonMode = false;
+                SaveBiotaToDatabase();
+            }
+            else if (HasStoredCustomAugs)
+            {
                 ClearStoredPvPAugs();
-                return;
             }
 
-            // Restore augmentations from stored values
-            LuminanceAugmentCreatureCount = StoredPvPCreatureAugs ?? 0;
-            LuminanceAugmentItemCount = StoredPvPItemAugs ?? 0;
-            LuminanceAugmentLifeCount = StoredPvPLifeAugs ?? 0;
-            LuminanceAugmentVoidCount = StoredPvPVoidAugs ?? 0;
-            LuminanceAugmentWarCount = StoredPvPWarAugs ?? 0;
-            LuminanceAugmentSpellDurationCount = StoredPvPDurationAugs ?? 0;
-            LuminanceAugmentSpecializeCount = StoredPvPSpecializeAugs ?? 0;
-            LuminanceAugmentSummonCount = StoredPvPSummonAugs ?? 0;
-            LuminanceAugmentMeleeCount = StoredPvPMeleeAugs ?? 0;
-            LuminanceAugmentMissileCount = StoredPvPMissileAugs ?? 0;
+            LoggedOutFromAugDisabledLandblock = false;
 
-            // Clear the stored values
-            ClearStoredPvPAugs();
+            if (!fromAdlb && !needsRecovery)
+                return;
 
-            // Ensure PvP modes are cleared
-            InPvPMode = false;
-            InPKDungeonMode = false;
-            InAugDisabledDungeonMode = false;
+            var restoreMessage = fromAdlb
+                ? "Your augmentations have been restored after an unexpected disconnection in an ADLB (augment-disabled landblock)."
+                : "Your augmentations have been restored after an unexpected disconnection during PvP.";
 
-            // Save to database
-            SaveBiotaToDatabase();
-
-            // Notify the player
             Session?.Network.EnqueueSend(new GameMessageSystemChat(
-                "Your augmentations have been restored after an unexpected disconnection during PvP.",
+                restoreMessage,
                 ChatMessageType.Broadcast));
         }
 

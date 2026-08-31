@@ -1255,7 +1255,10 @@ namespace ACE.Server.WorldObjects
             // Check standard no-log landblocks (base landblocks only, no variations)
             var isInNoLogLandblock = !location.VariationId.HasValue && NoLog_Landblocks.Contains(landblock);
 
-            if (!isInPKDungeon && !isInNoLogLandblock)
+            // CONQUEST: Aug-disabled landblocks (ADLB) are no-log — login at lifestone with augs restored
+            var isInAugDisabledLandblock = AugDisabledLandblocks.IsRestricted(landblock, variation);
+
+            if (!isInPKDungeon && !isInNoLogLandblock && !isInAugDisabledLandblock)
                 return;
 
             if (!biota.PropertiesPosition.TryGetValue(PositionType.Sanctuary, out var lifestone))
@@ -1272,6 +1275,14 @@ namespace ACE.Server.WorldObjects
             location.VariationId = lifestone.VariationId;
 
             playerWasMovedFromNoLogLandblock = true;
+
+            if (isInAugDisabledLandblock)
+            {
+                if (biota.PropertiesBool == null)
+                    biota.PropertiesBool = new Dictionary<PropertyBool, bool>();
+
+                biota.PropertiesBool[PropertyBool.LoggedOutFromAugDisabledLandblock] = true;
+            }
 
             return;
         }

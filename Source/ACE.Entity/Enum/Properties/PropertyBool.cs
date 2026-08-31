@@ -262,5 +262,11 @@ namespace ACE.Entity.Enum.Properties
         /// </summary>
         [AssessmentProperty]
         GlancingBlow = 9232,
+
+        /// <summary>
+        /// CONQUEST: Set when a player logs out or disconnects in an aug-disabled landblock (ADLB).
+        /// Used on next login to restore augs with an ADLB-specific message after booting them to their lifestone.
+        /// </summary>
+        LoggedOutFromAugDisabledLandblock = 9233,
     }
 }

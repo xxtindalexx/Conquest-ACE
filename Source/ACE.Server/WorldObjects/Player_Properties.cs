@@ -319,6 +319,15 @@ namespace ACE.Server.WorldObjects
             set { if (!value) RemoveProperty(PropertyBool.LoginAtLifestone); else SetProperty(PropertyBool.LoginAtLifestone, value); }
         }
 
+        /// <summary>
+        /// CONQUEST: True if the player logged out or disconnected in an aug-disabled landblock (ADLB)
+        /// </summary>
+        public bool LoggedOutFromAugDisabledLandblock
+        {
+            get => GetProperty(PropertyBool.LoggedOutFromAugDisabledLandblock) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.LoggedOutFromAugDisabledLandblock); else SetProperty(PropertyBool.LoggedOutFromAugDisabledLandblock, value); }
+        }
+
         /*public bool IsOlthoiPlayer()
         {
             switch (WeenieClassId)
