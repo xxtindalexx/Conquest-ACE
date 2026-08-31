@@ -110,7 +110,7 @@ LEFT JOIN biota_properties_int64 lum_magic_def ON c.id = lum_magic_def.object_Id
         private static async Task<int> GetLevelRankAsync(int level, int enlightenment)
         {
             var sql = $@"
-SELECT COUNT(*) + 1
+SELECT COUNT(*) + 1 AS Value
 FROM `character` c
 LEFT JOIN biota_properties_int level_prop ON c.id = level_prop.object_Id AND level_prop.`type` = {PropLevel}
 LEFT JOIN biota_properties_int enl ON c.id = enl.object_Id AND enl.`type` = {PropEnlightenment}
@@ -126,7 +126,7 @@ WHERE {CharacterEligibilityFilter}
         private static async Task<int> GetEnlightenmentRankAsync(int enlightenment, double enlightenmentTimestamp)
         {
             var sql = $@"
-SELECT COUNT(*) + 1
+SELECT COUNT(*) + 1 AS Value
 FROM `character` c
 LEFT JOIN biota_properties_int enl ON c.id = enl.object_Id AND enl.`type` = {PropEnlightenment}
 LEFT JOIN biota_properties_float enl_ts ON c.id = enl_ts.object_Id AND enl_ts.`type` = {PropEnlightenmentTimestamp}
@@ -142,7 +142,7 @@ WHERE {CharacterEligibilityFilter}
         private static async Task<int> GetSimpleInt64RankAsync(int propertyType, long score)
         {
             var sql = $@"
-SELECT COUNT(*) + 1
+SELECT COUNT(*) + 1 AS Value
 FROM `character` c
 LEFT JOIN biota_properties_int64 score_prop ON c.id = score_prop.object_Id AND score_prop.`type` = {propertyType}
 WHERE {CharacterEligibilityFilter}
@@ -154,7 +154,7 @@ WHERE {CharacterEligibilityFilter}
         private static async Task<int> GetSimpleIntRankAsync(int propertyType, int score)
         {
             var sql = $@"
-SELECT COUNT(*) + 1
+SELECT COUNT(*) + 1 AS Value
 FROM `character` c
 LEFT JOIN biota_properties_int score_prop ON c.id = score_prop.object_Id AND score_prop.`type` = {propertyType}
 WHERE {CharacterEligibilityFilter}
@@ -166,7 +166,7 @@ WHERE {CharacterEligibilityFilter}
         private static async Task<int> GetAugmentsRankAsync(long score)
         {
             var sql = $@"
-SELECT COUNT(*) + 1
+SELECT COUNT(*) + 1 AS Value
 FROM `character` c
 {LumAugJoins}
 WHERE {CharacterEligibilityFilter}
@@ -179,7 +179,7 @@ WHERE {CharacterEligibilityFilter}
         {
             var authDatabase = ConfigManager.Config.MySql.Authentication.Database;
             var sql = $@"
-SELECT COUNT(*) + 1
+SELECT COUNT(*) + 1 AS Value
 FROM `character` c
 WHERE {CharacterEligibilityFilter}
   AND (
