@@ -652,7 +652,7 @@ namespace ACE.Server.Network.Structure
                 return;
 
             const string propertyDetailsHeader = "Property Details:";
-            var pveSection = "PVE Ratings:\n" + string.Join("\n", lines);
+            var pveSection = "PVE Ratings:\n\n" + string.Join("\n", lines);
 
             var existingUse = PropertiesString.TryGetValue(PropertyString.Use, out var useText)
                 ? useText
@@ -664,12 +664,12 @@ namespace ACE.Server.Network.Structure
                 var before = existingUse.Substring(0, propertyDetailsIndex).TrimEnd();
                 var after = existingUse.Substring(propertyDetailsIndex);
                 var separator = string.IsNullOrEmpty(before) ? "" : "\n\n";
-                PropertiesString[PropertyString.Use] = before + separator + pveSection + "\n\n" + after;
+                PropertiesString[PropertyString.Use] = before + separator + pveSection + "\n\n\n" + after;
             }
             else
             {
                 var separator = string.IsNullOrEmpty(existingUse) ? "" : "\n\n";
-                PropertiesString[PropertyString.Use] = existingUse + separator + pveSection;
+                PropertiesString[PropertyString.Use] = existingUse + separator + pveSection + "\n";
             }
         }
 
@@ -743,6 +743,20 @@ namespace ACE.Server.Network.Structure
             var pveCritDamageResistRating = creature.GetPVECritDamageResistRating();
             var pveNetherResistRating = creature.GetPVENetherResistRating();
 
+            // Display-only: fold PvE ratings into universal totals for non-PK assess (combat still applies PvE separately).
+            var includePveInRatingDisplay = !(creature is Player player && player.IsPK);
+
+            if (includePveInRatingDisplay)
+            {
+                damageRating += pveDamageRating;
+                damageResistRating += pveDamageResistRating;
+                critRating += pveCritRating;
+                critResistRating += pveCritResistRating;
+                critDamageRating += pveCritDamageRating;
+                critDamageResistRating += pveCritDamageResistRating;
+                netherResistRating += pveNetherResistRating;
+            }
+
             if (damageRating != 0)
                 PropertiesInt[PropertyInt.DamageRating] = damageRating;
             if (damageResistRating != 0)
@@ -775,20 +789,13 @@ namespace ACE.Server.Network.Structure
             if (pkDamageResistRating != 0)
                 PropertiesInt[PropertyInt.PKDamageResistRating] = pkDamageResistRating;
 
-            if (pveDamageRating != 0)
-                PropertiesInt[PropertyInt.PVEDamageRating] = pveDamageRating;
-            if (pveDamageResistRating != 0)
-                PropertiesInt[PropertyInt.PVEDamageResistRating] = pveDamageResistRating;
-            if (pveCritRating != 0)
-                PropertiesInt[PropertyInt.PVECritRating] = pveCritRating;
-            if (pveCritResistRating != 0)
-                PropertiesInt[PropertyInt.PVECritResistRating] = pveCritResistRating;
-            if (pveCritDamageRating != 0)
-                PropertiesInt[PropertyInt.PVECritDamageRating] = pveCritDamageRating;
-            if (pveCritDamageResistRating != 0)
-                PropertiesInt[PropertyInt.PVECritDamageResistRating] = pveCritDamageResistRating;
-            if (pveNetherResistRating != 0)
-                PropertiesInt[PropertyInt.PVENetherResistRating] = pveNetherResistRating;
+            PropertiesInt.Remove(PropertyInt.PVEDamageRating);
+            PropertiesInt.Remove(PropertyInt.PVEDamageResistRating);
+            PropertiesInt.Remove(PropertyInt.PVECritRating);
+            PropertiesInt.Remove(PropertyInt.PVECritResistRating);
+            PropertiesInt.Remove(PropertyInt.PVECritDamageRating);
+            PropertiesInt.Remove(PropertyInt.PVECritDamageResistRating);
+            PropertiesInt.Remove(PropertyInt.PVENetherResistRating);
 
             // add ratings from equipped items?
         }
