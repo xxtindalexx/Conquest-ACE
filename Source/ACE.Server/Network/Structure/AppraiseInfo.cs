@@ -340,6 +340,8 @@ namespace ACE.Server.Network.Structure
                 //PropertiesString.Clear();
             }
 
+            AppendPVERatingDescriptions(wo);
+
             BuildFlags();
         }
 
@@ -610,6 +612,75 @@ namespace ACE.Server.Network.Structure
                 PropertiesString[PropertyString.Use] = existingUse + separator + descriptionText;
             else
                 PropertiesString[PropertyString.Use] = descriptionText;
+        }
+
+        /// <summary>
+        /// CONQUEST: Appends human-readable PvE rating lines to the Use property for appraisal display.
+        /// The retail client does not have labels for custom PvE property IDs.
+        /// </summary>
+        private void AppendPVERatingDescriptions(WorldObject wo)
+        {
+            if (!Success)
+                return;
+
+            int pveDamageRating;
+            int pveDamageResistRating;
+            int pveCritRating;
+            int pveCritResistRating;
+            int pveCritDamageRating;
+            int pveCritDamageResistRating;
+            int pveNetherResistRating;
+
+            if (wo is Creature creature)
+            {
+                pveDamageRating = creature.GetPVEDamageRating();
+                pveDamageResistRating = creature.GetPVEDamageResistRating();
+                pveCritRating = creature.GetPVECritRating();
+                pveCritResistRating = creature.GetPVECritResistRating();
+                pveCritDamageRating = creature.GetPVECritDamageRating();
+                pveCritDamageResistRating = creature.GetPVECritDamageResistRating();
+                pveNetherResistRating = creature.GetPVENetherResistRating();
+            }
+            else
+            {
+                pveDamageRating = wo.GearPVEDamageRating ?? 0;
+                pveDamageResistRating = wo.GearPVEDamageResistRating ?? 0;
+                pveCritRating = wo.GearPVECritRating ?? 0;
+                pveCritResistRating = wo.GearPVECritResistRating ?? 0;
+                pveCritDamageRating = wo.GearPVECritDamageRating ?? 0;
+                pveCritDamageResistRating = wo.GearPVECritDamageResistRating ?? 0;
+                pveNetherResistRating = wo.GearPVENetherResistRating ?? 0;
+            }
+
+            var descriptions = new List<string>();
+
+            if (pveDamageRating != 0)
+                descriptions.Add($"- PvE Damage Rating: +{pveDamageRating}");
+            if (pveDamageResistRating != 0)
+                descriptions.Add($"- PvE Damage Resist Rating: +{pveDamageResistRating}");
+            if (pveCritRating != 0)
+                descriptions.Add($"- PvE Crit Rating: +{pveCritRating}");
+            if (pveCritResistRating != 0)
+                descriptions.Add($"- PvE Crit Resist Rating: +{pveCritResistRating}");
+            if (pveCritDamageRating != 0)
+                descriptions.Add($"- PvE Crit Damage Rating: +{pveCritDamageRating}");
+            if (pveCritDamageResistRating != 0)
+                descriptions.Add($"- PvE Crit Damage Resist Rating: +{pveCritDamageResistRating}");
+            if (pveNetherResistRating != 0)
+                descriptions.Add($"- PvE Nether Resist Rating: +{pveNetherResistRating}");
+
+            if (descriptions.Count == 0)
+                return;
+
+            var existingUse = PropertiesString.TryGetValue(PropertyString.Use, out var useText)
+                ? useText
+                : wo.GetProperty(PropertyString.Use) ?? "";
+
+            var separator = string.IsNullOrEmpty(existingUse) ? "" : "\n\n";
+            var header = "PvE Ratings:";
+            var descriptionText = header + "\n" + string.Join("\n", descriptions);
+
+            PropertiesString[PropertyString.Use] = existingUse + separator + descriptionText;
         }
 
         private void BuildCreature(Creature creature)
