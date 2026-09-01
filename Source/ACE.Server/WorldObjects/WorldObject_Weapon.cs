@@ -608,7 +608,7 @@ namespace ACE.Server.WorldObjects
 
             if (rendDamageType != ImbuedEffectType.Undef && weapon.HasImbuedEffect(rendDamageType) && skill != null && !isNetherPvP)
             {
-                var rendingMod = GetRendingMod(skill, wielder);
+                var rendingMod = GetRendingMod(skill, wielder, rendDamageType);
 
                 // Apply PvP cap to Armor Rending (imbue)
                 if (isPvP)
@@ -853,7 +853,7 @@ namespace ACE.Server.WorldObjects
         // elemental rending cap, equivalent to level 6 vuln
         public static float MaxRendingMod = 2.5f;
 
-        public static float GetRendingMod(CreatureSkill skill, Creature wielder = null)
+        public static float GetRendingMod(CreatureSkill skill, Creature wielder = null, ImbuedEffectType rendDamageType = ImbuedEffectType.Undef)
         {
             var baseSkill = GetBaseSkillImbued(skill);
 
@@ -875,7 +875,9 @@ namespace ACE.Server.WorldObjects
             rendingMod = Math.Clamp(rendingMod, 1.0f, MaxRendingMod);
 
             // CONQUEST: Add life aug bonus to rends with diminishing returns (max +100% bonus)
-            rendingMod += GetRendingLifeAugBonus(wielder);
+            // Nether rend is not affected by life augs
+            if (rendDamageType != ImbuedEffectType.NetherRending)
+                rendingMod += GetRendingLifeAugBonus(wielder);
 
             //Console.WriteLine($"RendingMod: {rendingMod}");
 

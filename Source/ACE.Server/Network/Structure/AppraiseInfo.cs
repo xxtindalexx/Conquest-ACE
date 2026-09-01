@@ -995,7 +995,7 @@ namespace ACE.Server.Network.Structure
             if (imbuedEffect.HasFlag(ImbuedEffectType.FireRending))
                 descriptions.Add($"- Fire Rending{ImbueSlotTag(ImbuedEffectType.FireRending)}: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.NetherRending))
-                descriptions.Add($"- Void Rending{ImbueSlotTag(ImbuedEffectType.NetherRending)}: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Void Rending{ImbueSlotTag(ImbuedEffectType.NetherRending)}: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based)");
 
             // Always Critical
             if (imbuedEffect.HasFlag(ImbuedEffectType.AlwaysCritical))
