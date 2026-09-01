@@ -214,7 +214,7 @@ namespace ACE.Server.WorldObjects
 
         private void AddItemToEquippedItemsRatingCache(WorldObject wo)
         {
-            if ((wo.GearDamage ?? 0) == 0 && (wo.GearDamageResist ?? 0) == 0 && (wo.GearCrit ?? 0) == 0 && (wo.GearCritResist ?? 0) == 0 && (wo.GearCritDamage ?? 0) == 0 && (wo.GearCritDamageResist ?? 0) == 0 && (wo.GearHealingBoost ?? 0) == 0 && (wo.GearMaxHealth ?? 0) == 0 && (wo.GearPKDamageRating ?? 0) == 0 && (wo.GearPKDamageResistRating ?? 0) == 0)
+            if ((wo.GearDamage ?? 0) == 0 && (wo.GearDamageResist ?? 0) == 0 && (wo.GearCrit ?? 0) == 0 && (wo.GearCritResist ?? 0) == 0 && (wo.GearCritDamage ?? 0) == 0 && (wo.GearCritDamageResist ?? 0) == 0 && (wo.GearHealingBoost ?? 0) == 0 && (wo.GearNetherResist ?? 0) == 0 && (wo.GearMaxHealth ?? 0) == 0 && (wo.GearPKDamageRating ?? 0) == 0 && (wo.GearPKDamageResistRating ?? 0) == 0 && (wo.GearPVEDamageRating ?? 0) == 0 && (wo.GearPVEDamageResistRating ?? 0) == 0 && (wo.GearPVECritRating ?? 0) == 0 && (wo.GearPVECritResistRating ?? 0) == 0 && (wo.GearPVECritDamageRating ?? 0) == 0 && (wo.GearPVECritDamageResistRating ?? 0) == 0 && (wo.GearPVENetherResistRating ?? 0) == 0)
                 return;
 
             if (equippedItemsRatingCache == null)
@@ -228,9 +228,17 @@ namespace ACE.Server.WorldObjects
                     { PropertyInt.GearCritDamage, 0 },
                     { PropertyInt.GearCritDamageResist, 0 },
                     { PropertyInt.GearHealingBoost, 0 },
+                    { PropertyInt.GearNetherResist, 0 },
                     { PropertyInt.GearMaxHealth, 0 },
                     { PropertyInt.GearPKDamageRating, 0 },
                     { PropertyInt.GearPKDamageResistRating, 0 },
+                    { PropertyInt.GearPVEDamageRating, 0 },
+                    { PropertyInt.GearPVEDamageResistRating, 0 },
+                    { PropertyInt.GearPVECritRating, 0 },
+                    { PropertyInt.GearPVECritResistRating, 0 },
+                    { PropertyInt.GearPVECritDamageRating, 0 },
+                    { PropertyInt.GearPVECritDamageResistRating, 0 },
+                    { PropertyInt.GearPVENetherResistRating, 0 },
                 };
             }
 
@@ -241,9 +249,17 @@ namespace ACE.Server.WorldObjects
             equippedItemsRatingCache[PropertyInt.GearCritDamage] += (wo.GearCritDamage ?? 0);
             equippedItemsRatingCache[PropertyInt.GearCritDamageResist] += (wo.GearCritDamageResist ?? 0);
             equippedItemsRatingCache[PropertyInt.GearHealingBoost] += (wo.GearHealingBoost ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearNetherResist] += (wo.GearNetherResist ?? 0);
             equippedItemsRatingCache[PropertyInt.GearMaxHealth] += (wo.GearMaxHealth ?? 0);
             equippedItemsRatingCache[PropertyInt.GearPKDamageRating] += (wo.GearPKDamageRating ?? 0);
             equippedItemsRatingCache[PropertyInt.GearPKDamageResistRating] += (wo.GearPKDamageResistRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVEDamageRating] += (wo.GearPVEDamageRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVEDamageResistRating] += (wo.GearPVEDamageResistRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVECritRating] += (wo.GearPVECritRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVECritResistRating] += (wo.GearPVECritResistRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVECritDamageRating] += (wo.GearPVECritDamageRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVECritDamageResistRating] += (wo.GearPVECritDamageResistRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVENetherResistRating] += (wo.GearPVENetherResistRating ?? 0);
         }
 
         private void RemoveItemFromEquippedItemsRatingCache(WorldObject wo)
@@ -258,9 +274,17 @@ namespace ACE.Server.WorldObjects
             equippedItemsRatingCache[PropertyInt.GearCritDamage] -= (wo.GearCritDamage ?? 0);
             equippedItemsRatingCache[PropertyInt.GearCritDamageResist] -= (wo.GearCritDamageResist ?? 0);
             equippedItemsRatingCache[PropertyInt.GearHealingBoost] -= (wo.GearHealingBoost ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearNetherResist] -= (wo.GearNetherResist ?? 0);
             equippedItemsRatingCache[PropertyInt.GearMaxHealth] -= (wo.GearMaxHealth ?? 0);
             equippedItemsRatingCache[PropertyInt.GearPKDamageRating] -= (wo.GearPKDamageRating ?? 0);
             equippedItemsRatingCache[PropertyInt.GearPKDamageResistRating] -= (wo.GearPKDamageResistRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVEDamageRating] -= (wo.GearPVEDamageRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVEDamageResistRating] -= (wo.GearPVEDamageResistRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVECritRating] -= (wo.GearPVECritRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVECritResistRating] -= (wo.GearPVECritResistRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVECritDamageRating] -= (wo.GearPVECritDamageRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVECritDamageResistRating] -= (wo.GearPVECritDamageResistRating ?? 0);
+            equippedItemsRatingCache[PropertyInt.GearPVENetherResistRating] -= (wo.GearPVENetherResistRating ?? 0);
         }
 
         public int GetEquippedItemsRatingSum(PropertyInt rating)

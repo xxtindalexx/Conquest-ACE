@@ -153,7 +153,6 @@ namespace ACE.Entity.Models
                     into categories
                     //select categories.OrderByDescending(c => c.LayerId).First();
                     select categories.OrderByDescending(c => c.PowerLevel + ((c.AugmentationLevelWhenCast ?? 0)* 1000))
-                        .ThenByDescending(c => c.StatModValue + (c.AugmentationLevelWhenCast ?? 0))
                         .ThenByDescending(c => Level8AuraSelfSpells.Contains(c.SpellId))
                         .ThenByDescending(c => setSpells.Contains(c.SpellId) ? c.SpellId : c.StartTime).First();
 
@@ -185,7 +184,6 @@ namespace ACE.Entity.Models
                     into categories
                     //select categories.OrderByDescending(c => c.LayerId).First();
                     select categories.OrderByDescending(c => c.PowerLevel + ((c.AugmentationLevelWhenCast ?? 0) * 1000))
-                        .ThenByDescending(c => c.StatModValue + (c.AugmentationLevelWhenCast ?? 0))
                         .ThenByDescending(c => Level8AuraSelfSpells.Contains(c.SpellId))
                         .ThenByDescending(c => setSpells.Contains(c.SpellId) ? c.SpellId : c.StartTime).First();
 
@@ -233,7 +231,6 @@ namespace ACE.Entity.Models
                     into categories
                     //select categories.OrderByDescending(c => c.LayerId).First();
                     select categories.OrderByDescending(c => c.PowerLevel + ((c.AugmentationLevelWhenCast ?? 0) * 1000))
-                        .ThenByDescending(c => c.StatModValue + (c.AugmentationLevelWhenCast ?? 0))
                         .ThenByDescending(c => Level8AuraSelfSpells.Contains(c.SpellId))
                         .ThenByDescending(c => setSpells.Contains(c.SpellId) ? c.SpellId : c.StartTime).First();
 

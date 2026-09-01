@@ -64,6 +64,9 @@ namespace ACE.Server.Managers
                 return;
             }
 
+            if (DyeMixture.TryAddVial(player, source, target))
+                return;
+
             var recipe = GetRecipe(player, source, target);
 
             if (recipe == null)

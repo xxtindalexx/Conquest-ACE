@@ -201,8 +201,11 @@ namespace ACE.Database
                 if (quests == null || quests.Count == 0)
                     return 0;
 
+                // Exclude PKSoulLoot_ cooldown trackers and !-prefixed hidden flags
+                var validQuests = quests.Where(x => !x.Quest.StartsWith("PKSoulLoot_") && !x.Quest.StartsWith("!")).ToList();
+
                 // Count all quests + completed quests (gives bonus for both starting and completing)
-                return quests.Count + quests.Where(x => x.NumTimesCompleted >= 1).Count();
+                return validQuests.Count + validQuests.Where(x => x.NumTimesCompleted >= 1).Count();
             }
         }
 

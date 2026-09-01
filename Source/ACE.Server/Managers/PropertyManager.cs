@@ -672,7 +672,7 @@ namespace ACE.Server.Managers
                 ("pet_mythic_stamina_spell_level", new Property<long>(1, "the spell level (1-5) of Stamina to Health Other that Mythic pets cast on their owner. 1 = level I, 2 = level II, etc.")),
                 ("pet_mythic_spell_cooldown", new Property<long>(15, "the number of seconds Mythic pets must wait between casting healing/stamina spells on their owner")),
                 ("player_save_interval", new Property<long>(300, "the number of seconds between automatic player saves")),
-                ("qb_command_limit", new Property<long>(60, "The number of seconds a player must wait between using the qb list command")),
+                ("top_command_limit", new Property<long>(60, "The number of seconds a player must wait before reusing the same /top category")),
                 ("rares_max_days_between", new Property<long>(45, "for rares_real_time_v2: the maximum number of days a player can go before a rare is generated on rare eligible creature kills")),
                 ("rares_max_seconds_between", new Property<long>(5256000, "for rares_real_time: the maximum number of seconds a player can go before a second chance at a rare is allowed on rare eligible creature kills that did not generate a rare")),
                 ("summoning_killtask_multicredit_cap", new Property<long>(2, "if allow_summoning_killtask_multicredit is enabled, the maximum # of killtask credits a player can receive from 1 kill")),
@@ -735,6 +735,7 @@ namespace ACE.Server.Managers
                 ("vitae_penalty", new Property<double>(0.05, "the amount of vitae penalty a player gets per death")),
                 ("vitae_penalty_max", new Property<double>(0.40, "the maximum vitae penalty a player can have")),
                 ("void_pvp_modifier", new Property<double>(0.5, "Scales the amount of damage players take from Void Magic. Defaults to 0.5, as per retail. For earlier content where DRR isn't as readily available, this can be adjusted for balance.")),
+                ("cleave_damage_multiplier", new Property<double>(0.75, "CONQUEST: Extra-target melee cleave damage for weapons that are not two-handed slash-attack. 0.75 = 75% damage (default). Slash-attack 2Hs always deal 100%.")),
                 ("pvp_void_dot_damage_scale", new Property<double>(0.0, "CONQUEST: Scales Void/Nether DoT damage in PvP. 1.0 = full damage, 0.5 = half, 0 = disabled. The debuff (damage reduction) still applies. Default 0 (disabled).")),
                 ("lottery_pot_share", new Property<double>(0.5, "CONQUEST: Fraction of the full lottery pot (base + rollover + ticket sales) paid to winners at draw. When lottery_rollover is TRUE, the remainder carries to next week; otherwise it is destroyed. Default 0.5 (50%).")),
                 ("lottery_first_place_share", new Property<double>(0.5, "CONQUEST: Fraction of the lottery prize pool awarded to 1st place. 2nd and 3rd split the remainder equally. Default 0.5.")),
@@ -1101,6 +1102,9 @@ namespace ACE.Server.Managers
                 ("pve_void_dot_damage_mod", new Property<double>(1.0, "PvE: Void DoT damage dealt to mobs modifier")),
                 ("pve_void_dot_drr_mod", new Property<double>(1.0, "PvE: Void DoT Damage Resistance Reduction effectiveness on mobs. Scales how much extra damage mobs take when they have Void DoTs applied (the DRR debuff portion).")),
 
+                // Dirty Fighting
+                ("dirty_fighting_breaching_armor_debuff", new Property<double>(25.0, "AL reduction applied while Dirty Fighting low-attack (Unbalancing) debuff is active (Breaching Blow/Assault).")),
+
                 // ===================================================================================
                 // PvP Synthetic Nether Protection - Simulates missing nether protection spells/wards
                 // ===================================================================================
@@ -1171,6 +1175,7 @@ namespace ACE.Server.Managers
                 ("server_motd", new Property<string>("", "Server message of the day")),
                 ("proxycheck_api_key", new Property<string>("", "API key for proxycheck.io VPN detection service. Get a free key at https://proxycheck.io/")),
                 ("summon_restricted_landblocks", new Property<string>("", "CONQUEST: Comma-separated restricted landblocks for combat pet overrides (e.g. 0x0066:Conquest Arena,0x0066@2:Arena v2). Omit @variant for all variants.")),
+                ("aug_disabled_landblocks", new Property<string>("", "CONQUEST: Comma-separated landblocks where custom luminance augs are disabled for balanced raids (e.g. 0x1234:Raid Name,0x1234@2:Raid v2). Omit @variant for all variants.")),
                 ("town_control_alleglist", new Property<string>("", "Comma-separated list of monarch IDs whitelisted for PK quest credit")),
 
                 // CONQUEST: Luminance Lottery

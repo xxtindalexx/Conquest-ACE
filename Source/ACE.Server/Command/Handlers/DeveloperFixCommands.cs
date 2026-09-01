@@ -384,17 +384,20 @@ namespace ACE.Server.Command.Handlers
 
             HashSet<uint> oswaldSkillCredit = null;
             HashSet<uint> ralireaSkillCredit = null;
+            HashSet<uint> shadowQueenSkillCredit = null;
             Dictionary<uint, int> lumAugSkillCredits = null;
 
             using (var ctx = new ShardDbContext())
             {
-                // 4 possible skill credits from quests
+                // 5 possible skill credits from quests
                 // - OswaldManualCompleted
                 // - ArantahKill1 (no 'turned in' stamp, only if given figurine?)
                 // - LumAugSkillQuest (stamped either 1 or 2 times)
+                // - ShadowQueensSpikeFirstTurnIn
 
                 oswaldSkillCredit = ctx.CharacterPropertiesQuestRegistry.Where(i => i.QuestName.Equals("OswaldManualCompleted")).Select(i => i.CharacterId).ToHashSet();
                 ralireaSkillCredit = ctx.CharacterPropertiesQuestRegistry.Where(i => i.QuestName.Equals("ArantahKill1")).Select(i => i.CharacterId).ToHashSet();
+                shadowQueenSkillCredit = ctx.CharacterPropertiesQuestRegistry.Where(i => i.QuestName.Equals("ShadowQueensSpikeFirstTurnIn")).Select(i => i.CharacterId).ToHashSet();
                 lumAugSkillCredits = ctx.CharacterPropertiesQuestRegistry.Where(i => i.QuestName.Equals("LumAugSkillQuest")).ToDictionary(i => i.CharacterId, i => i.NumTimesCompleted);
             }
 
@@ -420,7 +423,7 @@ namespace ACE.Server.Command.Handlers
 
                 var questCredits = 0;
 
-                // 4 possible skill credits from quests
+                // 5 possible skill credits from quests
 
                 // - OswaldManualCompleted
                 if (oswaldSkillCredit.Contains(player.Guid.Full))
@@ -428,6 +431,10 @@ namespace ACE.Server.Command.Handlers
 
                 // - ArantahKill1 (no 'turned in' stamp, only if given figurine?)
                 if (ralireaSkillCredit.Contains(player.Guid.Full))
+                    questCredits++;
+
+                // - ShadowQueensSpikeFirstTurnIn
+                if (shadowQueenSkillCredit.Contains(player.Guid.Full))
                     questCredits++;
 
                 // - LumAugSkillQuest (stamped either 1 or 2 times)

@@ -938,8 +938,35 @@ namespace ACE.Server.WorldObjects
                     damageRatingMod = Creature.AdditiveCombine(damageRatingMod, pkDamageRatingMod);
                     damageResistRatingMod = Creature.AdditiveCombine(damageResistRatingMod, pkDamageResistRatingMod);
                 }
+                else
+                {
+                    if (critical)
+                    {
+                        var pveCritDamageRatingMod = Creature.GetPositiveRatingMod(sourceCreature?.GetPVECritDamageRating() ?? 0);
+                        var pveCritDamageResistRatingMod = Creature.GetNegativeRatingMod(target.GetPVECritDamageResistRating());
+
+                        damageRatingMod = Creature.AdditiveCombine(damageRatingMod, pveCritDamageRatingMod);
+                        damageResistRatingMod = Creature.AdditiveCombine(damageResistRatingMod, pveCritDamageResistRatingMod);
+                    }
+                    else
+                    {
+                        var pveDamageRatingMod = Creature.GetPositiveRatingMod(sourceCreature?.GetPVEDamageRating() ?? 0);
+                        var pveDamageResistRatingMod = Creature.GetNegativeRatingMod(target.GetPVEDamageResistRating());
+
+                        damageRatingMod = Creature.AdditiveCombine(damageRatingMod, pveDamageRatingMod);
+                        damageResistRatingMod = Creature.AdditiveCombine(damageResistRatingMod, pveDamageResistRatingMod);
+                    }
+                }
 
                 damage *= damageRatingMod * damageResistRatingMod;
+
+                if (Spell.DamageType == DamageType.Nether)
+                {
+                    damage *= Creature.GetNegativeRatingMod(target.GetNetherResistRating());
+
+                    if (!pkBattle)
+                        damage *= Creature.GetNegativeRatingMod(target.GetPVENetherResistRating());
+                }
 
                 // CONQUEST: Apply PvP magic damage cap to prevent 1-shot kills from crits
                 if (pkBattle)

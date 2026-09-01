@@ -1221,7 +1221,9 @@ namespace ACE.Server.WorldObjects
             {
                 // Factor in target's nether resistance
                 var resistMod = target.GetResistanceMod(DamageType.Nether, killerPlayer, null);
-                var finalDamage = (int)(explosionDamage * resistMod);
+                var netherResistMod = Creature.GetNegativeRatingMod(target.GetNetherResistRating());
+                var pveNetherResistMod = Creature.GetNegativeRatingMod(target.GetPVENetherResistRating());
+                var finalDamage = (int)(explosionDamage * resistMod * netherResistMod * pveNetherResistMod);
 
                 if (finalDamage > 0)
                 {

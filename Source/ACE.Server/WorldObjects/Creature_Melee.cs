@@ -5,6 +5,7 @@ using System.Linq;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
+using ACE.Server.Managers;
 using ACE.Server.Physics;
 
 namespace ACE.Server.WorldObjects
@@ -107,6 +108,18 @@ namespace ACE.Server.WorldObjects
         public const float CleaveCylRange = 2.0f;
 
         /// <summary>
+        /// Extra-target cleave damage for weapons that are not two-handed slash-attack.
+        /// Slash-attack 2Hs (greataxe, mace, nodachi, including elemental) keep 100%.
+        /// Tunable via server property cleave_damage_multiplier.
+        /// </summary>
+        public static float CleaveDamageMultiplier => (float)PropertyManager.GetDouble("cleave_damage_multiplier");
+
+        /// <summary>
+        /// Slash-attack 2Hs get 25% more lateral cleave. Forward (depth) stays at CleaveCylRange.
+        /// </summary>
+        public const float CleaveSlashWidthMultiplier = 1.25f;
+
+        /// <summary>
         /// Performs a cleaving attack for two-handed weapons
         /// </summary>
         /// <returns>The list of cleave targets to hit with this attack</returns>
@@ -133,6 +146,13 @@ namespace ACE.Server.WorldObjects
             // Add enlightenment bonus
             totalCleaves += enlCleaveBonus;
 
+            var isSlash2H = weapon.IsTwoHandedSlashAttack;
+            var maxLateral = isSlash2H ? CleaveCylRange * CleaveSlashWidthMultiplier : CleaveCylRange;
+            // Bounding radius of the front box so we don't miss diagonal flank targets
+            var maxCylDist = isSlash2H
+                ? (float)Math.Sqrt(CleaveCylRange * CleaveCylRange + maxLateral * maxLateral)
+                : CleaveCylRange;
+
             foreach (var obj in visible)
             {
                 // cleaving skips original target
@@ -158,13 +178,23 @@ namespace ACE.Server.WorldObjects
 
                 // no objects in cleave range
                 var cylDist = GetCylinderDistance(creature);
-                if (cylDist > CleaveCylRange)
+                if (cylDist > maxCylDist)
                     return cleaveTargets;
 
                 // only cleave in front of attacker
                 var angle = GetAngle(creature);
                 if (Math.Abs(angle) > CleaveAngle / 2.0f)
                     continue;
+
+                // Slash-attack 2Hs: same forward depth, 25% more to the sides
+                if (isSlash2H)
+                {
+                    var angleRad = Math.Abs(angle) * (Math.PI / 180.0);
+                    var forward = cylDist * (float)Math.Cos(angleRad);
+                    var lateral = cylDist * (float)Math.Sin(angleRad);
+                    if (forward > CleaveCylRange || lateral > maxLateral)
+                        continue;
+                }
 
                 // found cleavable object
                 cleaveTargets.Add(creature);

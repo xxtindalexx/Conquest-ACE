@@ -627,6 +627,21 @@ namespace ACE.Server.WorldObjects
                     }
                 }
 
+                // CONQUEST: Check if entering/exiting aug-disabled landblock (raid balancing)
+                if (landblockUpdate)
+                {
+                    var newLandblock = (ushort)(newPosition.Cell >> 16);
+                    var newVariation = newPosition.Variation ?? 0;
+
+                    var wasInAugDisabled = ACE.Server.Entity.AugDisabledLandblocks.IsRestricted(oldLandblock, oldVariation);
+                    var nowInAugDisabled = ACE.Server.Entity.AugDisabledLandblocks.IsRestricted(newLandblock, newVariation);
+
+                    if (!wasInAugDisabled && nowInAugDisabled)
+                        EnterAugDisabledDungeonMode();
+                    else if (wasInAugDisabled && !nowInAugDisabled)
+                        ExitAugDisabledDungeonMode();
+                }
+
                 // CONQUEST: Combat pet landblock restrictions on cross-landblock movement
                 if (landblockUpdate && CurrentActiveCombatPet != null)
                 {

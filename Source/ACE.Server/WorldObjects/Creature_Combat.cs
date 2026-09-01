@@ -1009,6 +1009,11 @@ namespace ACE.Server.WorldObjects
             target.EnqueueBroadcast(new GameMessageScript(target.Guid, PlayScript.DirtyFightingDefenseDebuff));
 
             FightDirty_SendMessage(target, spell);
+
+            var breachingName = GetCreatureSkill(Skill.DirtyFighting).AdvancementClass == SkillAdvancementClass.Specialized ?
+                "Breaching Assault" : "Breaching Blow";
+
+            FightDirty_SendMessage(target, breachingName);
         }
 
         /// <summary>
@@ -1078,10 +1083,12 @@ namespace ACE.Server.WorldObjects
 
         public void FightDirty_SendMessage(Creature target, Spell spell)
         {
-            // Dirty Fighting! <Player> delivers a <sic> Unbalancing Blow to <target>!
-            //var article = spellBase.Name.StartsWithVowel() ? "an" : "a";
+            FightDirty_SendMessage(target, spell.Name);
+        }
 
-            var msg = $"Dirty Fighting! {Name} delivers a {spell.Name} to {target.Name}!";
+        public void FightDirty_SendMessage(Creature target, string effectName)
+        {
+            var msg = $"Dirty Fighting! {Name} delivers a {effectName} to {target.Name}!";
 
             var playerSource = this as Player;
             var playerTarget = target as Player;

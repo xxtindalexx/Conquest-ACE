@@ -58,7 +58,10 @@ namespace ACE.Server.WorldObjects
         {
             Ethereal = true;
             RadarBehavior = ACE.Entity.Enum.RadarBehavior.ShowNever;
-            ItemUseable = Usable.No;
+
+            // Non-combat pets default to unusable, but keep a weenie-defined usable value
+            if (!IsPassivePet || ItemUseable == null || ItemUseable == Usable.Undef)
+                ItemUseable = Usable.No;
 
             SuppressGenerateEffect = true;
         }

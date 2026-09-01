@@ -375,6 +375,21 @@ namespace ACE.Server.WorldObjects.Managers
                     }
                     entry.AugmentationLevelWhenCast = creatureCaster.LuminanceAugmentLifeCount ?? 0;
                 }
+
+                var meleeMissileAug = Math.Max(creatureCaster.LuminanceAugmentMeleeCount ?? 0,
+                    creatureCaster.LuminanceAugmentMissileCount ?? 0);
+
+                switch (spell.Category)
+                {
+                    case SpellCategory.DFHealingDebuff:
+                        entry.StatModValue -= meleeMissileAug;
+                        entry.AugmentationLevelWhenCast = meleeMissileAug;
+                        break;
+                    case SpellCategory.DFBleedDamage:
+                        entry.StatModValue += meleeMissileAug;
+                        entry.AugmentationLevelWhenCast = meleeMissileAug;
+                        break;
+                }
             }
             else
             {
@@ -429,7 +444,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// Example progression: 200 augs ≈ 16%, 400 augs ≈ 24%, 600 augs ≈ 28%, 1000+ augs → 32% max
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float GetLifeAugProtectRating(long LifeAugAmt)
+        internal static float GetLifeAugProtectRating(long LifeAugAmt)
         {
             if (LifeAugAmt <= 0)
                 return 0f;
@@ -467,7 +482,7 @@ namespace ACE.Server.WorldObjects.Managers
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float GetItemAugPercentageRating(long itemAugAmt)
+        internal static float GetItemAugPercentageRating(long itemAugAmt)
         {
             float bonus = 0;
             for (int x = 0; x < itemAugAmt; x++)
@@ -1144,7 +1159,13 @@ namespace ACE.Server.WorldObjects.Managers
         /// </summary>
         public virtual int GetBodyArmorMod()
         {
-            return GetModifier(EnchantmentTypeFlags.BodyArmorValue);
+            var mod = GetModifier(EnchantmentTypeFlags.BodyArmorValue);
+
+            // CONQUEST: Breaching Blow / Assault — -25 AL while DF low-attack (Unbalancing) debuff is active
+            if (GetEnchantments(SpellCategory.DFDefenseSkillDebuff).Count > 0)
+                mod -= (int)PropertyManager.GetDouble("dirty_fighting_breaching_armor_debuff", 25.0);
+
+            return mod;
         }
 
         /// <summary>
@@ -1662,6 +1683,11 @@ namespace ACE.Server.WorldObjects.Managers
 
                     damageResistRatingMod = Creature.AdditiveCombine(damageResistRatingMod, pkDamageResistRatingMod);
                 }
+                else
+                {
+                    var pveDamageResistRatingMod = Creature.GetNegativeRatingMod(creature.GetPVEDamageResistRating());
+                    damageResistRatingMod = Creature.AdditiveCombine(damageResistRatingMod, pveDamageResistRatingMod);
+                }
 
                 var dotResistRatingMod = Creature.GetNegativeRatingMod(creature.GetDotResistanceRating());  // should this be here, or somewhere else?
                                                                                                             // should this affect NetherDotDamageRating?
@@ -1671,6 +1697,14 @@ namespace ACE.Server.WorldObjects.Managers
                 //Console.WriteLine("NRR: " + Creature.NegativeModToRating(netherResistRatingMod));
 
                 tickAmount *= resistanceMod * damageResistRatingMod * dotResistRatingMod;
+
+                if (damageType == DamageType.Nether)
+                {
+                    tickAmount *= Creature.GetNegativeRatingMod(creature.GetNetherResistRating());
+
+                    if (!(sourcePlayer != null && targetPlayer != null))
+                        tickAmount *= Creature.GetNegativeRatingMod(creature.GetPVENetherResistRating());
+                }
 
                 // make sure the target's current health is not exceeded
                 if (tickAmountTotal + tickAmount >= creature.Health.Current)

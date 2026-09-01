@@ -1240,8 +1240,6 @@ namespace ACE.Server.WorldObjects
         {
             playerWasMovedFromNoLogLandblock = false;
 
-            if (biota.WeenieType == WeenieType.Sentinel || biota.WeenieType == WeenieType.Admin) return;
-
             if (!biota.PropertiesPosition.TryGetValue(PositionType.Location, out var location))
                 return;
 
@@ -1255,10 +1253,19 @@ namespace ACE.Server.WorldObjects
             // Check standard no-log landblocks (base landblocks only, no variations)
             var isInNoLogLandblock = !location.VariationId.HasValue && NoLog_Landblocks.Contains(landblock);
 
-            if (!isInPKDungeon && !isInNoLogLandblock)
+            // CONQUEST: Aug-disabled landblocks (ADLB) are no-log — login at lifestone with augs restored
+            var isInAugDisabledLandblock = AugDisabledLandblocks.IsRestricted(landblock, variation);
+
+            // Admins bypass retail no-log / PK dungeon, but not ADLB
+            var isAdmin = biota.WeenieType == WeenieType.Sentinel || biota.WeenieType == WeenieType.Admin;
+            if (isAdmin && !isInAugDisabledLandblock)
                 return;
 
-            if (!biota.PropertiesPosition.TryGetValue(PositionType.Sanctuary, out var lifestone))
+            if (!isInPKDungeon && !isInNoLogLandblock && !isInAugDisabledLandblock)
+                return;
+
+            if (!biota.PropertiesPosition.TryGetValue(PositionType.Sanctuary, out var lifestone)
+                && !(isInAugDisabledLandblock && biota.PropertiesPosition.TryGetValue(PositionType.Instantiation, out lifestone)))
                 return;
 
             location.ObjCellId = lifestone.ObjCellId;
@@ -1273,7 +1280,42 @@ namespace ACE.Server.WorldObjects
 
             playerWasMovedFromNoLogLandblock = true;
 
+            if (isInAugDisabledLandblock)
+            {
+                if (biota.PropertiesBool == null)
+                    biota.PropertiesBool = new Dictionary<PropertyBool, bool>();
+
+                biota.PropertiesBool[PropertyBool.LoggedOutFromAugDisabledLandblock] = true;
+            }
+
             return;
+        }
+
+        /// <summary>
+        /// CONQUEST: After login variation is applied, boot ADLB logins to the lifestone.
+        /// HandleNoLogLandblock runs before Location.Variation is stamped, so variant-specific ADLBs can be missed.
+        /// </summary>
+        public bool ApplyAugDisabledNoLogOnLogin()
+        {
+            if (Location == null)
+                return false;
+
+            var landblock = (ushort)(Location.Cell >> 16);
+            var variation = Location.Variation ?? 0;
+
+            if (!AugDisabledLandblocks.IsRestricted(landblock, variation))
+                return false;
+
+            LoggedOutFromAugDisabledLandblock = true;
+
+            if (Sanctuary != null)
+                Location = new Position(Sanctuary);
+            else if (Instantiation != null)
+                Location = new Position(Instantiation);
+            else
+                Location = new Position(0xA9B40019, 84.0f, 7.1f, 94.0f, 0f, 0f, -0.0784591f, 0.996917f);
+
+            return true;
         }
 
         /// <summary>

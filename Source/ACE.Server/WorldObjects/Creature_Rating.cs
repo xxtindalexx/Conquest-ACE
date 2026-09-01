@@ -529,16 +529,16 @@ namespace ACE.Server.WorldObjects
 
         public int GetNetherResistRating()
         {
-            // there is a property defined for this,
-            // but does anything use this?
-
             // get from base properties (monsters)?
             var netherResistRating = NetherResistRating ?? 0;
 
             // additive enchantments
             var enchantments = EnchantmentManager.GetRating(PropertyInt.NetherResistRating);
 
-            return netherResistRating + enchantments;
+            // equipment ratings
+            var equipment = GetEquippedItemsRatingSum(PropertyInt.GearNetherResist);
+
+            return netherResistRating + equipment + enchantments;
         }
 
         public int GetGearMaxHealth()
@@ -580,6 +580,83 @@ namespace ACE.Server.WorldObjects
         public int GetGearPKDamageResistRating()
         {
             return GetEquippedItemsRatingSum(PropertyInt.GearPKDamageResistRating);
+        }
+
+        public int GetPVEDamageRating()
+        {
+            var pveDamageRating = PVEDamageRating ?? 0;
+
+            var enchantments = EnchantmentManager.GetRating(PropertyInt.PVEDamageRating);
+
+            var equipment = GetEquippedItemsRatingSum(PropertyInt.GearPVEDamageRating);
+
+            return pveDamageRating + equipment + enchantments;
+        }
+
+        public int GetPVEDamageResistRating()
+        {
+            var pveDamageResistRating = PVEDamageResistRating ?? 0;
+
+            var enchantments = EnchantmentManager.GetRating(PropertyInt.PVEDamageResistRating);
+
+            var equipment = GetEquippedItemsRatingSum(PropertyInt.GearPVEDamageResistRating);
+
+            return pveDamageResistRating + equipment + enchantments;
+        }
+
+        public int GetPVECritRating()
+        {
+            var pveCritRating = PVECritRating ?? 0;
+
+            var enchantments = EnchantmentManager.GetRating(PropertyInt.PVECritRating);
+
+            var equipment = GetEquippedItemsRatingSum(PropertyInt.GearPVECritRating);
+
+            return pveCritRating + equipment + enchantments;
+        }
+
+        public int GetPVECritResistRating()
+        {
+            var pveCritResistRating = PVECritResistRating ?? 0;
+
+            var enchantments = EnchantmentManager.GetRating(PropertyInt.PVECritResistRating);
+
+            var equipment = GetEquippedItemsRatingSum(PropertyInt.GearPVECritResistRating);
+
+            return pveCritResistRating + equipment + enchantments;
+        }
+
+        public int GetPVECritDamageRating()
+        {
+            var pveCritDamageRating = PVECritDamageRating ?? 0;
+
+            var enchantments = EnchantmentManager.GetRating(PropertyInt.PVECritDamageRating);
+
+            var equipment = GetEquippedItemsRatingSum(PropertyInt.GearPVECritDamageRating);
+
+            return pveCritDamageRating + equipment + enchantments;
+        }
+
+        public int GetPVECritDamageResistRating()
+        {
+            var pveCritDamageResistRating = PVECritDamageResistRating ?? 0;
+
+            var enchantments = EnchantmentManager.GetRating(PropertyInt.PVECritDamageResistRating);
+
+            var equipment = GetEquippedItemsRatingSum(PropertyInt.GearPVECritDamageResistRating);
+
+            return pveCritDamageResistRating + equipment + enchantments;
+        }
+
+        public int GetPVENetherResistRating()
+        {
+            var pveNetherResistRating = PVENetherResistRating ?? 0;
+
+            var enchantments = EnchantmentManager.GetRating(PropertyInt.PVENetherResistRating);
+
+            var equipment = GetEquippedItemsRatingSum(PropertyInt.GearPVENetherResistRating);
+
+            return pveNetherResistRating + equipment + enchantments;
         }
 
         public int GetItemManaReductionRating()

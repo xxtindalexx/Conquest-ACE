@@ -19,8 +19,6 @@ namespace ACE.Server.WorldObjects
         public static void ApplyUseOnTargetDefaults(WorldObject wo, ItemType targetType)
         {
             wo.ItemUseable = DefaultItemUseable;
-            wo.Attuned = AttunedStatus.Attuned;
-            wo.Bonded = BondedStatus.Bonded;
             wo.ItemType = ItemType.CraftCookingBase;
 
             if (wo.TargetType == null || wo.TargetType == ItemType.None)

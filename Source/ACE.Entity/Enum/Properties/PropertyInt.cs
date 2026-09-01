@@ -731,6 +731,39 @@ namespace ACE.Entity.Enum.Properties
         EnlightenmentGemType = 9351,            // Identifies type of enlightenment gem (1-13, see EnlightenmentGemType enum)
         AllegianceRankBonus = 9352,             // Permanent bonus added to calculated allegiance rank (capped at 10)
 
+        // CONQUEST: PvE-only ratings (apply when combat is not player-vs-player)
+        [SendOnLogin][AssessmentProperty]
+        PVEDamageRating = 9353,
+        [SendOnLogin][AssessmentProperty]
+        PVEDamageResistRating = 9354,
+        [SendOnLogin][AssessmentProperty]
+        PVECritRating = 9355,
+        [SendOnLogin][AssessmentProperty]
+        PVECritResistRating = 9356,
+        [SendOnLogin][AssessmentProperty]
+        PVECritDamageRating = 9357,
+        [SendOnLogin][AssessmentProperty]
+        PVECritDamageResistRating = 9358,
+        [SendOnLogin][AssessmentProperty]
+        PVENetherResistRating = 9359,
+        [AssessmentProperty]
+        GearPVEDamageRating = 9360,
+        [AssessmentProperty]
+        GearPVEDamageResistRating = 9361,
+        [AssessmentProperty]
+        GearPVECritRating = 9362,
+        [AssessmentProperty]
+        GearPVECritResistRating = 9363,
+        [AssessmentProperty]
+        GearPVECritDamageRating = 9364,
+        [AssessmentProperty]
+        GearPVECritDamageResistRating = 9365,
+        [AssessmentProperty]
+        GearPVENetherResistRating = 9366,
+
+        // CONQUEST: Dye Mixture — tracks which vials have been added (9-bit mask, max 511)
+        DyeMixtureVialsBitfield = 9367,
+
         // CONQUEST: Vendor Requirements
         VendorRequiredEnlightenment = 39000,    // Minimum enlightenment level required to use this vendor
     }

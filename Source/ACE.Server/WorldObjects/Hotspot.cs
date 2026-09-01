@@ -73,6 +73,12 @@ namespace ACE.Server.WorldObjects
                 ActionLoop.AddDelaySeconds(CycleTimeNext);
                 ActionLoop.AddAction(this, ActionType.Hotspot_ActionLoop, () =>
                 {
+                    if (IsDestroyed || CurrentLandblock == null)
+                    {
+                        ActionLoop = null;
+                        return;
+                    }
+
                     if (Creatures != null && Creatures.Any())
                     {
                         //check if the hotspot is enraged
@@ -170,7 +176,7 @@ namespace ACE.Server.WorldObjects
                 var creature = CurrentLandblock.GetObject(creatureGuid) as Creature;
 
                 // verify current state of collision here
-                if (creature == null || !touchCheck(creature.PhysicsObj))
+                if (creature == null || creature.PhysicsObj == null || !touchCheck(creature.PhysicsObj))
                 {
                     //Console.WriteLine($"{Name} ({Guid}).OnCollideObjectEnd({creature?.Name})");
                     Creatures.Remove(creatureGuid);

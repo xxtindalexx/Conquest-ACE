@@ -34,6 +34,8 @@ namespace ACE.Server.Factories
                 return new RandomDye(weenie, guid);
             if (weenie.WeenieClassId == ImbueStripTool.ImbueStripToolWcid)
                 return new ImbueStripTool(weenie, guid);
+            if (weenie.WeenieClassId == DyeMixture.DyeMixtureWcid)
+                return new DyeMixture(weenie, guid);
 
             var objWeenieType = weenie.WeenieType;
 
@@ -161,6 +163,8 @@ namespace ACE.Server.Factories
                 return new RandomDye(biota);
             if (biota.WeenieClassId == ImbueStripTool.ImbueStripToolWcid)
                 return new ImbueStripTool(biota);
+            if (biota.WeenieClassId == DyeMixture.DyeMixtureWcid)
+                return new DyeMixture(biota);
 
             switch (biota.WeenieType)
             {

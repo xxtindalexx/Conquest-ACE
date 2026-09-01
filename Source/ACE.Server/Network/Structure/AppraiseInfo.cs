@@ -113,7 +113,7 @@ namespace ACE.Server.Network.Structure
                 BuildCreature(creature);
 
             if (wo.Damage != null && !(wo is Clothing) || wo is MeleeWeapon || wo is Missile || wo is MissileLauncher || wo is Ammunition || wo is Caster)
-                BuildWeapon(wo);
+                BuildWeapon(wo, examiner);
 
             // CONQUEST: Build pet device property descriptions
             if (wo is PetDevice petDevice)
@@ -339,6 +339,8 @@ namespace ACE.Server.Network.Structure
                 //PropertiesInt64.Clear();
                 //PropertiesString.Clear();
             }
+
+            ApplyPVERatingDisplay(wo);
 
             BuildFlags();
         }
@@ -612,6 +614,65 @@ namespace ACE.Server.Network.Structure
                 PropertiesString[PropertyString.Use] = descriptionText;
         }
 
+        /// <summary>
+        /// CONQUEST: Adds a PvE Ratings section to gear appraisal Use text.
+        /// The retail client does not have labels for custom GearPVE* property IDs in the ratings list.
+        /// </summary>
+        private void ApplyPVERatingDisplay(WorldObject wo)
+        {
+            if (!Success || wo is Creature)
+                return;
+
+            var lines = new List<string>();
+
+            var pveDamageRating = wo.GearPVEDamageRating ?? 0;
+            var pveDamageResistRating = wo.GearPVEDamageResistRating ?? 0;
+            var pveCritRating = wo.GearPVECritRating ?? 0;
+            var pveCritResistRating = wo.GearPVECritResistRating ?? 0;
+            var pveCritDamageRating = wo.GearPVECritDamageRating ?? 0;
+            var pveCritDamageResistRating = wo.GearPVECritDamageResistRating ?? 0;
+            var pveNetherResistRating = wo.GearPVENetherResistRating ?? 0;
+
+            if (pveDamageRating != 0)
+                lines.Add($"- PvE Damage Rating: +{pveDamageRating}");
+            if (pveDamageResistRating != 0)
+                lines.Add($"- PvE Damage Resist Rating: +{pveDamageResistRating}");
+            if (pveCritRating != 0)
+                lines.Add($"- PvE Crit Rating: +{pveCritRating}");
+            if (pveCritResistRating != 0)
+                lines.Add($"- PvE Crit Resist Rating: +{pveCritResistRating}");
+            if (pveCritDamageRating != 0)
+                lines.Add($"- PvE Crit Damage Rating: +{pveCritDamageRating}");
+            if (pveCritDamageResistRating != 0)
+                lines.Add($"- PvE Crit Damage Resist Rating: +{pveCritDamageResistRating}");
+            if (pveNetherResistRating != 0)
+                lines.Add($"- PvE Nether Resist Rating: +{pveNetherResistRating}");
+
+            if (lines.Count == 0)
+                return;
+
+            const string propertyDetailsHeader = "Property Details:";
+            var pveSection = "PVE Ratings:\n\n" + string.Join("\n", lines);
+
+            var existingUse = PropertiesString.TryGetValue(PropertyString.Use, out var useText)
+                ? useText
+                : wo.GetProperty(PropertyString.Use) ?? "";
+
+            var propertyDetailsIndex = existingUse.IndexOf(propertyDetailsHeader, StringComparison.Ordinal);
+            if (propertyDetailsIndex >= 0)
+            {
+                var before = existingUse.Substring(0, propertyDetailsIndex).TrimEnd();
+                var after = existingUse.Substring(propertyDetailsIndex);
+                var separator = string.IsNullOrEmpty(before) ? "" : "\n\n";
+                PropertiesString[PropertyString.Use] = before + separator + pveSection + "\n\n\n" + after;
+            }
+            else
+            {
+                var separator = string.IsNullOrEmpty(existingUse) ? "" : "\n\n";
+                PropertiesString[PropertyString.Use] = existingUse + separator + pveSection + "\n";
+            }
+        }
+
         private void BuildCreature(Creature creature)
         {
             CreatureProfile = new CreatureProfile(creature, Success);
@@ -674,6 +735,28 @@ namespace ACE.Server.Network.Structure
             var pkDamageRating = creature.GetPKDamageRating();
             var pkDamageResistRating = creature.GetPKDamageResistRating();
 
+            var pveDamageRating = creature.GetPVEDamageRating();
+            var pveDamageResistRating = creature.GetPVEDamageResistRating();
+            var pveCritRating = creature.GetPVECritRating();
+            var pveCritResistRating = creature.GetPVECritResistRating();
+            var pveCritDamageRating = creature.GetPVECritDamageRating();
+            var pveCritDamageResistRating = creature.GetPVECritDamageResistRating();
+            var pveNetherResistRating = creature.GetPVENetherResistRating();
+
+            // Display-only: fold PvE ratings into universal totals for non-PK assess (combat still applies PvE separately).
+            var includePveInRatingDisplay = !(creature is Player player && player.IsPK);
+
+            if (includePveInRatingDisplay)
+            {
+                damageRating += pveDamageRating;
+                damageResistRating += pveDamageResistRating;
+                critRating += pveCritRating;
+                critResistRating += pveCritResistRating;
+                critDamageRating += pveCritDamageRating;
+                critDamageResistRating += pveCritDamageResistRating;
+                netherResistRating += pveNetherResistRating;
+            }
+
             if (damageRating != 0)
                 PropertiesInt[PropertyInt.DamageRating] = damageRating;
             if (damageResistRating != 0)
@@ -706,10 +789,18 @@ namespace ACE.Server.Network.Structure
             if (pkDamageResistRating != 0)
                 PropertiesInt[PropertyInt.PKDamageResistRating] = pkDamageResistRating;
 
+            PropertiesInt.Remove(PropertyInt.PVEDamageRating);
+            PropertiesInt.Remove(PropertyInt.PVEDamageResistRating);
+            PropertiesInt.Remove(PropertyInt.PVECritRating);
+            PropertiesInt.Remove(PropertyInt.PVECritResistRating);
+            PropertiesInt.Remove(PropertyInt.PVECritDamageRating);
+            PropertiesInt.Remove(PropertyInt.PVECritDamageResistRating);
+            PropertiesInt.Remove(PropertyInt.PVENetherResistRating);
+
             // add ratings from equipped items?
         }
 
-        private void BuildWeapon(WorldObject weapon)
+        private void BuildWeapon(WorldObject weapon, Player examiner)
         {
             if (!Success)
                 return;
@@ -751,7 +842,7 @@ namespace ACE.Server.Network.Structure
             }
 
             // Build detailed weapon property descriptions
-            BuildWeaponPropertyDescriptions(weapon);
+            BuildWeaponPropertyDescriptions(weapon, examiner);
 
             // item enchantments can also be on wielder currently
             AddEnchantments(weapon);
@@ -761,9 +852,21 @@ namespace ACE.Server.Network.Structure
         /// Builds detailed human-readable descriptions of weapon special properties
         /// Appends to the Use property string for display in appraisal panel
         /// </summary>
-        private void BuildWeaponPropertyDescriptions(WorldObject weapon)
+        private void BuildWeaponPropertyDescriptions(WorldObject weapon, Player examiner)
         {
             var descriptions = new List<string>();
+            var imbuedEffect = (ImbuedEffectType)(weapon.GetProperty(PropertyInt.ImbuedEffect) ?? 0);
+            var maxCritChancePercent = WorldObject.MaxCriticalStrikeMod * 100;
+            var maxCritDmgMultiplier = 1.0 + WorldObject.MaxCripplingBlowMod;
+            var maxRendingVulnPercent = (WorldObject.MaxRendingMod - 1.0) * 100;
+
+            var rendSuffix = "";
+            var lifeAugBonus = WorldObject.GetRendingLifeAugBonus(examiner);
+            if (lifeAugBonus > 0)
+            {
+                var withAugsPercent = (WorldObject.MaxRendingMod + lifeAugBonus - 1.0) * 100;
+                rendSuffix = $" (life augs: +{withAugsPercent:F0}%)";
+            }
 
             // Slayer bonus
             var slayerCreatureType = weapon.SlayerCreatureType;
@@ -774,19 +877,43 @@ namespace ACE.Server.Network.Structure
                 descriptions.Add($"- {creatureName} Slayer: {slayerDamageBonus.Value:G}x Dmg");
             }
 
-            // Biting Strike (critical frequency bonus)
+            // Biting Strike (critical frequency)
             var critFrequency = weapon.GetProperty(PropertyFloat.CriticalFrequency);
             if (critFrequency != null && critFrequency > 0)
             {
-                var critPercent = critFrequency.Value * 100;
-                descriptions.Add($"- Biting Strike: +{critPercent:F0}% Crit Chance");
+                if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
+                    descriptions.Add("- Biting Strike (Secondary): Surpassed by Critical Strike");
+                else
+                {
+                    var critPercent = critFrequency.Value * 100;
+                    descriptions.Add($"- Biting Strike (Secondary): {critPercent:F0}% Crit Chance");
+                }
             }
 
             // Crushing Blow (critical damage multiplier)
             var critDamageMod = weapon.GetProperty(PropertyFloat.CriticalMultiplier);
             if (critDamageMod != null && critDamageMod > 1.0)
             {
-                descriptions.Add($"- Crushing Blow: {critDamageMod:G}x Crit Dmg");
+                if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
+                    descriptions.Add("- Crushing Blow (Secondary): Surpassed by Crippling Blow");
+                else
+                {
+                    var totalCritDmgMultiplier = 1.0 + critDamageMod.Value;
+                    descriptions.Add($"- Crushing Blow (Secondary): {totalCritDmgMultiplier:G}x Crit Dmg");
+                }
+            }
+
+            // Cleave additional targets (two-handed / cleaving weapons, plus ENL melee bonus)
+            var extraTargets = weapon.CleaveTargets;
+            if (examiner != null && weapon.WeenieType == WeenieType.MeleeWeapon)
+                extraTargets += examiner.GetProperty(PropertyInt.EnlightenmentCleaveBonus) ?? 0;
+
+            if (extraTargets > 0)
+            {
+                if (weapon.IsTwoHandedSlashAttack)
+                    descriptions.Add($"- Cleave (Secondary): +{extraTargets} additional targets ({(Creature.CleaveSlashWidthMultiplier - 1.0f) * 100:F0}% wider)");
+                else
+                    descriptions.Add($"- Cleave (Secondary): +{extraTargets} additional targets ({Creature.CleaveDamageMultiplier * 100:F0}% damage)");
             }
 
             // Resistance Cleaving (vulnerability)
@@ -839,37 +966,36 @@ namespace ACE.Server.Network.Structure
             }
 
             // Imbued effects
-            var imbuedEffect = (ImbuedEffectType)(weapon.GetProperty(PropertyInt.ImbuedEffect) ?? 0);
 
             // Critical Strike
             if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
-                descriptions.Add("- Critical Strike: +Crit Chance");
+                descriptions.Add($"- Critical Strike{ImbueSlotTag(ImbuedEffectType.CriticalStrike)}: Up to {maxCritChancePercent:F0}% crit chance (skill based)");
 
             // Crippling Blow
             if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
-                descriptions.Add("- Crippling Blow: +Crit Dmg");
+                descriptions.Add($"- Crippling Blow{ImbueSlotTag(ImbuedEffectType.CripplingBlow)}: Up to {maxCritDmgMultiplier:G}x crit dmg (skill based)");
 
             // Armor Rending
             if (imbuedEffect.HasFlag(ImbuedEffectType.ArmorRending))
-                descriptions.Add("- Armor Rending: Crits ignore armor");
+                descriptions.Add($"- Armor Rending{ImbueSlotTag(ImbuedEffectType.ArmorRending)}: Ignores up to 60% armor (skill based)");
 
             // Elemental Rending effects
             if (imbuedEffect.HasFlag(ImbuedEffectType.SlashRending))
-                descriptions.Add("- Slash Rending: +Slash Dmg (vuln)");
+                descriptions.Add($"- Slash Rending{ImbueSlotTag(ImbuedEffectType.SlashRending)}: Up to +{maxRendingVulnPercent:F0}% Slash Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.PierceRending))
-                descriptions.Add("- Pierce Rending: +Pierce Dmg (vuln)");
+                descriptions.Add($"- Pierce Rending{ImbueSlotTag(ImbuedEffectType.PierceRending)}: Up to +{maxRendingVulnPercent:F0}% Pierce Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.BludgeonRending))
-                descriptions.Add("- Bludgeon Rending: +Bludgeon Dmg (vuln)");
+                descriptions.Add($"- Bludgeon Rending{ImbueSlotTag(ImbuedEffectType.BludgeonRending)}: Up to +{maxRendingVulnPercent:F0}% Bludgeon Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.AcidRending))
-                descriptions.Add("- Acid Rending: +Acid Dmg (vuln)");
+                descriptions.Add($"- Acid Rending{ImbueSlotTag(ImbuedEffectType.AcidRending)}: Up to +{maxRendingVulnPercent:F0}% Acid Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ColdRending))
-                descriptions.Add("- Cold Rending: +Cold Dmg (vuln)");
+                descriptions.Add($"- Cold Rending{ImbueSlotTag(ImbuedEffectType.ColdRending)}: Up to +{maxRendingVulnPercent:F0}% Cold Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ElectricRending))
-                descriptions.Add("- Lightning Rending: +Lightning Dmg (vuln)");
+                descriptions.Add($"- Lightning Rending{ImbueSlotTag(ImbuedEffectType.ElectricRending)}: Up to +{maxRendingVulnPercent:F0}% Lightning Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.FireRending))
-                descriptions.Add("- Fire Rending: +Fire Dmg (vuln)");
+                descriptions.Add($"- Fire Rending{ImbueSlotTag(ImbuedEffectType.FireRending)}: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based){rendSuffix}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.NetherRending))
-                descriptions.Add("- Void Rending: +Void Dmg (vuln)");
+                descriptions.Add($"- Void Rending{ImbueSlotTag(ImbuedEffectType.NetherRending)}: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based){rendSuffix}");
 
             // Always Critical
             if (imbuedEffect.HasFlag(ImbuedEffectType.AlwaysCritical))
@@ -892,6 +1018,19 @@ namespace ACE.Server.Network.Structure
                 else
                     PropertiesString[PropertyString.Use] = descriptionText + "\n";
             }
+        }
+
+        /// <summary>
+        /// CONQUEST: Labels weapon-tinker imbues as Primary.
+        /// Matches ImbueStripTool.PrimaryImbueMask (CS, CB, AR, elemental rends).
+        /// Secondaries (Biting Strike, Crushing Blow, Cleave) are labeled at their description lines.
+        /// </summary>
+        private static string ImbueSlotTag(ImbuedEffectType type)
+        {
+            if (type != ImbuedEffectType.Undef && (ImbueStripTool.PrimaryImbueMask & type) == type)
+                return " (Primary)";
+
+            return "";
         }
 
         /// <summary>

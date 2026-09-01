@@ -94,6 +94,12 @@ namespace ACE.Server.WorldObjects.Managers
                 return;
             }
 
+            if (player.InAugDisabledDungeonMode)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot use augmentation gems while in a balanced raid area.", ChatMessageType.Broadcast));
+                return;
+            }
+
             if (ArenaManager.IsActiveArenaPlayer(player.Character.Id))
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat("You cannot use augmentation gems while in an arena match.", ChatMessageType.Broadcast));

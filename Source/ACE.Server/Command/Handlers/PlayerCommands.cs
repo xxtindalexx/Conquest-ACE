@@ -17,6 +17,7 @@ using ACE.Server.Network;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
+using ACE.Server.WorldObjects.Managers;
 using Lifestoned.DataModel.DerethForever;
 using log4net;
 using System;
@@ -24,6 +25,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -471,6 +473,9 @@ namespace ACE.Server.Command.Handlers
             foreach (var playerQuest in quests)
             {
                 var questName = QuestManager.GetQuestName(playerQuest.QuestName);
+                if (QuestManager.IsNoQuestBonus(questName))
+                    continue;
+
                 var quest = DatabaseManager.World.GetCachedQuest(questName);
 
                 string text;
@@ -490,34 +495,114 @@ namespace ACE.Server.Command.Handlers
                 questMessages.Add(text);
             }
 
+            if (questMessages.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Quest list is empty.", ChatMessageType.Broadcast));
+                return;
+            }
+
             foreach (var message in questMessages)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
             }
         }
 
-        [CommandHandler("aug", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your advanced augmentation levels")]
+        [CommandHandler("aug", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
+            "Displays your advanced augmentation levels",
+            "/aug — show levels with current bonuses\n/aug info — show what each augmentation type does")]
         public static void HandleAugmentations(Session session, params string[] parameters)
         {
-            var player = session.Player;
+            if (parameters != null && parameters.Length > 0)
+            {
+                switch (parameters[0].ToLower())
+                {
+                    case "info":
+                        HandleAugmentationInfo(session);
+                        return;
+                    default:
+                        session.Network.EnqueueSend(new GameMessageSystemChat("[AUG] Usage: /aug | /aug info", ChatMessageType.Broadcast));
+                        return;
+                }
+            }
 
-            session.Network.EnqueueSend(new GameMessageSystemChat($"---------------------------", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Advanced Augmentation Levels:", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Creature: {session.Player.LuminanceAugmentCreatureCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Item: {session.Player.LuminanceAugmentItemCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Life: {session.Player.LuminanceAugmentLifeCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"War: {session.Player.LuminanceAugmentWarCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Void: {session.Player.LuminanceAugmentVoidCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Duration: {session.Player.LuminanceAugmentSpellDurationCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Specialization: {session.Player.LuminanceAugmentSpecializeCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Melee: {session.Player.LuminanceAugmentMeleeCount:N0}", ChatMessageType.Broadcast));
-            session.Network.EnqueueSend(new GameMessageSystemChat($"Missile: {session.Player.LuminanceAugmentMissileCount:N0}", ChatMessageType.Broadcast));
+            DisplayAugmentationLevels(session);
         }
 
-        [CommandHandler("augs", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Displays your advanced augmentation levels")]
+        [CommandHandler("augs", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
+            "Displays your advanced augmentation levels",
+            "/augs — show levels with current bonuses\n/augs info — show what each augmentation type does")]
         public static void HandleAugmentations2(Session session, params string[] parameters)
         {
             HandleAugmentations(session, parameters);
+        }
+
+        private static void DisplayAugmentationLevels(Session session)
+        {
+            var player = session.Player;
+
+            session.Network.EnqueueSend(new GameMessageSystemChat("---------------------------", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat("Advanced Augmentation Levels:", ChatMessageType.Broadcast));
+
+            var creatureCount = player.LuminanceAugmentCreatureCount ?? 0;
+            var itemCount = player.LuminanceAugmentItemCount ?? 0;
+            var lifeCount = player.LuminanceAugmentLifeCount ?? 0;
+            var warCount = player.LuminanceAugmentWarCount ?? 0;
+            var voidCount = player.LuminanceAugmentVoidCount ?? 0;
+            var durationCount = player.LuminanceAugmentSpellDurationCount ?? 0;
+            var specCount = player.LuminanceAugmentSpecializeCount ?? 0;
+            var meleeCount = player.LuminanceAugmentMeleeCount ?? 0;
+            var missileCount = player.LuminanceAugmentMissileCount ?? 0;
+
+            var warPctPerLevel = PropertyManager.GetDouble("war_aug_dmg_per_level") * 100.0;
+            var voidPctPerLevel = PropertyManager.GetDouble("void_aug_dmg_per_level") * 100.0;
+            var lifeProtPct = EnchantmentManager.GetLifeAugProtectRating(lifeCount) * 100.0;
+            var lifeRendPct = WorldObject.GetRendingLifeAugBonus(player) * 100.0;
+            var itemPctRating = EnchantmentManager.GetItemAugPercentageRating(itemCount) * 100.0;
+
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Creature: {creatureCount:N0}  (+{creatureCount:N0} creature enchantments)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Item: {itemCount:N0}  (Impen +{itemCount:N0} AL, Blood Drinker +{itemCount * 0.5:F1}, Heart Seeker/Defender +{itemPctRating:F2}%)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Life: {lifeCount:N0}  (Armor +{lifeCount:N0} AL, Protection +{lifeProtPct:F2}%, Rending +{lifeRendPct:F2}%)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"War: {warCount:N0}  (+{warCount * warPctPerLevel:F2}% war magic damage)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Void: {voidCount:N0}  (+{voidCount * voidPctPerLevel:F2}% void magic damage)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Duration: {durationCount:N0}  (+{durationCount * 5:N0}% spell duration)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Specialization: {specCount:N0}  (spec credit cap {70 + specCount})", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Melee: {meleeCount:N0}  (+{meleeCount:N0} flat damage, +{meleeCount * 1.5:F1}% crit damage)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Missile: {missileCount:N0}  (+{missileCount:N0} flat damage, +{missileCount * 1.5:F1}% crit damage)", ChatMessageType.Broadcast));
+            session.Network.EnqueueSend(new GameMessageSystemChat(
+                "Use /aug info for per-level effect details.", ChatMessageType.Broadcast));
+        }
+
+        private static void HandleAugmentationInfo(Session session)
+        {
+            var warPctPerLevel = PropertyManager.GetDouble("war_aug_dmg_per_level") * 100.0;
+            var voidPctPerLevel = PropertyManager.GetDouble("void_aug_dmg_per_level") * 100.0;
+            var lifeProtMaxPct = PropertyManager.GetDouble("life_aug_prot_max_bonus") * 100.0;
+            var lifeProtLinearPct = PropertyManager.GetDouble("life_aug_prot_linear_rate") * 100.0;
+            var lifeProtLinearCap = PropertyManager.GetLong("life_aug_prot_linear_cap");
+
+            var message =
+                "=== Luminance Augmentation Info ===\n" +
+                "Each level purchased adds the listed bonus.\n\n" +
+                "Creature: +1 StatMod per level on self-targeted creature buffs; -1 on harmful creature debuffs.\n\n" +
+                "Item: Impen +1 AL per level; Brittlemail -1 AL per level; Blood Drinker +0.5 per level; Spirit Drinker +0.5% per level; Banes/Surges +1% per level; Heart Seeker/Defender diminishing (+1% each for first 100, then 0.75%, 0.5625%, down to 0.1%); Alacrity -1 weapon speed per level.\n\n" +
+                $"Life: Armor buff +1 AL per level; Protection buffs use hybrid scaling ({lifeProtLinearPct:F2}% per level for first {lifeProtLinearCap}, then diminishing toward {lifeProtMaxPct:F2}% max); other life buffs +0.10 per level; harmful life spells mirror these; Rending bonus approaches +100% with diminishing returns.\n\n" +
+                $"War: +{warPctPerLevel:F2}% war magic projectile damage per level.\n\n" +
+                $"Void: +{voidPctPerLevel:F2}% void magic projectile damage per level.\n\n" +
+                "Duration: +5% spell duration per level (stacks with Archmage's Endurance).\n\n" +
+                "Specialization: +1 specialized skill credit cap per level (base cap 70).\n\n" +
+                "Melee: +1 flat melee damage per level; +1.5% melee crit damage per level.\n\n" +
+                "Missile: +1 flat missile damage per level; +1.5% missile crit damage per level.";
+
+            session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
         }
 
         /// <summary>
@@ -848,17 +933,8 @@ namespace ACE.Server.Command.Handlers
 
             var player = session.Player;
 
-            // Calculate costs for confirmation message
             var targetEnlightenment = player.Enlightenment + 1;
-            long baseLumCost = 1_000_000;
-            long reqLum = targetEnlightenment * baseLumCost;
-            long coinsRequired = targetEnlightenment * 100;
-
-            // Build confirmation message
-            var confirmMessage = $"Enlightening to level {targetEnlightenment} will cost:\n" +
-                                 $"- {reqLum:N0} Luminance\n" +
-                                 $"- {coinsRequired:N0} Conquest Coins\n\n" +
-                                 $"Are you sure you want to enlighten?";
+            var confirmMessage = Entity.Enlightenment.FormatConfirmationMessage(targetEnlightenment);
 
             // Show confirmation dialog
             if (!player.ConfirmationManager.EnqueueSend(
@@ -881,7 +957,7 @@ namespace ACE.Server.Command.Handlers
             HandleEnlighten(session, parameters);
         }
 
-        [CommandHandler("top", AccessLevel.Player, CommandHandlerFlag.None, "Show current leaderboards", "use /top qb, /top level, /top enl, /top bank, /top lum, /top augs, /top deaths, or /top titles")]
+        [CommandHandler("top", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Show current leaderboards", "use /top qb, /top level, /top enl, /top bank, /top lum, /top augs, /top deaths, or /top titles")]
         public static async void HandleTop(Session session, params string[] parameters)
         {
             if (parameters.Length < 1)
@@ -890,28 +966,33 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            // Rate limit check for /top qb command
-            if (parameters[0]?.ToLower() == "qb")
+            var category = parameters[0]?.ToLower();
+            var cooldownKey = NormalizeTopCategory(category);
+            if (cooldownKey == null)
             {
-                var qbCommandLimit = PropertyManager.GetLong("qb_command_limit");
-                var timeSinceLastCommand = DateTime.UtcNow - session.LastQBCommandTime;
-                if (timeSinceLastCommand.TotalSeconds < qbCommandLimit)
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[TOP] Unknown leaderboard '{category}'. Use: qb, level, enl, bank, lum, augs, deaths, or titles", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var topCommandLimit = PropertyManager.GetLong("top_command_limit");
+            if (session.LastTopCommandTimes.TryGetValue(cooldownKey, out var lastUsed))
+            {
+                var elapsed = DateTime.UtcNow - lastUsed;
+                if (elapsed.TotalSeconds < topCommandLimit)
                 {
-                    var remainingTime = (int)(qbCommandLimit - timeSinceLastCommand.TotalSeconds);
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {remainingTime} more second(s) before using /top qb again.", ChatMessageType.Broadcast));
+                    var remainingTime = (int)(topCommandLimit - elapsed.TotalSeconds);
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"You must wait {remainingTime} more second(s) before using /top {category} again.", ChatMessageType.Broadcast));
                     return;
                 }
-                session.LastQBCommandTime = DateTime.UtcNow;
             }
+            session.LastTopCommandTimes[cooldownKey] = DateTime.UtcNow;
 
             List<Database.Models.Auth.Leaderboard> list = new List<Database.Models.Auth.Leaderboard>();
             var cache = Database.Models.Auth.LeaderboardCache.Instance;
 
             using (var context = new Database.Models.Auth.AuthDbContext())
             {
-                var category = parameters[0]?.ToLower();
-
-                switch (category)
+                switch (cooldownKey)
                 {
                     case "qb":
                         list = await cache.GetTopQBAsync(context);
@@ -930,7 +1011,6 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "enl":
-                    case "enlightenment":
                         list = await cache.GetTopEnlAsync(context);
                         if (list.Count > 0)
                         {
@@ -947,7 +1027,6 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "lum":
-                    case "luminance":
                         list = await cache.GetTopLumAsync(context);
                         if (list.Count > 0)
                         {
@@ -956,8 +1035,6 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "augs":
-                    case "aug":
-                    case "augmentations":
                         list = await cache.GetTopAugsAsync(context);
                         if (list.Count > 0)
                         {
@@ -966,7 +1043,6 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "deaths":
-                    case "death":
                         list = await cache.GetTopDeathsAsync(context);
                         if (list.Count > 0)
                         {
@@ -975,29 +1051,92 @@ namespace ACE.Server.Command.Handlers
                         break;
 
                     case "titles":
-                    case "title":
                         list = await cache.GetTopTitlesAsync(context);
                         if (list.Count > 0)
                         {
                             session.Network.EnqueueSend(new GameMessageSystemChat("Top 25 Players by Title Count:", ChatMessageType.Broadcast));
                         }
                         break;
-
-                    default:
-                        session.Network.EnqueueSend(new GameMessageSystemChat($"[TOP] Unknown leaderboard '{category}'. Use: qb, level, enl, bank, or lum", ChatMessageType.Broadcast));
-                        return;
                 }
+
+                var player = session.Player;
+                var showPersonalRank = player != null && !player.ExcludeFromLeaderboards;
+                var playerName = showPersonalRank ? player.Name : null;
+                var playerOnList = false;
 
                 // Display the leaderboard
                 for (int i = 0; i < list.Count; i++)
                 {
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"{i + 1}: {list[i].Score:N0} - {list[i].Character}", ChatMessageType.Broadcast));
+                    var isPlayer = showPersonalRank && string.Equals(list[i].Character, playerName, StringComparison.OrdinalIgnoreCase);
+                    if (isPlayer)
+                        playerOnList = true;
+
+                    var suffix = isPlayer ? " (You)" : "";
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"{i + 1}: {list[i].Score:N0} - {list[i].Character}{suffix}", ChatMessageType.Broadcast));
                 }
 
                 if (list.Count == 0)
                 {
                     session.Network.EnqueueSend(new GameMessageSystemChat("[TOP] No data available for this leaderboard yet.", ChatMessageType.Broadcast));
                 }
+                else if (showPersonalRank && !playerOnList)
+                {
+                    var placement = await GetTopPlacementAsync(player, cooldownKey);
+                    if (placement != null)
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat("...", ChatMessageType.Broadcast));
+                        session.Network.EnqueueSend(new GameMessageSystemChat(
+                            $"{placement.Rank}: {placement.Score:N0} - {playerName} (You)",
+                            ChatMessageType.Broadcast));
+                    }
+                    else
+                    {
+                        session.Network.EnqueueSend(new GameMessageSystemChat(
+                            "[TOP] Unable to determine your rank on this leaderboard.",
+                            ChatMessageType.Broadcast));
+                    }
+                }
+            }
+        }
+
+        private static string NormalizeTopCategory(string category)
+        {
+            return category switch
+            {
+                "qb" => "qb",
+                "level" => "level",
+                "enl" or "enlightenment" => "enl",
+                "bank" => "bank",
+                "lum" or "luminance" => "lum",
+                "augs" or "aug" or "augmentations" => "augs",
+                "deaths" or "death" => "deaths",
+                "titles" or "title" => "titles",
+                _ => null
+            };
+        }
+
+        private static async Task<Database.Models.Auth.LeaderboardPlacement> GetTopPlacementAsync(Player player, string cooldownKey)
+        {
+            switch (cooldownKey)
+            {
+                case "qb":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("qb", player.Account?.CachedQuestBonusCount ?? 0);
+                case "level":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("level", player.Level ?? 1, player.Enlightenment);
+                case "enl":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("enl", player.Enlightenment, tieBreakFloat: player.GetProperty(PropertyFloat.EnlightenmentTimestamp) ?? double.MaxValue);
+                case "bank":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("bank", player.GetProperty(PropertyInt64.BankedPyreals) ?? 0);
+                case "lum":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("lum", player.GetProperty(PropertyInt64.BankedLuminance) ?? 0);
+                case "augs":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("augs", GetPlayerAugmentationCount(player));
+                case "deaths":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("deaths", player.NumDeaths);
+                case "titles":
+                    return await LeaderboardRankDatabase.GetPlacementAsync("titles", player.NumCharacterTitles ?? 0);
+                default:
+                    return null;
             }
         }
 
@@ -2742,8 +2881,10 @@ namespace ACE.Server.Command.Handlers
             MyQstListLastUsed[characterId] = currentTime;
 
             // Get account-level quest completions, excluding PKSoulLoot_ stamps (PvP cooldown trackers)
+            // and !-prefixed hidden flags (not QB-eligible)
             var accountQuests = DatabaseManager.Authentication.GetAccountQuests(accountId)?
-                .Where(q => !q.Quest.StartsWith("PKSoulLoot_", StringComparison.OrdinalIgnoreCase))
+                .Where(q => !q.Quest.StartsWith("PKSoulLoot_", StringComparison.OrdinalIgnoreCase)
+                         && !q.Quest.StartsWith("!", StringComparison.Ordinal))
                 .ToList();
 
             if (accountQuests == null || accountQuests.Count == 0)

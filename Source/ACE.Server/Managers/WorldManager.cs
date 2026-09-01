@@ -316,6 +316,10 @@ namespace ACE.Server.Managers
                 log.Error($"Saved Player Biota location position does not exist for {session.Player.Name}, variation could not be found and set");
             }
 
+            // CONQUEST: ADLB no-log after variation is applied (HandleNoLogLandblock runs too early to see it)
+            if (session.Player.ApplyAugDisabledNoLogOnLogin())
+                playerLoggedInOnNoLogLandblock = true;
+
             session.Player.PlayerEnterWorld();
 
             // Check if player's IP is gagged and apply gag if so

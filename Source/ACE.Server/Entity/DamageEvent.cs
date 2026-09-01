@@ -125,6 +125,7 @@ namespace ACE.Server.Entity
 
         public bool Overpower;
 
+        public bool IsCleave;
 
         // player defender
         public BodyPart BodyPart;
@@ -155,11 +156,12 @@ namespace ACE.Server.Entity
             40301,  // Verdant Moar
         };
 
-        public static DamageEvent CalculateDamage(Creature attacker, Creature defender, WorldObject damageSource, MotionCommand? attackMotion = null, AttackHook attackHook = null)
+        public static DamageEvent CalculateDamage(Creature attacker, Creature defender, WorldObject damageSource, MotionCommand? attackMotion = null, AttackHook attackHook = null, bool isCleave = false)
         {
             var damageEvent = new DamageEvent();
             damageEvent.AttackMotion = attackMotion;
             damageEvent.AttackHook = attackHook;
+            damageEvent.IsCleave = isCleave;
             if (damageSource == null)
                 damageSource = attacker;
 
@@ -298,6 +300,11 @@ namespace ACE.Server.Entity
                 PkDamageMod = Creature.GetPositiveRatingMod(attacker.GetPKDamageRating());
                 DamageRatingMod = Creature.AdditiveCombine(DamageRatingMod, PkDamageMod);
             }
+            else
+            {
+                var pveDamageMod = Creature.GetPositiveRatingMod(attacker.GetPVEDamageRating());
+                DamageRatingMod = Creature.AdditiveCombine(DamageRatingMod, pveDamageMod);
+            }
 
             // damage before mitigation
             DamageBeforeMitigation = BaseDamage * AttributeMod * PowerMod * SlayerMod * DamageRatingMod;
@@ -375,6 +382,11 @@ namespace ACE.Server.Entity
 
                     if (pkBattle)
                         DamageRatingMod = Creature.AdditiveCombine(DamageRatingMod, PkDamageMod);
+                    else
+                    {
+                        var pveCritDamageMod = Creature.GetPositiveRatingMod(attacker.GetPVECritDamageRating());
+                        DamageRatingMod = Creature.AdditiveCombine(DamageRatingMod, pveCritDamageMod);
+                    }
 
                     DamageBeforeMitigation = BaseDamageMod.MaxDamage * AttributeMod * PowerMod * SlayerMod * DamageRatingMod * CriticalDamageMod;
                 }
@@ -566,6 +578,12 @@ namespace ACE.Server.Entity
                 CriticalDamageResistanceRatingMod = Creature.GetNegativeRatingMod(defender.GetCritDamageResistRating());
 
                 DamageResistanceRatingMod = Creature.AdditiveCombine(DamageResistanceRatingBaseMod, CriticalDamageResistanceRatingMod);
+
+                if (!pkBattle)
+                {
+                    var pveCritDamageResistMod = Creature.GetNegativeRatingMod(defender.GetPVECritDamageResistRating());
+                    DamageResistanceRatingMod = Creature.AdditiveCombine(DamageResistanceRatingMod, pveCritDamageResistMod);
+                }
             }
 
             if (pkBattle)
@@ -574,6 +592,11 @@ namespace ACE.Server.Entity
 
                 DamageResistanceRatingMod = Creature.AdditiveCombine(DamageResistanceRatingMod, PkDamageResistanceMod);
             }
+            else
+            {
+                var pveDamageResistMod = Creature.GetNegativeRatingMod(defender.GetPVEDamageResistRating());
+                DamageResistanceRatingMod = Creature.AdditiveCombine(DamageResistanceRatingMod, pveDamageResistMod);
+            }
 
             // get shield modifier
             // CONQUEST: Additive shield model - shield AL folded into ArmorMod; ShieldMod no longer applied separately
@@ -581,6 +604,14 @@ namespace ACE.Server.Entity
 
             // calculate final output damage
             Damage = DamageBeforeMitigation * ArmorMod * ShieldMod * ResistanceMod * DamageResistanceRatingMod;
+
+            if (DamageType == DamageType.Nether)
+            {
+                Damage *= Creature.GetNegativeRatingMod(defender.GetNetherResistRating());
+
+                if (!pkBattle)
+                    Damage *= Creature.GetNegativeRatingMod(defender.GetPVENetherResistRating());
+            }
 
             // ===================================================================================
             // PvP Damage Configuration System - Apply granular PvP damage modifiers
@@ -638,6 +669,15 @@ namespace ACE.Server.Entity
                 var splitMultiplier = (float)(DamageSource.ProjectileLauncher?.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ??
                                              DefaultSplitArrowDamageMultiplier);
                 Damage *= splitMultiplier;
+            }
+
+            // CONQUEST: Extra-target cleave uses cleave_damage_multiplier unless this is a two-handed slash-attack weapon
+            if (IsCleave)
+            {
+                var fullCleave = Weapon != null && Weapon.IsTwoHandedSlashAttack;
+
+                if (!fullCleave)
+                    Damage *= Creature.CleaveDamageMultiplier;
             }
 
             // Apply enrage damage reduction to the final output damage if the defender is a mob and enraged

@@ -12,6 +12,7 @@ using ACE.Server.WorldObjects.Entity;
 using log4net;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Position = ACE.Entity.Position;
 
 namespace ACE.Server.WorldObjects
@@ -383,7 +384,7 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void OnHealthUpdate()
         {
-            foreach (var kvp in selectedTargets)
+            foreach (var kvp in selectedTargets.ToList())
             {
                 var player = kvp.Value.TryGetWorldObject() as Player;
 

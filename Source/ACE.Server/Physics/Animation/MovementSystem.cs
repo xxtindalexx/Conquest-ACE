@@ -21,7 +21,7 @@ namespace ACE.Server.Physics.Animation
         {
             var loadMod = EncumbranceSystem.GetBurdenMod(burden);
 
-            if (runSkill >= 800.0f)     // max run speed?
+            if (runSkill >= 1200.0f)     // max run speed?
                 return 18.0f / 4.0f;
             else
                 return ((loadMod * ((float)runSkill / (runSkill + 200) * 11) + 4) / scaling) / 4.0f;

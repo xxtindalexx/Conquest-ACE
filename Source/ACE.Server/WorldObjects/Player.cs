@@ -513,6 +513,11 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public double LastPKDungeonCombatTime;
 
+        /// <summary>
+        /// CONQUEST: True if player is in an aug-disabled landblock (raid balancing) with custom augs temporarily disabled
+        /// </summary>
+        public bool InAugDisabledDungeonMode;
+
         // Note: Stored augmentation values are now database-backed properties in Creature_Properties.cs (StoredPvP*Augs)
 
         // CONQUEST: Arena pre-entry location (in-memory, returns to lifestone on crash)
