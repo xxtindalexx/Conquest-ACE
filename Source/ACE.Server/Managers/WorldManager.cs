@@ -347,7 +347,7 @@ namespace ACE.Server.Managers
             }
 
             // These warnings are set by DDD_InterrogationResponse
-            if ((session.DatWarnCell || session.DatWarnLanguage || session.DatWarnPortal) && PropertyManager.GetBool("show_dat_warning"))
+            if ((session.DatWarnCell || session.DatWarnLanguage || session.DatWarnPortal || session.DatWarnHighRes) && PropertyManager.GetBool("show_dat_warning"))
             {
                 var msg = PropertyManager.GetString("dat_older_warning_msg");
                 var chatMsg = new GameMessageSystemChat(msg, ChatMessageType.System);

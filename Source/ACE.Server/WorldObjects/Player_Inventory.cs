@@ -2572,7 +2572,7 @@ namespace ACE.Server.WorldObjects
                     }
 
                     // We make sure the stack is still valid. It could have changed during our movement
-                    if (stackOriginalContainer != stack.ContainerId || stack.StackSize < amount)
+                    if (stackOriginalContainer != stack.ContainerId || stack.StackSize <= amount)
                     {
                         log.DebugFormat("Player 0x{0:X8}:{1} tried to split an item that's no longer valid 0x{2:X8}:{3}.", Guid.Full, Name, stack.Guid.Full, stack.Name);
                         Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "Split failed!")); // Custom error message
@@ -2588,7 +2588,7 @@ namespace ACE.Server.WorldObjects
                     pickupChain.AddAction(this, ActionType.PlayerInventory_StackableSplitToContainer, () =>
                     {
                         // We make sure the stack is still valid. It could have changed during our pickup animation
-                        if (stackOriginalContainer != stack.ContainerId || stack.StackSize < amount)
+                        if (stackOriginalContainer != stack.ContainerId || stack.StackSize <= amount)
                         {
                             log.DebugFormat("Player 0x{0:X8}:{1} tried to split an item that's no longer valid 0x{2:X8}:{3}.", Guid.Full, Name, stack.Guid.Full, stack.Name);
                             Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "Split failed!")); // Custom error message
@@ -2954,7 +2954,7 @@ namespace ACE.Server.WorldObjects
                     }
 
                     // We make sure the stack is still valid. It could have changed during our movement
-                    if (stackOriginalContainer != stack.ContainerId || stack.StackSize < amount)
+                    if (stackOriginalContainer != stack.ContainerId || stack.StackSize <= amount)
                     {
                         log.DebugFormat("Player 0x{0:X8}:{1} tried to split an item that's no longer valid 0x{2:X8}:{3}.", Guid.Full, Name, stack.Guid.Full, stack.Name);
                         Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "Split failed!")); // Custom error message
@@ -2970,7 +2970,7 @@ namespace ACE.Server.WorldObjects
                     pickupChain.AddAction(this, ActionType.PlayerInventory_StackableSplitToWield, () =>
                     {
                         // We make sure the stack is still valid. It could have changed during our pickup animation
-                        if (stackOriginalContainer != stack.ContainerId || stack.StackSize < amount)
+                        if (stackOriginalContainer != stack.ContainerId || stack.StackSize <= amount)
                         {
                             log.DebugFormat("Player 0x{0:X8}:{1} tried to split an item that's no longer valid 0x{2:X8}:{3}.", Guid.Full, Name, stack.Guid.Full, stack.Name);
                             Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "Split failed!")); // Custom error message
@@ -3688,7 +3688,7 @@ namespace ACE.Server.WorldObjects
             {
                 Session.Network.EnqueueSend(new GameEventWeenieErrorWithString(Session, WeenieErrorWithString._IsNotAcceptingGiftsRightNow, target.Name));
                 Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
-                var msg = new GameMessageSystemChat($"{Name} tries to give you {(item.StackSize > 1 ? $"{item.StackSize} " : "")}{item.GetNameWithMaterial(item.StackSize)}.", ChatMessageType.Broadcast);
+                var msg = new GameMessageSystemChat($"{Name} tries to give you {(amount > 1 ? $"{amount} " : "")}{item.GetNameWithMaterial(amount)}.", ChatMessageType.Broadcast);
                 target.Session.Network.EnqueueSend(msg);
                 return;
             }
@@ -3703,7 +3703,7 @@ namespace ACE.Server.WorldObjects
             {
                 Session.Network.EnqueueSend(new GameEventWeenieErrorWithString(Session, WeenieErrorWithString._IsTooBusyToAcceptGifts, target.Name));
                 Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
-                var msg = new GameMessageSystemChat($"{Name} tries to give you {(item.StackSize > 1 ? $"{item.StackSize} " : "")}{item.GetNameWithMaterial(item.StackSize)}.", ChatMessageType.Broadcast);
+                var msg = new GameMessageSystemChat($"{Name} tries to give you {(amount > 1 ? $"{amount} " : "")}{item.GetNameWithMaterial(amount)}.", ChatMessageType.Broadcast);
                 target.Session.Network.EnqueueSend(msg);
                 return;
             }
