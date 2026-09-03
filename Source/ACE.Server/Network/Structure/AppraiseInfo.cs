@@ -863,18 +863,10 @@ namespace ACE.Server.Network.Structure
         private void BuildWeaponPropertyDescriptions(WorldObject weapon, Player examiner)
         {
             var descriptions = new List<string>();
-            var imbuedEffect = (ImbuedEffectType)(weapon.GetProperty(PropertyInt.ImbuedEffect) ?? 0);
+            var imbuedEffect = weapon.GetImbuedEffects();
             var maxCritChancePercent = WorldObject.MaxCriticalStrikeMod * 100;
             var maxCritDmgMultiplier = 1.0 + WorldObject.MaxCripplingBlowMod;
             var maxRendingVulnPercent = (WorldObject.MaxRendingMod - 1.0) * 100;
-
-            var rendSuffix = "";
-            var lifeAugBonus = WorldObject.GetRendingLifeAugBonus(examiner);
-            if (lifeAugBonus > 0)
-            {
-                var withAugsPercent = (WorldObject.MaxRendingMod + lifeAugBonus - 1.0) * 100;
-                rendSuffix = $" (life augs: +{withAugsPercent:F0}%)";
-            }
 
             // Slayer bonus
             var slayerCreatureType = weapon.SlayerCreatureType;
@@ -989,21 +981,21 @@ namespace ACE.Server.Network.Structure
 
             // Elemental Rending effects
             if (imbuedEffect.HasFlag(ImbuedEffectType.SlashRending))
-                descriptions.Add($"- Slash Rending{ImbueSlotTag(ImbuedEffectType.SlashRending)}: Up to +{maxRendingVulnPercent:F0}% Slash Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Slash Rending{ImbueSlotTag(ImbuedEffectType.SlashRending)}: Up to +{maxRendingVulnPercent:F0}% Slash Dmg (vuln, skill based){WorldObject.GetRendingLifeAugDescriptionSuffix(ImbuedEffectType.SlashRending, examiner)}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.PierceRending))
-                descriptions.Add($"- Pierce Rending{ImbueSlotTag(ImbuedEffectType.PierceRending)}: Up to +{maxRendingVulnPercent:F0}% Pierce Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Pierce Rending{ImbueSlotTag(ImbuedEffectType.PierceRending)}: Up to +{maxRendingVulnPercent:F0}% Pierce Dmg (vuln, skill based){WorldObject.GetRendingLifeAugDescriptionSuffix(ImbuedEffectType.PierceRending, examiner)}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.BludgeonRending))
-                descriptions.Add($"- Bludgeon Rending{ImbueSlotTag(ImbuedEffectType.BludgeonRending)}: Up to +{maxRendingVulnPercent:F0}% Bludgeon Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Bludgeon Rending{ImbueSlotTag(ImbuedEffectType.BludgeonRending)}: Up to +{maxRendingVulnPercent:F0}% Bludgeon Dmg (vuln, skill based){WorldObject.GetRendingLifeAugDescriptionSuffix(ImbuedEffectType.BludgeonRending, examiner)}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.AcidRending))
-                descriptions.Add($"- Acid Rending{ImbueSlotTag(ImbuedEffectType.AcidRending)}: Up to +{maxRendingVulnPercent:F0}% Acid Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Acid Rending{ImbueSlotTag(ImbuedEffectType.AcidRending)}: Up to +{maxRendingVulnPercent:F0}% Acid Dmg (vuln, skill based){WorldObject.GetRendingLifeAugDescriptionSuffix(ImbuedEffectType.AcidRending, examiner)}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ColdRending))
-                descriptions.Add($"- Cold Rending{ImbueSlotTag(ImbuedEffectType.ColdRending)}: Up to +{maxRendingVulnPercent:F0}% Cold Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Cold Rending{ImbueSlotTag(ImbuedEffectType.ColdRending)}: Up to +{maxRendingVulnPercent:F0}% Cold Dmg (vuln, skill based){WorldObject.GetRendingLifeAugDescriptionSuffix(ImbuedEffectType.ColdRending, examiner)}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.ElectricRending))
-                descriptions.Add($"- Lightning Rending{ImbueSlotTag(ImbuedEffectType.ElectricRending)}: Up to +{maxRendingVulnPercent:F0}% Lightning Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Lightning Rending{ImbueSlotTag(ImbuedEffectType.ElectricRending)}: Up to +{maxRendingVulnPercent:F0}% Lightning Dmg (vuln, skill based){WorldObject.GetRendingLifeAugDescriptionSuffix(ImbuedEffectType.ElectricRending, examiner)}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.FireRending))
-                descriptions.Add($"- Fire Rending{ImbueSlotTag(ImbuedEffectType.FireRending)}: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based){rendSuffix}");
+                descriptions.Add($"- Fire Rending{ImbueSlotTag(ImbuedEffectType.FireRending)}: Up to +{maxRendingVulnPercent:F0}% Fire Dmg (vuln, skill based){WorldObject.GetRendingLifeAugDescriptionSuffix(ImbuedEffectType.FireRending, examiner)}");
             if (imbuedEffect.HasFlag(ImbuedEffectType.NetherRending))
-                descriptions.Add($"- Void Rending{ImbueSlotTag(ImbuedEffectType.NetherRending)}: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based)");
+                descriptions.Add($"- Void Rending{ImbueSlotTag(ImbuedEffectType.NetherRending)}: Up to +{maxRendingVulnPercent:F0}% Void Dmg (vuln, skill based){WorldObject.GetRendingLifeAugDescriptionSuffix(ImbuedEffectType.NetherRending, examiner)}");
 
             // Always Critical
             if (imbuedEffect.HasFlag(ImbuedEffectType.AlwaysCritical))

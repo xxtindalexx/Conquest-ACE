@@ -564,7 +564,7 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat(
                 $"Item: {itemCount:N0}  (Impen +{itemCount:N0} AL, Blood Drinker +{itemCount * 0.5:F1}, Heart Seeker/Defender +{itemPctRating:F2}%)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat(
-                $"Life: {lifeCount:N0}  (Armor +{lifeCount:N0} AL, Protection +{lifeProtPct:F2}%, Rending +{lifeRendPct:F2}%)", ChatMessageType.Broadcast));
+                $"Life: {lifeCount:N0}  (Armor +{lifeCount:N0} AL, Protection +{lifeProtPct:F2}%, Rending +{lifeRendPct:F2}% on elemental/physical rends, not void)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat(
                 $"War: {warCount:N0}  (+{warCount * warPctPerLevel:F2}% war magic damage)", ChatMessageType.Broadcast));
             session.Network.EnqueueSend(new GameMessageSystemChat(
@@ -594,7 +594,7 @@ namespace ACE.Server.Command.Handlers
                 "Each level purchased adds the listed bonus.\n\n" +
                 "Creature: +1 StatMod per level on self-targeted creature buffs; -1 on harmful creature debuffs.\n\n" +
                 "Item: Impen +1 AL per level; Brittlemail -1 AL per level; Blood Drinker +0.5 per level; Spirit Drinker +0.5% per level; Banes/Surges +1% per level; Heart Seeker/Defender diminishing (+1% each for first 100, then 0.75%, 0.5625%, down to 0.1%); Alacrity -1 weapon speed per level.\n\n" +
-                $"Life: Armor buff +1 AL per level; Protection buffs use hybrid scaling ({lifeProtLinearPct:F2}% per level for first {lifeProtLinearCap}, then diminishing toward {lifeProtMaxPct:F2}% max); other life buffs +0.10 per level; harmful life spells mirror these; Rending bonus approaches +100% with diminishing returns.\n\n" +
+                $"Life: Armor buff +1 AL per level; Protection buffs use hybrid scaling ({lifeProtLinearPct:F2}% per level for first {lifeProtLinearCap}, then diminishing toward {lifeProtMaxPct:F2}% max); other life buffs +0.10 per level; harmful life spells mirror these; Rending bonus approaches +100% with diminishing returns on elemental/physical rends (not void/nether).\n\n" +
                 $"War: +{warPctPerLevel:F2}% war magic projectile damage per level.\n\n" +
                 $"Void: +{voidPctPerLevel:F2}% void magic projectile damage per level.\n\n" +
                 "Duration: +5% spell duration per level (stacks with Archmage's Endurance).\n\n" +

@@ -636,7 +636,31 @@ namespace ACE.Server.WorldObjects
 
         public bool HasImbuedEffect(ImbuedEffectType type)
         {
-            return ImbuedEffect.HasFlag(type);
+            return GetImbuedEffects().HasFlag(type);
+        }
+
+        public static bool LifeAugsApplyToRending(ImbuedEffectType rendType)
+        {
+            return rendType != ImbuedEffectType.Undef && rendType != ImbuedEffectType.NetherRending;
+        }
+
+        /// <summary>
+        /// CONQUEST: Appraisal suffix for rending lines. Void/nether rend explicitly excludes life augs.
+        /// </summary>
+        public static string GetRendingLifeAugDescriptionSuffix(ImbuedEffectType rendType, Creature examiner)
+        {
+            if (rendType == ImbuedEffectType.NetherRending)
+                return " (not affected by life augs)";
+
+            if (!LifeAugsApplyToRending(rendType))
+                return "";
+
+            var lifeAugBonus = GetRendingLifeAugBonus(examiner);
+            if (lifeAugBonus <= 0)
+                return "";
+
+            var withAugsPercent = (MaxRendingMod + lifeAugBonus - 1.0) * 100;
+            return $" (life augs: +{withAugsPercent:F0}%)";
         }
 
         public static ImbuedEffectType GetRendDamageType(DamageType damageType)
@@ -876,7 +900,7 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Add life aug bonus to rends with diminishing returns (max +100% bonus)
             // Nether rend is not affected by life augs
-            if (rendDamageType != ImbuedEffectType.NetherRending)
+            if (LifeAugsApplyToRending(rendDamageType))
                 rendingMod += GetRendingLifeAugBonus(wielder);
 
             //Console.WriteLine($"RendingMod: {rendingMod}");
