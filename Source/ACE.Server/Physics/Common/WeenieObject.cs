@@ -11,38 +11,39 @@ using ACE.Server.WorldObjects;
 
 namespace ACE.Server.Physics.Common
 {
-    public class WeenieObject
+    public sealed class WeenieObject
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
-        public uint ID;
-        public double UpdateTime;
+        // public readonly uint ID;
+        // public readonly double UpdateTime;
         public readonly WorldObjectInfo WorldObjectInfo;
         public WorldObject WorldObject => WorldObjectInfo?.TryGetWorldObject();
 
-        public bool IsMonster { get; set; }
-
-        public bool IsCombatPet { get; set; }
-
-        public bool IsFactionMob { get; set; }
         public readonly bool IsPlayer;
         public readonly bool IsCreature;
         public readonly bool IsStorage;
         public readonly bool IsCorpse;
 
-        public FactionBits Faction1Bits { get; set; }
+        public readonly bool IsMonster;
 
-        public CreatureType? FoeType { get; set; }
+        public readonly bool IsCombatPet;
 
-        public PlayerKillerStatus PlayerKillerStatus { get; set; }
+        public readonly bool IsFactionMob;
 
-        public WeenieObject() { }
+        public readonly FactionBits Faction1Bits;
+
+        public readonly CreatureType? FoeType;
+
+        public readonly PlayerKillerStatus PlayerKillerStatus;
+
+        private WeenieObject() { }
+
         public static readonly WeenieObject DummyObject = new();
 
         public WeenieObject(WorldObject worldObject)
         {
             WorldObjectInfo = new WorldObjectInfo(worldObject);
-
             if (worldObject is not Creature creature)
             {
                 if (worldObject is Corpse)
@@ -90,6 +91,9 @@ namespace ACE.Server.Physics.Common
         {
             velocity_z = 0.0f;
 
+            if (!IsPlayer)
+                return false;
+
             var player = WorldObject as Player;
 
             if (player == null)
@@ -119,6 +123,9 @@ namespace ACE.Server.Physics.Common
         /// </summary>
         public float? InqBurden()
         {
+            if (!IsPlayer)
+                return null;
+
             var player = WorldObject as Player;
 
             if (player == null)
@@ -152,17 +159,17 @@ namespace ACE.Server.Physics.Common
 
         public bool IsImpenetrable()
         {
-            return WorldObject is Player player && player.PlayerKillerStatus == PlayerKillerStatus.Free;
+            return IsPlayer && WorldObject is Player player && player.PlayerKillerStatus == PlayerKillerStatus.Free;
         }
 
         public bool IsPK()
         {
-            return WorldObject is Player player && player.IsPK;
+            return IsPlayer && WorldObject is Player player && player.IsPK;
         }
 
         public bool IsPKLite()
         {
-            return WorldObject is Player player && player.IsPKL;
+            return IsPlayer && WorldObject is Player player && player.IsPKL;
         }
 
         public float JumpStaminaCost(float extent, int staminaCost)
@@ -175,23 +182,45 @@ namespace ACE.Server.Physics.Common
             if (WorldObject == null)
                 return;
 
-            prof.WCID = ID;
+            // prof.WCID = ID;
             prof.ItemType = WorldObject.ItemType;
 
-            if (WorldObject is Creature)
+            if (IsCreature)
+            {
                 prof.Flags |= ObjCollisionProfileFlags.Creature;
 
-            if (WorldObject is Player)
-                prof.Flags |= ObjCollisionProfileFlags.Player;
+                if (IsPlayer)
+                    prof.Flags |= ObjCollisionProfileFlags.Player;
+            }
+            else if (WorldObject is Door)
+                prof.Flags |= ObjCollisionProfileFlags.Door;
 
             if (WorldObject.Attackable)
                 prof.Flags |= ObjCollisionProfileFlags.Attackable;
-
-            if (WorldObject is Door)
-                prof.Flags |= ObjCollisionProfileFlags.Door;
         }
 
         public int DoCollision(ObjectGuid guid, PhysicsObj target)
+        {
+            var wo = WorldObject;
+
+            if (wo == null)
+                return -1;
+
+            var targetWO = target.WeenieObj.WorldObject;
+
+            if (targetWO == null)
+                return -1;
+
+            // no collision with self
+            if (wo.Guid.Equals(targetWO.Guid))
+                return -1;
+
+            wo.OnCollideObject(targetWO);
+
+            return 0;
+        }
+
+        public int DoCollision(ObjCollisionProfile prof, ObjectGuid guid, PhysicsObj target)
         {
             var wo = WorldObject;
 
@@ -228,7 +257,7 @@ namespace ACE.Server.Physics.Common
             if (wo == null)
                 return 0;
 
-            if (wo is Player player)
+            if (IsPlayer && wo is Player player)
                 player.HandleFallingDamage(prof);
             else
                 wo.OnCollideEnvironment();
