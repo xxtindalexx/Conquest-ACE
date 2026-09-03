@@ -640,8 +640,9 @@ namespace ACE.Server.WorldObjects
                     // Works for both players and creatures (mobs)
                     // Skip in PvP if pvp_disable_custom_augs is enabled
                     bool skipPvPWarVoidAugs = isPVP && PropertyManager.GetBool("pvp_disable_custom_augs");
+                    bool skipUnspecLoreProcAugs = WorldObject.ShouldSkipProcAugmentations(sourceCreature, weapon, FromProc);
 
-                    if (!skipPvPWarVoidAugs && sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.WarMagic)
+                    if (!skipPvPWarVoidAugs && !skipUnspecLoreProcAugs && sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.WarMagic)
                     {
                         var warAugCount = sourceCreature.LuminanceAugmentWarCount ?? 0;
                         if (warAugCount > 0)
@@ -655,7 +656,7 @@ namespace ACE.Server.WorldObjects
                     // Each void aug adds 0.5% damage bonus to void magic spells (same as war)
                     // Works for both players and creatures (mobs)
                     // Skip in PvP if pvp_disable_custom_augs is enabled
-                    if (!skipPvPWarVoidAugs && sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.VoidMagic)
+                    if (!skipPvPWarVoidAugs && !skipUnspecLoreProcAugs && sourceCreature != null && Spell.School == ACE.Entity.Enum.MagicSchool.VoidMagic)
                     {
                         var voidAugCount = sourceCreature.LuminanceAugmentVoidCount ?? 0;
                         if (voidAugCount > 0)

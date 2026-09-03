@@ -131,7 +131,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// <summary>
         /// Add/update an enchantment in this object's registry
         /// </summary>
-        public virtual AddEnchantmentResult Add(Spell spell, WorldObject caster, WorldObject weapon, bool equip = false)
+        public virtual AddEnchantmentResult Add(Spell spell, WorldObject caster, WorldObject weapon, bool equip = false, bool fromProc = false)
         {
             var result = new AddEnchantmentResult();
 
@@ -141,7 +141,7 @@ namespace ACE.Server.WorldObjects.Managers
             // if none, add new record
             if (entries.Count == 0)
             {
-                var newEntry = BuildEntry(spell, caster, weapon, equip);
+                var newEntry = BuildEntry(spell, caster, weapon, equip, fromProc);
 
                 newEntry.LayerId = 1;
                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
@@ -174,7 +174,7 @@ namespace ACE.Server.WorldObjects.Managers
 
             if (refreshSpell == null)
             {
-                var newEntry = BuildEntry(spell, caster, weapon, equip);
+                var newEntry = BuildEntry(spell, caster, weapon, equip, fromProc);
 
                 newEntry.LayerId = result.NextLayerId;
                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
@@ -196,7 +196,8 @@ namespace ACE.Server.WorldObjects.Managers
                 // should be update the StatModVal here?
 
                 var duration = spell.Duration;
-                if (caster is Player player && (player.AugmentationIncreasedSpellDuration > 0 || (player.LuminanceAugmentSpellDurationCount ?? 0) > 0) && spell.DotDuration == 0)
+                var skipUnspecLoreProcAugs = WorldObject.ShouldSkipProcAugmentations(caster as Creature, weapon, fromProc);
+                if (caster is Player player && !skipUnspecLoreProcAugs && (player.AugmentationIncreasedSpellDuration > 0 || (player.LuminanceAugmentSpellDurationCount ?? 0) > 0) && spell.DotDuration == 0)
                 {
                     duration *= 1.0f + (player.AugmentationIncreasedSpellDuration * 0.2f) + ((player.LuminanceAugmentSpellDurationCount ?? 0) * 0.05f);
                 }
@@ -221,7 +222,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// <summary>
         /// Builds an enchantment registry entry from a spell ID
         /// </summary>
-        private PropertiesEnchantmentRegistry BuildEntry(Spell spell, WorldObject caster = null, WorldObject weapon = null, bool equip = false)
+        private PropertiesEnchantmentRegistry BuildEntry(Spell spell, WorldObject caster = null, WorldObject weapon = null, bool equip = false, bool fromProc = false)
         {
             var entry = new PropertiesEnchantmentRegistry
             {
@@ -237,11 +238,13 @@ namespace ACE.Server.WorldObjects.Managers
                 StatModValue = spell.StatModVal,
             };
 
+            var skipUnspecLoreProcAugs = WorldObject.ShouldSkipProcAugmentations(caster as Creature, weapon, fromProc);
+
             if (caster is Creature)
             {
                 entry.Duration = spell.Duration;
 
-                if (caster is Player player && !spell.IsFellowshipSpell && (player.AugmentationIncreasedSpellDuration > 0 || (player.LuminanceAugmentSpellDurationCount ?? 0) > 0))
+                if (caster is Player player && !skipUnspecLoreProcAugs && !spell.IsFellowshipSpell && (player.AugmentationIncreasedSpellDuration > 0 || (player.LuminanceAugmentSpellDurationCount ?? 0) > 0))
                 {
                     entry.Duration *= 1.0f + (player.AugmentationIncreasedSpellDuration * 0.2f) + ((player.LuminanceAugmentSpellDurationCount ?? 0) * 0.05f);
                 }
@@ -279,7 +282,7 @@ namespace ACE.Server.WorldObjects.Managers
 
             // Augmentation bonuses only apply when caster is a Creature (player casting spells)
             // Equipped items do NOT get augmentation bonuses
-            if (caster != null && caster is Creature && !skipPvPAugBonuses)
+            if (caster != null && caster is Creature && !skipPvPAugBonuses && !skipUnspecLoreProcAugs)
             {
                 var creatureCaster = caster as Creature;
 

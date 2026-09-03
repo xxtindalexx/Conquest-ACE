@@ -97,6 +97,57 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// CONQUEST: Returns item spellcraft plus spec Arcane Lore bonus for resist checks.
+        /// </summary>
+        public static uint GetEffectiveItemSpellcraft(WorldObject item, Creature wielder)
+        {
+            if (item?.ItemSpellcraft == null)
+                return 0;
+
+            var spellcraft = (uint)item.ItemSpellcraft.Value;
+
+            if (!PropertyManager.GetBool("arcane_lore_spec_adds_spellcraft"))
+                return spellcraft;
+
+            if (wielder is Player player)
+            {
+                var arcaneLore = player.GetCreatureSkill(Skill.ArcaneLore);
+                if (arcaneLore.AdvancementClass == SkillAdvancementClass.Specialized)
+                {
+                    var bonus = (uint)Math.Round(arcaneLore.Current * PropertyManager.GetDouble("arcane_lore_spec_spellcraft_mod"));
+                    spellcraft += bonus;
+                }
+            }
+
+            return spellcraft;
+        }
+
+        /// <summary>
+        /// CONQUEST: Cast-on-strike procs skip luminance spell augs unless the wielder has spec Arcane Lore.
+        /// Cloaks and aetheria are excluded from this gate.
+        /// </summary>
+        public static bool ShouldSkipProcAugmentations(Creature caster, WorldObject procSource, bool fromProc)
+        {
+            if (!fromProc || !PropertyManager.GetBool("arcane_lore_spec_required_for_proc_augs"))
+                return false;
+
+            if (procSource == null)
+                return false;
+
+            if (Cloak.IsCloak(procSource))
+                return false;
+
+            if (procSource is Gem && Aetheria.IsAetheria(procSource.WeenieClassId))
+                return false;
+
+            if (caster is not Player player)
+                return false;
+
+            var arcaneLore = player.GetCreatureSkill(Skill.ArcaneLore);
+            return arcaneLore.AdvancementClass != SkillAdvancementClass.Specialized;
+        }
+
+        /// <summary>
         /// Determines whether a spell will be resisted,
         /// based upon the caster's magic skill vs target's magic defense skill
         /// </summary>
@@ -149,16 +200,18 @@ namespace ACE.Server.WorldObjects
                 if (casterCreature is Player casterPlayer)
                 {
                     var weapon = casterPlayer.GetEquippedWeapon();
-                    if (weapon?.ItemSpellcraft != null && weapon.ItemSpellcraft > magicSkill)
+                    if (weapon?.ItemSpellcraft != null)
                     {
-                        magicSkill = (uint)weapon.ItemSpellcraft;
+                        var effectiveSpellcraft = GetEffectiveItemSpellcraft(weapon, casterPlayer);
+                        if (effectiveSpellcraft > magicSkill)
+                            magicSkill = effectiveSpellcraft;
                     }
                 }
             }
             else if (caster.ItemSpellcraft != null)
             {
-                // Retrieve casting item's spellcraft
-                magicSkill = (uint)caster.ItemSpellcraft;
+                var wielder = this as Creature ?? caster.Wielder as Creature;
+                magicSkill = GetEffectiveItemSpellcraft(caster, wielder);
             }
             else if (caster.Wielder is Creature wielder)
             {
@@ -296,9 +349,9 @@ namespace ACE.Server.WorldObjects
 
                     // TODO: replace with some kind of 'rootOwner unless equip' concept?
                     if (itemCaster != null && (equip || itemCaster is Gem || itemCaster is Food))
-                        CreateEnchantment(targetCreature ?? target, itemCaster, itemCaster, spell, equip);
+                        CreateEnchantment(targetCreature ?? target, itemCaster, itemCaster, spell, equip, fromProc);
                     else
-                        CreateEnchantment(targetCreature ?? target, this, weapon, spell, equip, isWeaponSpell: isWeaponSpell);
+                        CreateEnchantment(targetCreature ?? target, this, weapon, spell, equip, fromProc, isWeaponSpell);
 
                     break;
 
@@ -418,7 +471,7 @@ namespace ACE.Server.WorldObjects
             }
 
             // create enchantment
-            var addResult = target.EnchantmentManager.Add(spell, caster, weapon, equip);
+            var addResult = target.EnchantmentManager.Add(spell, caster, weapon, equip, fromProc);
 
             // build message
             var suffix = "";
