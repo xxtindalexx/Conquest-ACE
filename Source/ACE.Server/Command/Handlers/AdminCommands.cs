@@ -9276,6 +9276,210 @@ namespace ACE.Server.Command.Handlers
             }
         }
 
+        private const string NoDropLbCommands = "/ndlb or /nodroplb";
+
+        // CONQUEST: No-drop landblock management command
+        [CommandHandler("nodroplb", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Manage landblocks where player corpses drop no items on death.",
+            "add <landblock> [variation] [label] - Add a landblock (all variants if variation omitted)\n" +
+            "remove <landblock> [variation] - Remove a landblock entry\n" +
+            "list - List all no-drop landblocks\n" +
+            "check <landblock> [variation] - Check if a landblock + variant is no-drop")]
+        public static void HandleNoDropLandblock(Session session, params string[] parameters)
+        {
+            if (parameters.Length < 1)
+            {
+                ShowNoDropLandblockUsage(session);
+                return;
+            }
+
+            var subcommand = parameters[0].ToLower();
+
+            switch (subcommand)
+            {
+                case "add":
+                    HandleNoDropLandblockAdd(session, parameters);
+                    break;
+                case "remove":
+                    HandleNoDropLandblockRemove(session, parameters);
+                    break;
+                case "list":
+                    HandleNoDropLandblockList(session);
+                    break;
+                case "check":
+                    HandleNoDropLandblockCheck(session, parameters);
+                    break;
+                default:
+                    ShowNoDropLandblockUsage(session);
+                    break;
+            }
+        }
+
+        [CommandHandler("ndlb", AccessLevel.Admin, CommandHandlerFlag.None, 0,
+            "Shorthand for /nodroplb",
+            "add <landblock> [variation] [label] | remove <landblock> [variation] | list | check <landblock> [variation]")]
+        public static void HandleNoDropLandblockShort(Session session, params string[] parameters)
+        {
+            HandleNoDropLandblock(session, parameters);
+        }
+
+        private static void ShowNoDropLandblockUsage(Session session)
+        {
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {NoDropLbCommands} <add|remove|list|check>", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  add <landblock> [variation] [label] - Add entry (all variants if variation omitted)", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  remove <landblock> [variation] - Remove entry (all-variants entry if variation omitted)", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  list - List all no-drop landblocks", ChatMessageType.Help));
+            session.Network.EnqueueSend(new GameMessageSystemChat("  check <landblock> [variation] - Check restriction (defaults to variant 0 if omitted)", ChatMessageType.Help));
+        }
+
+        private static void HandleNoDropLandblockAdd(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {NoDropLbCommands} add <landblock> [variation] [label]", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Example: /ndlb add 0x0066 Conquest Arena", ChatMessageType.Help));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Example: /ndlb add 0x0066 2 Arena v2 only", ChatMessageType.Help));
+                return;
+            }
+
+            if (!SummonRestrictedLandblocks.TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat("Use hex format (0x0066) or decimal (102)", ChatMessageType.Help));
+                return;
+            }
+
+            int? variation = null;
+            string label = null;
+            var labelStartIndex = 2;
+
+            if (parameters.Length > 2 && TryParseOptionalVariation(parameters[2], out variation))
+                labelStartIndex = 3;
+
+            if (parameters.Length > labelStartIndex)
+                label = string.Join(" ", parameters.Skip(labelStartIndex));
+
+            if (NoDropLandblocks.ContainsEntry(landblock, variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} is already in the no-drop list.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            if (!NoDropLandblocks.AddLandblock(landblock, variation, label))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to add landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} to no-drop list.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var displayName = NoDropLandblocks.GetDisplayName(landblock, variation);
+            var count = NoDropLandblocks.GetLandblocksSorted().Count;
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Added landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) to no-drop list. ({count} total)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} added landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) to no-drop list");
+        }
+
+        private static void HandleNoDropLandblockRemove(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {NoDropLbCommands} remove <landblock> [variation]", ChatMessageType.Help));
+                return;
+            }
+
+            if (!SummonRestrictedLandblocks.TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            int? variation = null;
+            if (parameters.Length > 2)
+            {
+                if (!TryParseOptionalVariation(parameters[2], out variation))
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            if (!NoDropLandblocks.ContainsEntry(landblock, variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} is not in the no-drop list.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var displayName = NoDropLandblocks.GetDisplayName(landblock, variation);
+
+            if (!NoDropLandblocks.RemoveLandblock(landblock, variation))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Failed to remove landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} from no-drop list.", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var count = NoDropLandblocks.GetLandblocksSorted().Count;
+            session.Network.EnqueueSend(new GameMessageSystemChat($"Removed landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) from no-drop list. ({count} remaining)", ChatMessageType.Broadcast));
+            log.Info($"[ADMIN] {session.Player.Name} removed landblock 0x{landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(variation)} ({displayName}) from no-drop list");
+        }
+
+        private static void HandleNoDropLandblockList(Session session)
+        {
+            var landblocks = NoDropLandblocks.GetLandblocksSorted();
+
+            if (landblocks.Count == 0)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("No landblocks are currently configured for no-drop.", ChatMessageType.Broadcast));
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Use {NoDropLbCommands} add <landblock> [variation] [label] to add landblocks.", ChatMessageType.Help));
+                return;
+            }
+
+            session.Network.EnqueueSend(new GameMessageSystemChat($"=== No-Drop Landblocks ({landblocks.Count}) ===", ChatMessageType.Broadcast));
+
+            foreach (var entry in landblocks)
+            {
+                var displayName = NoDropLandblocks.GetDisplayName(entry.Landblock, entry.Variation);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"  0x{entry.Landblock:X4}{SummonRestrictedLandblocks.FormatVariantSuffix(entry.Variation)} - {displayName}", ChatMessageType.Broadcast));
+            }
+        }
+
+        private static void HandleNoDropLandblockCheck(Session session, string[] parameters)
+        {
+            if (parameters.Length < 2)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Usage: {NoDropLbCommands} check <landblock> [variation]", ChatMessageType.Help));
+                return;
+            }
+
+            if (!SummonRestrictedLandblocks.TryParseLandblock(parameters[1], out ushort landblock))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid landblock: {parameters[1]}", ChatMessageType.Broadcast));
+                return;
+            }
+
+            var variation = 0;
+            var variationSpecified = parameters.Length > 2;
+            if (variationSpecified)
+            {
+                if (!int.TryParse(parameters[2], out variation))
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Invalid variation: {parameters[2]}", ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
+            var variantSuffix = SummonRestrictedLandblocks.FormatCheckVariantSuffix(variation, variationSpecified);
+            var isRestricted = NoDropLandblocks.IsRestricted(landblock, variation);
+
+            if (isRestricted)
+            {
+                var displayVariation = NoDropLandblocks.ContainsEntry(landblock, variation) ? (int?)variation : null;
+                var displayName = NoDropLandblocks.GetDisplayName(landblock, displayVariation);
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{variantSuffix} ({displayName}) is NO-DROP.", ChatMessageType.Broadcast));
+            }
+            else
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Landblock 0x{landblock:X4}{variantSuffix} is NOT no-drop.", ChatMessageType.Broadcast));
+            }
+        }
+
         // CONQUEST: Allegiance Whitelist Management Command
         [CommandHandler("allegwhitelist", AccessLevel.Admin, CommandHandlerFlag.None, 1,
             "Manage whitelisted allegiances for PK quest credit.",
