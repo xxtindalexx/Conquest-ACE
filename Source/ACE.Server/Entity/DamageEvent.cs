@@ -16,8 +16,6 @@ namespace ACE.Server.Entity
     public class DamageEvent
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-        private const float DefaultSplitArrowDamageMultiplier = 0.6f;
-
         // factors:
         // - lifestone protection
         // - evade
@@ -666,9 +664,10 @@ namespace ACE.Server.Entity
             // Apply split arrow damage multiplier if this is a split arrow
             if (DamageSource.GetProperty(PropertyBool.IsSplitArrow) == true)
             {
-                var splitMultiplier = (float)(DamageSource.ProjectileLauncher?.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ??
-                                             DefaultSplitArrowDamageMultiplier);
-                Damage *= splitMultiplier;
+                // Per-weapon SplitArrowDamageMultiplier no longer consulted; use server prop
+                //var splitMultiplier = (float)(DamageSource.ProjectileLauncher?.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ??
+                //                             DefaultSplitArrowDamageMultiplier);
+                Damage *= Creature.SplitArrowDamageMultiplier;
             }
 
             // CONQUEST: Extra-target cleave uses cleave_damage_multiplier unless this is a two-handed slash-attack weapon

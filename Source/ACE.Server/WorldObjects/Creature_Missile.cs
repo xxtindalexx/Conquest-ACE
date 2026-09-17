@@ -68,19 +68,26 @@ namespace ACE.Server.WorldObjects
         }
 
         // Split arrow constants
-        // CONQUEST: Main target takes 100% damage, 2 additional arrows each deal 30% damage
+        // CONQUEST: Main target takes 100% damage; split targets use split_arrow_damage_multiplier server prop
         public const int DEFAULT_SPLIT_ARROW_COUNT = 2;
-        public const float DEFAULT_SPLIT_ARROW_RANGE = 8f;
-        public const float DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER = 0.3f;
+        //public const float DEFAULT_SPLIT_ARROW_RANGE = 8f;
+        //public const float DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER = 0.3f;
+
+        /// <summary>
+        /// Split arrow target search radius from the primary target. Tunable via split_arrow_range.
+        /// </summary>
+        public new static float SplitArrowRange => (float)PropertyManager.GetDouble("split_arrow_range");
+
+        /// <summary>
+        /// Split arrow damage as a fraction of a normal missile hit. Tunable via split_arrow_damage_multiplier.
+        /// </summary>
+        public new static float SplitArrowDamageMultiplier => (float)PropertyManager.GetDouble("split_arrow_damage_multiplier");
 
         // Split arrow validation constants
         private const int SPLIT_ARROW_COUNT_MIN = 0;
         private const int SPLIT_ARROW_COUNT_MAX = 10;
         private const float SPLIT_ARROW_RANGE_MIN = 0f;
         private const float SPLIT_ARROW_RANGE_MAX = 50f;
-        private const float SPLIT_ARROW_DAMAGE_MULTIPLIER_MIN = 0f;
-        private const float SPLIT_ARROW_DAMAGE_MULTIPLIER_MAX = 1f;
-
         private const float SPLIT_ARROW_RANGE_MULTIPLIER = 0.8f;
 
         public Vector3 GetDir2D(Vector3 source, Vector3 dest)
@@ -551,8 +558,10 @@ namespace ACE.Server.WorldObjects
                 var splitCount = hasSplitArrows
                     ? (weapon.GetProperty(PropertyInt.SplitArrowCount) ?? DEFAULT_SPLIT_ARROW_COUNT)
                     : 0;
-                var splitRange = (float)(weapon.GetProperty(PropertyFloat.SplitArrowRange) ?? DEFAULT_SPLIT_ARROW_RANGE);
-                var damageMultiplier = (float)(weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER);
+                // Per-weapon SplitArrowRange / SplitArrowDamageMultiplier no longer consulted; use server props
+                //var splitRange = (float)(weapon.GetProperty(PropertyFloat.SplitArrowRange) ?? DEFAULT_SPLIT_ARROW_RANGE);
+                //var damageMultiplier = (float)(weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER);
+                var splitRange = SplitArrowRange;
 
                 // CONQUEST: Enlightenment ENL 25 bonus: +1 split arrow target
                 var player = this as Player;
@@ -566,7 +575,6 @@ namespace ACE.Server.WorldObjects
                 // Apply safety clamps to prevent invalid values
                 splitCount = Math.Clamp(splitCount, SPLIT_ARROW_COUNT_MIN, SPLIT_ARROW_COUNT_MAX);
                 splitRange = Math.Clamp(splitRange, SPLIT_ARROW_RANGE_MIN, SPLIT_ARROW_RANGE_MAX);
-                damageMultiplier = Math.Clamp(damageMultiplier, SPLIT_ARROW_DAMAGE_MULTIPLIER_MIN, SPLIT_ARROW_DAMAGE_MULTIPLIER_MAX);
 
                 var additionalArrowCount = splitCount; // SplitArrowCount now directly represents number of split arrows to create
 

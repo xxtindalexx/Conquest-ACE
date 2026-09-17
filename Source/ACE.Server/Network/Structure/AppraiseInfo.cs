@@ -832,11 +832,8 @@ namespace ACE.Server.Network.Structure
                 var splitCount = weapon.GetProperty(PropertyInt.SplitArrowCount) ?? Creature.DEFAULT_SPLIT_ARROW_COUNT;
                 PropertiesInt[PropertyInt.SplitArrowCount] = splitCount;
 
-                var splitRange = weapon.GetProperty(PropertyFloat.SplitArrowRange) ?? Creature.DEFAULT_SPLIT_ARROW_RANGE;
-                PropertiesFloat[PropertyFloat.SplitArrowRange] = splitRange;
-
-                var damageMultiplier = weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? Creature.DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER;
-                PropertiesFloat[PropertyFloat.SplitArrowDamageMultiplier] = damageMultiplier;
+                PropertiesFloat[PropertyFloat.SplitArrowRange] = Creature.SplitArrowRange;
+                PropertiesFloat[PropertyFloat.SplitArrowDamageMultiplier] = Creature.SplitArrowDamageMultiplier;
             }
 
             // Add spell chain properties to appraisal (for wands/casters)
@@ -951,9 +948,8 @@ namespace ACE.Server.Network.Structure
             if (hasSplitArrows == true)
             {
                 var splitCount = weapon.GetProperty(PropertyInt.SplitArrowCount) ?? Creature.DEFAULT_SPLIT_ARROW_COUNT;
-                var splitRange = weapon.GetProperty(PropertyFloat.SplitArrowRange) ?? Creature.DEFAULT_SPLIT_ARROW_RANGE;
-                var splitDamage = weapon.GetProperty(PropertyFloat.SplitArrowDamageMultiplier) ?? Creature.DEFAULT_SPLIT_ARROW_DAMAGE_MULTIPLIER;
-                var splitDamagePercent = splitDamage * 100;
+                var splitRange = Creature.SplitArrowRange;
+                var splitDamagePercent = Creature.SplitArrowDamageMultiplier * 100;
                 descriptions.Add($"- Split Arrows: +{splitCount} targets, {splitRange:F0}m range, {splitDamagePercent:F0}% Dmg");
             }
 
