@@ -209,6 +209,9 @@ namespace ACE.Server.WorldObjects.Managers
                     refreshSpell.Duration = duration;
                 }
 
+                // CONQUEST: Player recast refresh is a fresh cast, not a contagion hop
+                refreshSpell.VoidContagionJumps = 0;
+
                 result.Enchantment = refreshSpell;
             }
             WorldObject.ChangesDetected = true;
@@ -1530,7 +1533,12 @@ namespace ACE.Server.WorldObjects.Managers
             var expired = WorldObject.Biota.PropertiesEnchantmentRegistry.HeartBeatEnchantmentsAndReturnExpired(heartbeatInterval, WorldObject.BiotaDatabaseLock);
 
             foreach (var enchantment in expired)
+            {
+                if (WorldObject is Creature creature && creature.IsAlive && !(creature is Player))
+                    creature.TryVoidContagionExpireRing(enchantment);
+
                 Remove(enchantment);
+            }
         }
 
         /// <summary>

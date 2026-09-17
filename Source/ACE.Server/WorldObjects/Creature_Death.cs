@@ -1105,7 +1105,9 @@ namespace ACE.Server.WorldObjects
         public bool IsOnNoDeathXPLandblock => Location != null ? NoDeathXP_Landblocks.Contains(Location.LandblockId.Landblock) : false;
 
         private const int VoidContagionSpreadTargets = 2;              // Max nearby creatures to receive spread DoTs
-        private const float VoidContagionExplosionChance = 0.20f;      // Per-death roll; explosion blocks spread
+        private const float VoidContagionBaseRingChance = 0.05f;       // Per-DoT expire roll baseline
+        private const float VoidContagionJumpRingBonus = 0.05f;        // Added per contagion jump
+        private const float VoidContagionExplosionChance = 0.20f;      // Per-death roll; explosion blocks spread (disabled)
         private const float VoidContagionExplosionHealthPercent = 0.20f; // Of dying creature max HP, per active dot
         private const int VoidContagionMaxDotsForExplosion = 3;        // Dot count cap for explosion damage scaling
 
@@ -1113,7 +1115,7 @@ namespace ACE.Server.WorldObjects
         /// CONQUEST: Void Contagion entry point on mob death.
         /// Requires void_contagion_enabled, killer player (or pet owner) with EnlightenmentVoidDotSpreadBonus >= 1,
         /// and active nether DoTs on the dying creature. Void Magic training is not required.
-        /// On success: 20% chance to explode (no spread), otherwise spread all DoTs to up to 2 nearby enemies at 50% duration.
+        /// On success: spread all DoTs to up to 2 nearby enemies at 50% duration.
         /// PvP protected — never triggers on player deaths or targets players.
         /// </summary>
         private void TrySpreadVoidDots(DamageHistoryInfo killer)
@@ -1147,12 +1149,12 @@ namespace ACE.Server.WorldObjects
             if (netherDots == null || netherDots.Count == 0)
                 return;
 
-            // 20% per-death roll: explosion replaces spread for this death (dot chain does not continue)
-            if (ThreadSafeRandom.Next(0.0f, 1.0f) < VoidContagionExplosionChance)
-            {
-                TryVoidContagionExplosion(killerPlayer, netherDots);
-                return;
-            }
+            // CONQUEST: Death-time explosion disabled — always spread. Explosion code retained below.
+            // if (ThreadSafeRandom.Next(0.0f, 1.0f) < VoidContagionExplosionChance)
+            // {
+            //     TryVoidContagionExplosion(killerPlayer, netherDots);
+            //     return;
+            // }
 
             TryVoidContagionSpread(killerPlayer, netherDots);
         }
@@ -1325,12 +1327,49 @@ namespace ACE.Server.WorldObjects
 
                 // Copy the damage value from the original enchantment
                 result.Enchantment.StatModValue = originalEnchantment.StatModValue;
+                result.Enchantment.VoidContagionJumps = originalEnchantment.VoidContagionJumps + 1;
 
                 target.ChangesDetected = true;
             }
 
             // Send visual effect to target
             target.EnqueueBroadcast(new GameMessageScript(target.Guid, PlayScript.HealthDownVoid));
+        }
+
+        /// <summary>
+        /// CONQUEST: Void Contagion — when a nether DoT naturally expires, roll for a free Clouded Soul II
+        /// from this creature using the void mage's stats.
+        /// </summary>
+        public void TryVoidContagionExpireRing(PropertiesEnchantmentRegistry expiredDot)
+        {
+            if (!PropertyManager.GetBool("void_contagion_enabled"))
+                return;
+
+            if (this is Player || !IsAlive)
+                return;
+
+            if (expiredDot.StatModKey != (uint)PropertyInt.NetherOverTime)
+                return;
+
+            var casterPlayer = PlayerManager.GetOnlinePlayer(expiredDot.CasterObjectId);
+            if (casterPlayer == null)
+                return;
+
+            var enlBonus = casterPlayer.GetProperty(PropertyInt.EnlightenmentVoidDotSpreadBonus) ?? 0;
+            if (enlBonus < 1)
+                return;
+
+            var chance = Math.Min(1.0f, VoidContagionBaseRingChance + VoidContagionJumpRingBonus * expiredDot.VoidContagionJumps);
+            if (ThreadSafeRandom.Next(0.0f, 1.0f) >= chance)
+                return;
+
+            var spell = new Server.Entity.Spell((uint)SpellId.CloudedSoulII);
+            if (spell.NotFound)
+                return;
+
+            var projectiles = CreateSpellProjectiles(spell, null, null);
+            foreach (var projectile in projectiles)
+                projectile.ProjectileSource = casterPlayer;
         }
 
         /// <summary>

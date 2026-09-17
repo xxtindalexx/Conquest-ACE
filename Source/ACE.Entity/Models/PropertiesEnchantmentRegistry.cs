@@ -23,5 +23,10 @@ namespace ACE.Entity.Models
         public float StatModValue { get; set; }
         public EquipmentSet SpellSetId { get; set; }
         public long? AugmentationLevelWhenCast { get; set; }
+
+        /// <summary>
+        /// CONQUEST: Runtime-only Void Contagion hop count (not persisted). Used for expire ring chance.
+        /// </summary>
+        public int VoidContagionJumps { get; set; }
     }
 }
