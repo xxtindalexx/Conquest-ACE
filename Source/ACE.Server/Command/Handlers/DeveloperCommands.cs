@@ -27,9 +27,12 @@ using ACE.Server.WorldObjects.Entity;
 using log4net;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Reflection;
 using System.Threading.Tasks;
 using Position = ACE.Entity.Position;
 using Spell = ACE.Server.Entity.Spell;
@@ -184,6 +187,23 @@ namespace ACE.Server.Command.Handlers
         public static void HandleNetStats(Session session, params string[] parameters)
         {
             CommandHandlerHelper.WriteOutputInfo(session, NetworkStatistics.Summary(), ChatMessageType.Broadcast);
+        }
+
+        [CommandHandler("buildtime", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Shows the date and time of the most recent server build.")]
+        public static void HandleBuildTime(Session session, params string[] parameters)
+        {
+            var assemblyPath = Assembly.GetExecutingAssembly().Location;
+            if (string.IsNullOrEmpty(assemblyPath))
+                assemblyPath = Process.GetCurrentProcess().MainModule?.FileName;
+
+            if (string.IsNullOrEmpty(assemblyPath))
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Server build time is unavailable.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            var buildTimeUtc = File.GetLastWriteTimeUtc(assemblyPath);
+            CommandHandlerHelper.WriteOutputInfo(session, $"Server build time: {buildTimeUtc:yyyy-MM-dd HH:mm:ss} UTC", ChatMessageType.Broadcast);
         }
 
         /// <summary>
