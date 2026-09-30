@@ -90,10 +90,10 @@ namespace ACE.Server.WorldObjects
                     if (damageEvent != null && damageEvent.HasDamage)
                         worldObject.EnqueueBroadcast(new GameMessageSound(worldObject.Guid, Sound.Collision, 1.0f));
                 }
-                else if (sourceCreature != null && sourceCreature.AttackTarget != null)
+                else if (sourceCreature != null && targetCreature != null)
                 {
                     // todo: clean this up
-                    var targetPlayer = sourceCreature.AttackTarget as Player;
+                    var targetPlayer = targetCreature as Player;
 
                     damageEvent = DamageEvent.CalculateDamage(sourceCreature, targetCreature, worldObject);
 
