@@ -508,14 +508,6 @@ namespace ACE.Server.WorldObjects
             }
 
             var amount = (uint)Math.Round(_amount);
-
-            // A creature damage roll leaves BodyPart at 0. Do not apply that roll to a player.
-            if (!BodyParts.Indices.TryGetValue(bodyPart, out var iDamageLocation))
-            {
-                log.Warn($"{Name}.TakeDamage({source?.Name}, {damageType}, {amount}, {bodyPart}, {crit}): avoided crash for bad damage location");
-                return 0;
-            }
-
             var percent = (float)amount / Health.MaxValue;
 
             var equippedCloak = EquippedCloak;
@@ -572,6 +564,11 @@ namespace ACE.Server.WorldObjects
                 return (int)damageTaken;
             }
 
+            if (!BodyParts.Indices.TryGetValue(bodyPart, out var iDamageLocation))
+            {
+                log.Warn($"{Name}.TakeDamage({source.Name}, {damageType}, {amount}, {bodyPart}, {crit}): avoided crash for bad damage location");
+                return 0;
+            }
             var damageLocation = (DamageLocation)iDamageLocation;
 
             // send network messages

@@ -88,18 +88,15 @@ namespace ACE.Server.WorldObjects
 
             var projectileSpeed = GetProjectileSpeed();
 
-            // Aim and projectile target are fixed here. AttackTarget can change during the shoot animation.
-            var missileTarget = AttackTarget;
-
             // get z-angle for aim motion
-            var aimVelocity = GetAimVelocity(missileTarget, projectileSpeed);
+            var aimVelocity = GetAimVelocity(AttackTarget, projectileSpeed);
 
             var aimLevel = GetAimLevel(aimVelocity);
 
             // calculate projectile spawn pos and velocity
             var localOrigin = GetProjectileSpawnOrigin(ammo.WeenieClassId, aimLevel);
 
-            var velocity = CalculateProjectileVelocity(localOrigin, missileTarget, projectileSpeed, out Vector3 origin, out Quaternion orientation);
+            var velocity = CalculateProjectileVelocity(localOrigin, AttackTarget, projectileSpeed, out Vector3 origin, out Quaternion orientation);
 
             //Console.WriteLine($"Velocity: {velocity}");
 
@@ -121,10 +118,9 @@ namespace ACE.Server.WorldObjects
 
                 // TODO: monster stamina usage
 
-                var target = missileTarget as Creature;
-                if (target != null && target.IsAlive)
+                if (AttackTarget != null)
                 {
-                    var projectile = LaunchProjectile(launcher, ammo, target, origin, orientation, velocity);
+                    var projectile = LaunchProjectile(launcher, ammo, AttackTarget, origin, orientation, velocity);
                     UpdateAmmoAfterLaunch(ammo);
                 }
             });
