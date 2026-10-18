@@ -30,7 +30,11 @@ namespace ACE.Server.WorldObjects
             ImbuedEffectType.AcidRending |
             ImbuedEffectType.ColdRending |
             ImbuedEffectType.ElectricRending |
-            ImbuedEffectType.FireRending;
+            ImbuedEffectType.FireRending |
+            ImbuedEffectType.NetherRending;
+
+        // CONQUEST: Void rending imbue uses Onyx salvage (custom tinker recipe).
+        private const uint NetherRendingIconUnderlayId = 0x060067A1;
 
         private static readonly Dictionary<MaterialTypeEnum, ImbuedEffectType> MaterialPrimaryImbue = new Dictionary<MaterialTypeEnum, ImbuedEffectType>
         {
@@ -44,6 +48,7 @@ namespace ACE.Server.WorldObjects
             { MaterialTypeEnum.WhiteSapphire, ImbuedEffectType.BludgeonRending },
             { MaterialTypeEnum.ImperialTopaz, ImbuedEffectType.SlashRending },
             { MaterialTypeEnum.Emerald, ImbuedEffectType.AcidRending },
+            { MaterialTypeEnum.Onyx, ImbuedEffectType.NetherRending },
         };
 
         public ImbueStripTool(Weenie weenie, ObjectGuid guid) : base(weenie, guid)
@@ -111,6 +116,8 @@ namespace ACE.Server.WorldObjects
                 return MaterialTypeEnum.ImperialTopaz;
             if (primary.HasFlag(ImbuedEffectType.AcidRending))
                 return MaterialTypeEnum.Emerald;
+            if (primary.HasFlag(ImbuedEffectType.NetherRending))
+                return MaterialTypeEnum.Onyx;
 
             return null;
         }
@@ -141,6 +148,8 @@ namespace ACE.Server.WorldObjects
                 return ImbuedEffectType.SlashRending;
             if (primary.HasFlag(ImbuedEffectType.AcidRending))
                 return ImbuedEffectType.AcidRending;
+            if (primary.HasFlag(ImbuedEffectType.NetherRending))
+                return ImbuedEffectType.NetherRending;
 
             return null;
         }
@@ -149,6 +158,9 @@ namespace ACE.Server.WorldObjects
         {
             if (RecipeManager.IconUnderlay.TryGetValue(imbueType, out var icon))
                 return icon;
+
+            if (imbueType == ImbuedEffectType.NetherRending)
+                return NetherRendingIconUnderlayId;
 
             return null;
         }
@@ -186,12 +198,12 @@ namespace ACE.Server.WorldObjects
             if (!IsValidImbueStripTarget(target))
                 return false;
 
-            var material = GetPrimaryImbueMaterial(target.ImbuedEffect);
-            if (material == null)
-                return false;
-
             var imbueType = GetPrimaryImbueType(target.ImbuedEffect);
             if (imbueType == null)
+                return false;
+
+            var material = GetPrimaryImbueMaterial(target.ImbuedEffect);
+            if (material == null)
                 return false;
 
             target.ImbuedEffect &= ~imbueType.Value;

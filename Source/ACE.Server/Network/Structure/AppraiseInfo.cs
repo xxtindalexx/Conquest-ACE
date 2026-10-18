@@ -1020,7 +1020,7 @@ namespace ACE.Server.Network.Structure
 
         /// <summary>
         /// CONQUEST: Labels weapon-tinker imbues as Primary.
-        /// Matches ImbueStripTool.PrimaryImbueMask (CS, CB, AR, elemental rends).
+        /// Matches ImbueStripTool.PrimaryImbueMask (CS, CB, AR, elemental rends, void rending).
         /// Secondaries (Biting Strike, Crushing Blow, Cleave) are labeled at their description lines.
         /// </summary>
         private static string ImbueSlotTag(ImbuedEffectType type)
