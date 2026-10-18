@@ -875,28 +875,30 @@ namespace ACE.Server.Network.Structure
             }
 
             // Biting Strike (critical frequency)
+            var bitingStrikeSecondaryTag = SecondaryWithPvpCap(FormatBitingStrikePvpCap());
             var critFrequency = weapon.GetProperty(PropertyFloat.CriticalFrequency);
             if (critFrequency != null && critFrequency > 0)
             {
                 if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
-                    descriptions.Add("- Biting Strike (Secondary): Surpassed by Critical Strike");
+                    descriptions.Add($"- Biting Strike {bitingStrikeSecondaryTag}: Surpassed by Critical Strike");
                 else
                 {
                     var critPercent = critFrequency.Value * 100;
-                    descriptions.Add($"- Biting Strike (Secondary): {critPercent:F0}% Crit Chance");
+                    descriptions.Add($"- Biting Strike {bitingStrikeSecondaryTag}: {critPercent:F0}% Crit Chance");
                 }
             }
 
             // Crushing Blow (critical damage multiplier)
+            var crushingBlowSecondaryTag = SecondaryWithPvpCap(FormatCrushingBlowPvpCap());
             var critDamageMod = weapon.GetProperty(PropertyFloat.CriticalMultiplier);
             if (critDamageMod != null && critDamageMod > 1.0)
             {
                 if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
-                    descriptions.Add("- Crushing Blow (Secondary): Surpassed by Crippling Blow");
+                    descriptions.Add($"- Crushing Blow {crushingBlowSecondaryTag}: Surpassed by Crippling Blow");
                 else
                 {
                     var totalCritDmgMultiplier = 1.0 + critDamageMod.Value;
-                    descriptions.Add($"- Crushing Blow (Secondary): {totalCritDmgMultiplier:G}x Crit Dmg");
+                    descriptions.Add($"- Crushing Blow {crushingBlowSecondaryTag}: {totalCritDmgMultiplier:G}x Crit Dmg");
                 }
             }
 
@@ -932,7 +934,7 @@ namespace ACE.Server.Network.Structure
                 var cleavingMod = weapon.GetArmorCleavingMod();
                 var ignorePercent = (1.0f - cleavingMod) * 100;
                 if (ignorePercent >= 1.0f)
-                    descriptions.Add($"- Armor Cleaving: Ignores {ignorePercent:F0}% Armor");
+                    descriptions.Add($"- Armor Cleaving: Ignores {ignorePercent:F0}% Armor{PvpCapParenthetical(FormatArmorCleavingPvpCap())}");
             }
 
             // Ignore Shield
@@ -965,15 +967,15 @@ namespace ACE.Server.Network.Structure
 
             // Critical Strike
             if (imbuedEffect.HasFlag(ImbuedEffectType.CriticalStrike))
-                descriptions.Add($"- Critical Strike{ImbueSlotTag(ImbuedEffectType.CriticalStrike)}: Up to {maxCritChancePercent:F0}% crit chance (skill based)");
+                descriptions.Add($"- Critical Strike{ImbueSlotTag(ImbuedEffectType.CriticalStrike)}: Up to {maxCritChancePercent:F0}% crit chance {SkillBasedWithPvpCap(FormatCriticalStrikePvpCap())}");
 
             // Crippling Blow
             if (imbuedEffect.HasFlag(ImbuedEffectType.CripplingBlow))
-                descriptions.Add($"- Crippling Blow{ImbueSlotTag(ImbuedEffectType.CripplingBlow)}: Up to {maxCritDmgMultiplier:G}x crit dmg (skill based)");
+                descriptions.Add($"- Crippling Blow{ImbueSlotTag(ImbuedEffectType.CripplingBlow)}: Up to {maxCritDmgMultiplier:G}x crit dmg {SkillBasedWithPvpCap(FormatCripplingBlowPvpCap())}");
 
             // Armor Rending
             if (imbuedEffect.HasFlag(ImbuedEffectType.ArmorRending))
-                descriptions.Add($"- Armor Rending{ImbueSlotTag(ImbuedEffectType.ArmorRending)}: Ignores up to 60% armor (skill based)");
+                descriptions.Add($"- Armor Rending{ImbueSlotTag(ImbuedEffectType.ArmorRending)}: Ignores up to 60% armor {SkillBasedWithPvpCap(FormatArmorRendingPvpCap())}");
 
             // Elemental Rending effects
             if (imbuedEffect.HasFlag(ImbuedEffectType.SlashRending))
@@ -999,7 +1001,7 @@ namespace ACE.Server.Network.Structure
 
             // Ignore All Armor
             if (imbuedEffect.HasFlag(ImbuedEffectType.IgnoreAllArmor))
-                descriptions.Add("- Ignore Armor: Bypasses all armor");
+                descriptions.Add($"- Ignore Armor: Bypasses all armor{PvpCapParenthetical(FormatPhantomIgnoreArmorPvpCap())}");
 
             // Append descriptions to Use property if any exist
             if (descriptions.Count > 0)
@@ -1027,6 +1029,68 @@ namespace ACE.Server.Network.Structure
                 return " (Primary)";
 
             return "";
+        }
+
+        private static string PvpCapParenthetical(string value) => $" (PVP Cap: {value})";
+
+        private static string SkillBasedWithPvpCap(string pvpCapValue) => $"(skill based, PVP Cap: {pvpCapValue})";
+
+        private static string SecondaryWithPvpCap(string pvpCapValue) => $"(Secondary, PVP Cap: {pvpCapValue})";
+
+        private static string FormatPvpMaxFractionAsPercent(string propertyKey)
+        {
+            var cap = PropertyManager.GetDouble(propertyKey);
+            if (cap <= 0)
+                return "Unchanged";
+
+            return $"{cap * 100:F0}%";
+        }
+
+        private static string FormatPvpMaxCritDamageMultiplier(string propertyKey)
+        {
+            var cap = PropertyManager.GetDouble(propertyKey);
+            if (cap <= 0)
+                return "Unchanged";
+
+            return $"{1.0 + cap:G}x";
+        }
+
+        private static string FormatCriticalStrikePvpCap() => FormatPvpMaxFractionAsPercent("pvp_max_critical_strike");
+
+        private static string FormatCripplingBlowPvpCap() => FormatPvpMaxCritDamageMultiplier("pvp_max_crippling_blow");
+
+        private static string FormatArmorRendingPvpCap() => FormatPvpMaxFractionAsPercent("pvp_max_armor_rend");
+
+        private static string FormatBitingStrikePvpCap()
+        {
+            if (PropertyManager.GetBool("pvp_disable_biting_strike"))
+                return "disabled";
+
+            return FormatPvpMaxFractionAsPercent("pvp_max_biting_strike");
+        }
+
+        private static string FormatCrushingBlowPvpCap()
+        {
+            if (PropertyManager.GetBool("pvp_disable_crushing_blow"))
+                return "disabled";
+
+            return FormatPvpMaxCritDamageMultiplier("pvp_max_crushing_blow");
+        }
+
+        private static string FormatArmorCleavingPvpCap()
+        {
+            if (PropertyManager.GetBool("pvp_disable_armor_cleaving"))
+                return "disabled";
+
+            return FormatPvpMaxFractionAsPercent("pvp_max_armor_cleaving");
+        }
+
+        private static string FormatPhantomIgnoreArmorPvpCap()
+        {
+            if (PropertyManager.GetBool("pvp_disable_ignore_all_armor"))
+                return "disabled";
+
+            return "enabled";
         }
 
         /// <summary>

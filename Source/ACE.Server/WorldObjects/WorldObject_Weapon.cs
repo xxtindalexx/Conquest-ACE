@@ -604,20 +604,10 @@ namespace ACE.Server.WorldObjects
 
             // CONQUEST: Disable Nether Rending in PvP (there are no Nether protection spells)
             var isNetherPvP = damageType == DamageType.Nether && target is Player && wielder is Player;
-            var isPvP = wielder is Player && target is Player;
 
             if (rendDamageType != ImbuedEffectType.Undef && weapon.HasImbuedEffect(rendDamageType) && skill != null && !isNetherPvP)
             {
                 var rendingMod = GetRendingMod(skill, wielder, rendDamageType);
-
-                // Apply PvP cap to Armor Rending (imbue)
-                if (isPvP)
-                {
-                    var pvpCapRend = (float)PropertyManager.GetDouble("pvp_max_armor_rend");
-                    if (pvpCapRend > 0)
-                        rendingMod = Math.Min(rendingMod, pvpCapRend);
-                }
-
                 resistMod = Math.Max(resistMod, rendingMod);
             }
 

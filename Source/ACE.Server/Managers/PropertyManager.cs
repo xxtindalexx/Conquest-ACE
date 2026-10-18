@@ -789,7 +789,7 @@ namespace ACE.Server.Managers
                 ("pvp_max_crushing_blow", new Property<double>(0, "PvP: Max Crushing Blow crit damage multiplier (0 = no cap, e.g. 2.0)")),
                 ("pvp_max_biting_strike", new Property<double>(0, "PvP: Max Biting Strike crit chance (0 = no cap, e.g. 0.25 = 25%)")),
                 ("pvp_max_critical_strike", new Property<double>(0, "PvP: Max Critical Strike crit chance (0 = no cap, e.g. 0.25 = 25%)")),
-                ("pvp_max_armor_rend", new Property<double>(0, "PvP: Max Armor Rending penetration multiplier (0 = no cap, e.g. 2.0)")),
+                ("pvp_max_armor_rend", new Property<double>(0, "PvP: Max Armor Rending armor ignored fraction (0 = no cap, e.g. 0.4 = 40% armor ignored)")),
                 ("pvp_max_armor_cleaving", new Property<double>(0, "PvP: Max Armor Cleaving reduction (0 = no cap, e.g. 0.5 = 50% armor ignored)")),
                 ("armor_cleaving_mod_override", new Property<double>(0, "Max armor cleave fraction for weapons with IgnoreArmor. 0 = no cap (spell formula). 0.25 = weapons cannot ignore more than 25% armor; lower cleave values are unchanged.")),
 

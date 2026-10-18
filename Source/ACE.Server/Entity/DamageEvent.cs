@@ -395,10 +395,20 @@ namespace ACE.Server.Entity
             if (Weapon != null && Weapon.HasImbuedEffect(ImbuedEffectType.ArmorRending))
                 armorRendingMod = WorldObject.GetArmorRendingMod(attackSkill);
 
+            var isPvPCleave = attacker is Player && defender is Player;
+            if (isPvPCleave && armorRendingMod < 1.0f)
+            {
+                var pvpCapArmorRend = (float)PropertyManager.GetDouble("pvp_max_armor_rend");
+                if (pvpCapArmorRend > 0)
+                {
+                    // armorRendingMod is inverted (lower = more armor ignored), so we take Max
+                    armorRendingMod = Math.Max(armorRendingMod, 1.0f - pvpCapArmorRend);
+                }
+            }
+
             var armorCleavingMod = attacker.GetArmorCleavingMod(Weapon);
 
             // Apply PvP handling for Armor Cleaving (weapon property)
-            var isPvPCleave = attacker is Player && defender is Player;
             if (isPvPCleave && armorCleavingMod < 1.0f)
             {
                 // CONQUEST: Disable Armor Cleaving entirely in PvP - only Armor Rending imbue works

@@ -202,7 +202,7 @@ If you prefer to CAP rather than disable, use these (only apply if disable is `f
 | `pvp_max_armor_cleaving` | double | `0` | Max armor bypass (e.g., 0.5 = max 50% ignored) |
 | `pvp_max_critical_strike` | double | `0` | Max crit chance from imbue |
 | `pvp_max_crippling_blow` | double | `0` | Max crit damage from imbue |
-| `pvp_max_armor_rend` | double | `0` | Max armor penetration from imbue |
+| `pvp_max_armor_rend` | double | `0` | Max armor ignored from Armor Rending imbue (e.g. 0.4 = 40% ignored) |
 
 ---
 
